@@ -22,13 +22,31 @@ if [ ! -f "pyproject.toml" ]; then
     exit 1
 fi
 
+# Select Python interpreter (prefer 3.11 for torch/neural-admixture wheels)
+PYTHON_BIN=""
+if command -v python3.11 >/dev/null 2>&1; then
+    PYTHON_BIN="python3.11"
+elif command -v python3.10 >/dev/null 2>&1; then
+    PYTHON_BIN="python3.10"
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment..."
     if command -v uv &> /dev/null; then
-        uv venv
+        if [ -n "$PYTHON_BIN" ]; then
+            uv venv --python "$PYTHON_BIN"
+        else
+            echo "WARNING: python3.11/3.10 not found; using default python for venv."
+            uv venv
+        fi
     else
-        python -m venv .venv
+        if [ -n "$PYTHON_BIN" ]; then
+            "$PYTHON_BIN" -m venv .venv
+        else
+            echo "ERROR: python3.11 or python3.10 not found. Please load a module or install one, then re-run setup."
+            exit 1
+        fi
     fi
     echo "✓ Virtual environment created"
 else

@@ -41,7 +41,12 @@ def cmd_admixture(args):
     """Run admixture command."""
     setup_logging(args.verbose)
 
-    admix = NeuralAdmixture(k_min=args.k_min, k_max=args.k_max, force=args.force)
+    admix = NeuralAdmixture(
+        k_min=args.k_min,
+        k_max=args.k_max,
+        force=args.force,
+        threads=args.threads,
+    )
     q_files = admix.fit_transform(args.input, output_dir=args.output)
 
     print(f"Admixture complete: {args.output}")
@@ -145,7 +150,7 @@ def cmd_pipeline(args):
 
     pipeline = Pipeline(
         fit_plink_prefix=args.fit_plink,
-        transform_plink_prefix=args.plink,
+        transform_plink_prefix=args.project_plink,
         labels=args.labels,
         colormap=args.colormap,
         output_dir=args.output,
@@ -164,6 +169,7 @@ def cmd_pipeline(args):
         skip_visualization=args.skip_embedding_visualization,
         skip_pca_visualization=args.skip_pca_visualization,
         skip_metrics=args.skip_metrics,
+        admix_threads=args.threads,
     )
 
     print(f"Pipeline complete!")
@@ -211,6 +217,7 @@ def main():
     admix_parser.add_argument("--k-min", type=int, default=2, help="Minimum K")
     admix_parser.add_argument("--k-max", type=int, default=10, help="Maximum K")
     admix_parser.add_argument("--force", action="store_true", help="Force retraining")
+    admix_parser.add_argument("--threads", type=int, help="Threads for neural admixture")
     admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_parser.set_defaults(func=cmd_admixture)
 
@@ -252,12 +259,25 @@ def main():
 
     # Pipeline command
     pipeline_parser = subparsers.add_parser("pipeline", help="Run full pipeline")
-    pipeline_parser.add_argument("--plink", required=True, help="Input PLINK prefix (transform subset)")
-    pipeline_parser.add_argument("--fit-plink", required=True, help="Fit subset PLINK prefix (for proper fit/transform workflow)")
+    pipeline_parser.add_argument(
+        "--fit-plink",
+        required=True,
+        help="PLINK prefix for PCA/admixture reference set (fit subset)",
+    )
+    pipeline_parser.add_argument(
+        "--project-plink",
+        required=True,
+        help="PLINK prefix to project/apply the fitted models (transform subset)",
+    )
     pipeline_parser.add_argument("--labels", required=True, help="Labels CSV file")
     pipeline_parser.add_argument("--colormap", required=True, help="Colormap JSON file")
     pipeline_parser.add_argument("--output", required=True, help="Output directory")
     pipeline_parser.add_argument("--geographic", help="Geographic coordinates CSV")
+    pipeline_parser.add_argument(
+        "--threads",
+        type=int,
+        help="Threads for neural admixture (defaults to SLURM/affinity detection)",
+    )
     pipeline_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")
     pipeline_parser.add_argument("--k-min", type=int, default=2, help="Min K (admixture)")
     pipeline_parser.add_argument("--k-max", type=int, default=10, help="Max K (admixture)")

@@ -273,12 +273,12 @@ qc_pass[['sample_id', 'sample_id']].to_csv(
 )
 EOF
 
-# Create transform subset with PLINK2
+# Create project subset with PLINK2
 plink2 \
   --bfile final_dataset \
   --keep transform_indices.txt \
   --make-bed \
-  --out transform_subset
+  --out project_subset
 ```
 
 ---
@@ -301,7 +301,7 @@ plink2 \
 
 ### 6.3 Genetic Ancestry Distribution
 
-The samples span 7 continental genetic regions with representation from 54 distinct populations (specific population counts vary between fit and transform subsets).
+The samples span 7 continental genetic regions with representation from 54 distinct populations (specific population counts vary between fit and project subsets).
 
 ### 6.4 File Sizes
 

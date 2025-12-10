@@ -130,13 +130,15 @@ manifold-genetics plot \
 
 ```bash
 manifold-genetics pipeline \
-    --plink data/hgdp \
+    --fit-plink data/fit_subset \
+    --project-plink data/project_subset \
     --labels data/labels.csv \
     --colormap data/colormap.json \
     --output results/ \
     --n-pcs 50 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 25
+    --embedding phate --knn 25 \
+    --threads 8
 ```
 
 ## Data Format Requirements
@@ -146,8 +148,8 @@ manifold-genetics pipeline \
 Binary PLINK format (`.bed`, `.bim`, `.fam`). Specify the prefix (without extension):
 
 ```bash
-# If you have: data/hgdp.bed, data/hgdp.bim, data/hgdp.fam
-# Use: --plink data/hgdp
+# If you have: data/fit_subset.{bed,bim,fam} and data/project_subset.{bed,bim,fam}
+# Use: --fit-plink data/fit_subset   --project-plink data/project_subset
 ```
 
 ### Labels CSV
@@ -221,8 +223,9 @@ source /lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics/.venv
 
 # Run analysis
 manifold-genetics pipeline \
-    --plink /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/standalone/genotypes/fit_subset \
-    --labels /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/hgdp_fit_labels.csv \
+    --fit-plink /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/standalone/genotypes/fit_subset \
+    --project-plink /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/standalone/genotypes/project_subset \
+    --labels /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/hgdp_project_labels.csv \
     --colormap /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/colormap.json \
     --output results/ \
     --n-pcs 50 \
@@ -285,8 +288,9 @@ Using HGDP test data:
 ```bash
 # On compute node
 manifold-genetics pipeline \
-    --plink /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/standalone/genotypes/fit_subset \
-    --labels /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/hgdp_fit_labels.csv \
+    --fit-plink /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/standalone/genotypes/fit_subset \
+    --project-plink /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/standalone/genotypes/project_subset \
+    --labels /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/hgdp_project_labels.csv \
     --colormap /lustre06/project/6065672/sciclun4/ActiveProjects/manyGenomes/data_new/hgdp/colormap.json \
     --output hgdp_results/ \
     --n-pcs 50 \

@@ -2,7 +2,7 @@
 #
 # Process HGDP+1KGP data: create subsets and labels
 #
-# This script processes the downloaded raw data to create fit and transform subsets.
+# This script processes the downloaded raw data to create fit and project subsets.
 # Can run on COMPUTE NODE (no internet required).
 #
 # Smart caching: Skips processing if subsets already exist.
@@ -61,26 +61,26 @@ echo ""
 print_status "Checking for existing processed data..."
 
 FIT_BED="${DATA_DIR}/fit_subset.bed"
-TRANSFORM_BED="${DATA_DIR}/transform_subset.bed"
+PROJECT_BED="${DATA_DIR}/project_subset.bed"
 FIT_LABELS="${DATA_DIR}/hgdp_fit_labels.csv"
-TRANSFORM_LABELS="${DATA_DIR}/hgdp_transform_labels.csv"
+PROJECT_LABELS="${DATA_DIR}/hgdp_project_labels.csv"
 FIT_GEOGRAPHIC="${DATA_DIR}/hgdp_fit_geographic.csv"
-TRANSFORM_GEOGRAPHIC="${DATA_DIR}/hgdp_transform_geographic.csv"
+PROJECT_GEOGRAPHIC="${DATA_DIR}/hgdp_project_geographic.csv"
 COLORMAP="${DATA_DIR}/colormap.json"
 
-if [[ -f "${FIT_BED}" ]] && [[ -f "${TRANSFORM_BED}" ]] && \
-   [[ -f "${FIT_LABELS}" ]] && [[ -f "${TRANSFORM_LABELS}" ]] && \
-   [[ -f "${FIT_GEOGRAPHIC}" ]] && [[ -f "${TRANSFORM_GEOGRAPHIC}" ]] && \
+if [[ -f "${FIT_BED}" ]] && [[ -f "${PROJECT_BED}" ]] && \
+   [[ -f "${FIT_LABELS}" ]] && [[ -f "${PROJECT_LABELS}" ]] && \
+   [[ -f "${FIT_GEOGRAPHIC}" ]] && [[ -f "${PROJECT_GEOGRAPHIC}" ]] && \
    [[ -f "${COLORMAP}" ]]; then
     print_success "Data already processed!"
     echo ""
     echo "Found:"
     echo "  - fit_subset.{bed,bim,fam}"
-    echo "  - transform_subset.{bed,bim,fam}"
+    echo "  - project_subset.{bed,bim,fam}"
     echo "  - hgdp_fit_labels.csv"
-    echo "  - hgdp_transform_labels.csv"
+    echo "  - hgdp_project_labels.csv"
     echo "  - hgdp_fit_geographic.csv"
-    echo "  - hgdp_transform_geographic.csv"
+    echo "  - hgdp_project_geographic.csv"
     echo "  - colormap.json"
     echo ""
     echo "You can run: python examples/hgdp_1kgp/run_pipeline.py"
@@ -166,7 +166,7 @@ fi
 
 print_success "Python environment ready"
 
-# Step 5: Create fit indices (3,400 unrelated samples)
+# Step 5: Create fit indices (3,452 unrelated samples)
 print_status "Creating fit indices (unrelated samples)..."
 
 python3 - <<'PYEOF'
@@ -204,8 +204,8 @@ fi
 FIT_COUNT=$(wc -l < "${DATA_DIR}/fit_indices.txt")
 print_success "Created fit_indices.txt (${FIT_COUNT} samples)"
 
-# Step 6: Create transform indices (4,094 all QC-passing samples)
-print_status "Creating transform indices (all QC-passing samples)..."
+# Step 6: Create project indices (4,094 all QC-passing samples)
+print_status "Creating projection indices (all QC-passing samples)..."
 
 python3 - <<'PYEOF'
 import pandas as pd
@@ -229,20 +229,20 @@ keep_df = pd.DataFrame({
 })
 
 # Write indices
-output_path = Path("examples/hgdp_1kgp/data/transform_indices.txt")
+output_path = Path("examples/hgdp_1kgp/data/project_indices.txt")
 keep_df.to_csv(output_path, sep='\t', header=False, index=False)
 
-print(f"Created transform indices: {len(keep_df)} samples")
+print(f"Created projection indices: {len(keep_df)} samples")
 PYEOF
 
-if [[ ! -f "${DATA_DIR}/transform_indices.txt" ]]; then
-    print_error "Failed to create transform indices!"
+if [[ ! -f "${DATA_DIR}/project_indices.txt" ]]; then
+    print_error "Failed to create projection indices!"
     exit 1
 fi
 
 # Count samples
-TRANSFORM_COUNT=$(wc -l < "${DATA_DIR}/transform_indices.txt")
-print_success "Created transform_indices.txt (${TRANSFORM_COUNT} samples)"
+PROJECT_COUNT=$(wc -l < "${DATA_DIR}/project_indices.txt")
+print_success "Created project_indices.txt (${PROJECT_COUNT} samples)"
 
 # Step 7: Create PLINK subsets
 print_status "Creating fit subset with plink2..."
@@ -261,19 +261,19 @@ else
     exit 1
 fi
 
-print_status "Creating transform subset with plink2..."
+print_status "Creating projection subset with plink2..."
 
 ${PLINK2} \
     --bfile "${RAW_DIR}/full_dataset" \
-    --keep "${DATA_DIR}/transform_indices.txt" \
+    --keep "${DATA_DIR}/project_indices.txt" \
     --make-bed \
-    --out "${DATA_DIR}/transform_subset" \
+    --out "${DATA_DIR}/project_subset" \
     --silent
 
-if [[ -f "${TRANSFORM_BED}" ]]; then
-    print_success "Created transform_subset.{bed,bim,fam}"
+if [[ -f "${PROJECT_BED}" ]]; then
+    print_success "Created project_subset.{bed,bim,fam}"
 else
-    print_error "Failed to create transform subset!"
+    print_error "Failed to create project subset!"
     exit 1
 fi
 
@@ -293,10 +293,10 @@ fit_indices_path = Path("examples/hgdp_1kgp/data/fit_indices.txt")
 fit_indices = pd.read_csv(fit_indices_path, sep='\t', header=None, names=['FID', 'IID'])
 fit_samples = set(fit_indices['IID'])
 
-# Read transform indices
-transform_indices_path = Path("examples/hgdp_1kgp/data/transform_indices.txt")
-transform_indices = pd.read_csv(transform_indices_path, sep='\t', header=None, names=['FID', 'IID'])
-transform_samples = set(transform_indices['IID'])
+# Read projection indices
+project_indices_path = Path("examples/hgdp_1kgp/data/project_indices.txt")
+project_indices = pd.read_csv(project_indices_path, sep='\t', header=None, names=['FID', 'IID'])
+project_samples = set(project_indices['IID'])
 
 # Create fit labels
 fit_labels = metadata[metadata['project_meta.sample_id'].isin(fit_samples)][
@@ -309,19 +309,19 @@ fit_output = Path("examples/hgdp_1kgp/data/hgdp_fit_labels.csv")
 fit_labels.to_csv(fit_output, index=False)
 print(f"Created hgdp_fit_labels.csv ({len(fit_labels)} samples)")
 
-# Create transform labels
-transform_labels = metadata[metadata['project_meta.sample_id'].isin(transform_samples)][
+# Create projection labels
+project_labels = metadata[metadata['project_meta.sample_id'].isin(project_samples)][
     ['project_meta.sample_id', 'Population', 'Genetic_region_merged']
 ].copy()
 # Rename column to match expected format
-transform_labels = transform_labels.rename(columns={'project_meta.sample_id': 'sample_id'})
+project_labels = project_labels.rename(columns={'project_meta.sample_id': 'sample_id'})
 
-transform_output = Path("examples/hgdp_1kgp/data/hgdp_transform_labels.csv")
-transform_labels.to_csv(transform_output, index=False)
-print(f"Created hgdp_transform_labels.csv ({len(transform_labels)} samples)")
+project_output = Path("examples/hgdp_1kgp/data/hgdp_project_labels.csv")
+project_labels.to_csv(project_output, index=False)
+print(f"Created hgdp_project_labels.csv ({len(project_labels)} samples)")
 PYEOF
 
-if [[ -f "${FIT_LABELS}" ]] && [[ -f "${TRANSFORM_LABELS}" ]]; then
+if [[ -f "${FIT_LABELS}" ]] && [[ -f "${PROJECT_LABELS}" ]]; then
     print_success "Created label CSVs"
 else
     print_error "Failed to create label CSVs!"
@@ -340,14 +340,14 @@ from pathlib import Path
 metadata_path = Path("examples/hgdp_1kgp/data/raw/metadata.csv")
 metadata = pd.read_csv(metadata_path)
 
-# Read fit and transform indices
+# Read fit and projection indices
 fit_indices_path = Path("examples/hgdp_1kgp/data/fit_indices.txt")
 fit_indices = pd.read_csv(fit_indices_path, sep='\t', header=None, names=['FID', 'IID'])
 fit_samples = set(fit_indices['IID'])
 
-transform_indices_path = Path("examples/hgdp_1kgp/data/transform_indices.txt")
-transform_indices = pd.read_csv(transform_indices_path, sep='\t', header=None, names=['FID', 'IID'])
-transform_samples = set(transform_indices['IID'])
+project_indices_path = Path("examples/hgdp_1kgp/data/project_indices.txt")
+project_indices = pd.read_csv(project_indices_path, sep='\t', header=None, names=['FID', 'IID'])
+project_samples = set(project_indices['IID'])
 
 def extract_geographic_preservation_indices(metadata_subset):
     """
@@ -402,31 +402,31 @@ fit_geo_output = Path("examples/hgdp_1kgp/data/hgdp_fit_geographic.csv")
 fit_geo_data.to_csv(fit_geo_output, index=False)
 print(f"Created hgdp_fit_geographic.csv ({len(fit_geo_data)} samples)")
 
-# Process transform subset
-transform_metadata = metadata[metadata['project_meta.sample_id'].isin(transform_samples)].copy()
-transform_geo_mask = extract_geographic_preservation_indices(transform_metadata)
-transform_geo_samples = transform_metadata[transform_geo_mask]
+# Process projection subset
+project_metadata = metadata[metadata['project_meta.sample_id'].isin(project_samples)].copy()
+project_geo_mask = extract_geographic_preservation_indices(project_metadata)
+project_geo_samples = project_metadata[project_geo_mask]
 
-# Create transform geographic CSV
-transform_geo_data = transform_geo_samples[['project_meta.sample_id', 'latitude', 'longitude']].copy()
-transform_geo_data = transform_geo_data.rename(columns={'project_meta.sample_id': 'sample_id'})
+# Create projection geographic CSV
+project_geo_data = project_geo_samples[['project_meta.sample_id', 'latitude', 'longitude']].copy()
+project_geo_data = project_geo_data.rename(columns={'project_meta.sample_id': 'sample_id'})
 
 # Remove rows with missing coordinates
-transform_geo_data = transform_geo_data.dropna(subset=['latitude', 'longitude'])
+project_geo_data = project_geo_data.dropna(subset=['latitude', 'longitude'])
 
-transform_geo_output = Path("examples/hgdp_1kgp/data/hgdp_transform_geographic.csv")
-transform_geo_data.to_csv(transform_geo_output, index=False)
-print(f"Created hgdp_transform_geographic.csv ({len(transform_geo_data)} samples)")
+project_geo_output = Path("examples/hgdp_1kgp/data/hgdp_project_geographic.csv")
+project_geo_data.to_csv(project_geo_output, index=False)
+print(f"Created hgdp_project_geographic.csv ({len(project_geo_data)} samples)")
 
 # Print filtering summary
 print(f"Fit subset (unrelated, QC-pass): {len(fit_metadata)} samples")
 print(f"  - Geographic analysis: {len(fit_geo_data)} samples (excluded {len(fit_metadata) - len(fit_geo_data)} Americas/ACB/ASW/CEU)")
 
-print(f"Transform subset (all QC-pass): {len(transform_metadata)} samples")
-print(f"  - Geographic analysis: {len(transform_geo_data)} samples (excluded {len(transform_metadata) - len(transform_geo_data)} Americas/ACB/ASW/CEU)")
+print(f"Projection subset (all QC-pass): {len(project_metadata)} samples")
+print(f"  - Geographic analysis: {len(project_geo_data)} samples (excluded {len(project_metadata) - len(project_geo_data)} Americas/ACB/ASW/CEU)")
 PYEOF
 
-if [[ -f "${FIT_GEOGRAPHIC}" ]] && [[ -f "${TRANSFORM_GEOGRAPHIC}" ]]; then
+if [[ -f "${FIT_GEOGRAPHIC}" ]] && [[ -f "${PROJECT_GEOGRAPHIC}" ]]; then
     print_success "Created geographic coordinate CSVs"
 else
     print_error "Failed to create geographic coordinate CSVs!"
@@ -451,13 +451,13 @@ echo "========================================="
 echo ""
 echo "Files created in ${DATA_DIR}:"
 echo "  - fit_subset.{bed,bim,fam} (${FIT_COUNT} samples)"
-echo "  - transform_subset.{bed,bim,fam} (${TRANSFORM_COUNT} samples)"
+echo "  - project_subset.{bed,bim,fam} (${PROJECT_COUNT} samples)"
 echo "  - hgdp_fit_labels.csv"
-echo "  - hgdp_transform_labels.csv"
+echo "  - hgdp_project_labels.csv"
 echo "  - hgdp_fit_geographic.csv (geographic coordinates, Americas excluded)"
-echo "  - hgdp_transform_geographic.csv (geographic coordinates, Americas excluded)"
+echo "  - hgdp_project_geographic.csv (geographic coordinates, Americas excluded)"
 echo "  - colormap.json"
 echo ""
 echo "Next steps:"
-echo "  python examples/hgdp_1kgp/run_pipeline.py"
+echo "  bash examples/hgdp_1kgp/run_pipeline.sh"
 echo ""

@@ -7,7 +7,7 @@ name = "manifold-genetics"
 version = "0.1.0"
 description = "A lightweight, batteries-included package for genetic analysis with PCA, Admixture, and manifold learning"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "your.email@example.com"},
@@ -36,7 +36,7 @@ dependencies = [
     "umap-learn>=0.5.0",
     # Neural admixture
     "torch>=1.10.0",
-    "neural-admixture>=1.5.0",
+    "neural-admixture==1.6.7",
 ]
 
 [project.optional-dependencies]

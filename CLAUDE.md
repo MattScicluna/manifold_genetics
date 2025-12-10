@@ -62,7 +62,7 @@ python your_script.py
 ### Module Structure
 ```
 src/manifold_genetics/
-├── pca/flashpca.py          # FlashPCA wrapper with fit/transform API
+├── pca/flashpca.py          # FlashPCA wrapper with fit/project API
 ├── admixture/neural.py      # Neural admixture wrapper (K=k_min to k_max)
 ├── embeddings/              # Manifold learning methods
 │   ├── base.py             # Abstract base class with shared I/O
@@ -83,7 +83,7 @@ src/manifold_genetics/
 
 ### Design Patterns
 
-1. **Unified fit/transform API**: All methods (PCA, embeddings) follow scikit-learn pattern
+1. **Unified fit/project API**: All methods (PCA, embeddings) follow scikit-learn pattern
    ```python
    model = PCA(n_components=50)
    coords = model.fit_transform(input_path, output_path="output.csv")
@@ -116,7 +116,8 @@ src/manifold_genetics/
 ```bash
 # Full pipeline
 manifold-genetics pipeline \
-    --plink data/prefix \
+    --fit-plink data/fit_subset \
+    --project-plink data/project_subset \
     --labels labels.csv \
     --colormap colormap.json \
     --output results/ \
@@ -138,6 +139,8 @@ from manifold_genetics import PCA, NeuralAdmixture, PHATE, visualize
 # PCA
 pca = PCA(n_components=50)
 pca_coords = pca.fit_transform("data/hgdp.plink", output_path="pca_50.csv")
+pca.fit("data/hgdp_fit.plink")
+projected = pca.project("data/hgdp_transform.plink", output_path="pca_transform_50.csv")
 
 # Admixture
 admix = NeuralAdmixture(k_min=2, k_max=10)
@@ -250,7 +253,8 @@ pip install -e .[dev]
 
 **PLINK files**: Binary format (`.bed`, `.bim`, `.fam`)
 ```bash
---plink data/hgdp  # for hgdp.bed, hgdp.bim, hgdp.fam
+--fit-plink data/fit_subset        # reference (training) set
+--project-plink data/project_subset  # projection/application set
 ```
 
 **Labels CSV**: Must have `sample_id` column

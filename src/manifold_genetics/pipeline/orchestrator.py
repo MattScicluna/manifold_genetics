@@ -81,6 +81,7 @@ class Pipeline:
         skip_visualization: bool = False,
         skip_pca_visualization: bool = False,
         skip_metrics: bool = False,
+        admix_threads: Optional[int] = None,
     ) -> Dict:
         """
         Run full pipeline.
@@ -97,6 +98,7 @@ class Pipeline:
             skip_visualization: Skip embedding visualization step
             skip_pca_visualization: Skip PCA visualization step
             skip_metrics: Skip metrics computation
+            admix_threads: Threads to use for neural admixture (None = auto-detect)
 
         Returns:
             Dictionary with paths to outputs and computed metrics
@@ -136,11 +138,11 @@ class Pipeline:
             logger.info(f"Fitting PCA on fit subset: {self.fit_plink_prefix}")
             pca.fit(self.fit_plink_prefix, output_dir=pca_dir / "pca_outputs")
 
-            logger.info(f"Transforming fit subset...")
-            pca.transform(self.fit_plink_prefix, output_path=fit_pca_file)
+            logger.info(f"Projecting fit subset...")
+            pca.project(self.fit_plink_prefix, output_path=fit_pca_file)
 
-            logger.info(f"Transforming transform subset...")
-            pca_coords = pca.transform(self.transform_plink_prefix, output_path=transform_pca_file)
+            logger.info(f"Projecting transform subset...")
+            pca_coords = pca.project(self.transform_plink_prefix, output_path=transform_pca_file)
 
             results["fit_pca_file"] = fit_pca_file
             results["transform_pca_file"] = transform_pca_file
@@ -199,7 +201,7 @@ class Pipeline:
             logger.info("=" * 70)
 
             admix_dir = self.output_dir / "admixture"
-            admix = NeuralAdmixture(k_min=k_min, k_max=k_max)
+            admix = NeuralAdmixture(k_min=k_min, k_max=k_max, threads=admix_threads)
 
             logger.info(f"Fitting admixture on fit subset: {self.fit_plink_prefix}")
             admix.fit(self.fit_plink_prefix, output_dir=admix_dir, model_name="fit")

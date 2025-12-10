@@ -54,10 +54,11 @@ echo ""
 DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="${SCRIPT_DIR}/outputs"
 FIT_PLINK="${DATA_DIR}/fit_subset"
-TRANSFORM_PLINK="${DATA_DIR}/transform_subset"
-LABELS_CSV="${DATA_DIR}/hgdp_transform_labels.csv"
+PROJECT_PLINK="${DATA_DIR}/project_subset"
+LABELS_CSV="${DATA_DIR}/hgdp_project_labels.csv"
 COLORMAP_JSON="${DATA_DIR}/colormap.json"
-GEOGRAPHIC_CSV="${DATA_DIR}/hgdp_transform_geographic.csv"
+GEOGRAPHIC_CSV="${DATA_DIR}/hgdp_project_geographic.csv"
+THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
 # Step 1: Check if raw data exists
 print_status "Checking for raw data..."
@@ -86,9 +87,9 @@ REQUIRED_FILES=(
     "${FIT_PLINK}.bed"
     "${FIT_PLINK}.bim"
     "${FIT_PLINK}.fam"
-    "${TRANSFORM_PLINK}.bed"
-    "${TRANSFORM_PLINK}.bim"
-    "${TRANSFORM_PLINK}.fam"
+    "${PROJECT_PLINK}.bed"
+    "${PROJECT_PLINK}.bim"
+    "${PROJECT_PLINK}.fam"
     "${LABELS_CSV}"
     "${COLORMAP_JSON}"
 )
@@ -135,15 +136,16 @@ print_status "Running complete analysis pipeline..."
 echo ""
 echo "Command:"
 echo "manifold-genetics pipeline \\"
-echo "    --plink ${TRANSFORM_PLINK} \\"
 echo "    --fit-plink ${FIT_PLINK} \\"
+echo "    --project-plink ${PROJECT_PLINK} \\"
 echo "    --labels ${LABELS_CSV} \\"
 echo "    --colormap ${COLORMAP_JSON} \\"
 echo "    --geographic ${GEOGRAPHIC_CSV} \\"
 echo "    --output ${OUTPUT_DIR} \\"
 echo "    --n-pcs 50 \\"
 echo "    --k-min 2 --k-max 5 \\"
-echo "    --embedding phate --knn 100 --t 3"
+echo "    --embedding phate --knn 100 --t 3 \\"
+echo "    --threads ${THREADS}"
 echo ""
 
 # Create output directory
@@ -151,15 +153,16 @@ mkdir -p "$OUTPUT_DIR"
 
 # Run pipeline
 manifold-genetics pipeline \
-    --plink "$TRANSFORM_PLINK" \
     --fit-plink "$FIT_PLINK" \
+    --project-plink "$PROJECT_PLINK" \
     --labels "$LABELS_CSV" \
     --colormap "$COLORMAP_JSON" \
     --geographic "$GEOGRAPHIC_CSV" \
     --output "$OUTPUT_DIR" \
     --n-pcs 50 \
     --k-min 2 --k-max 5 \
-    --embedding phate --knn 100 --t 3
+    --embedding phate --knn 100 --t 3 \
+    --threads "$THREADS"
 
 # Step 6: Summary
 echo ""

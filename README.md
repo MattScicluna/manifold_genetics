@@ -16,10 +16,10 @@ A lightweight, batteries-included Python package for genetic analysis with dimen
 
 ### Step 1: Installation (Login Node)
 
-**IMPORTANT**: Run setup on the login node (which has internet access):
+**IMPORTANT**: Run setup.sh before running any of this code.
 
 ```bash
-cd /lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics
+cd /path/to/manifold_genetics
 bash setup.sh
 ```
 
@@ -28,32 +28,21 @@ This will:
 - Install all Python dependencies
 - **Download plink2 and flashPCA** (~22MB total)
 
-The tools are downloaded during setup because compute nodes don't have internet access.
+Note that this step requires internet access.
 
 ### Step 2: Run HGDP+1KGP Example
 
 The package includes a complete example using HGDP+1000 Genomes Project data.
 
-**Option A: Submit batch job (recommended):**
-
 ```bash
-sbatch examples/hgdp_1kgp/run_pipeline_batch.sh
-```
-
-**Option B: Interactive (login node → compute node):**
-
-```bash
-# On login node - download data
+# download data
 bash examples/hgdp_1kgp/download_data.sh
 bash examples/hgdp_1kgp/prepare_data.sh
 
-# Request compute node
-salloc --account=ctb-hussinju --cpus-per-task=4 --mem=16GB --time=1:00:00
-
 # Run pipeline
-cd /lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics
+cd /path/to/manifold_genetics/
 source .venv/bin/activate
-python examples/hgdp_1kgp/run_pipeline.py
+bash examples/hgdp_1kgp/run_pipeline.py
 ```
 
 Results will be in `examples/hgdp_1kgp/outputs/`
@@ -63,19 +52,22 @@ Results will be in `examples/hgdp_1kgp/outputs/`
 ### CLI Pipeline
 
 ```bash
-# On compute node with environment activated
+# With environment activated
 manifold-genetics pipeline \
-    --plink examples/hgdp_1kgp/data/fit_subset \
-    --labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
+    --fit-plink examples/hgdp_1kgp/data/fit_subset \
+    --project-plink examples/hgdp_1kgp/data/project_subset \
+    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --colormap examples/hgdp_1kgp/data/colormap.json \
     --output my_results/ \
     --n-pcs 50 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 25
+    --embedding phate --knn 100 --t 3 \
+    --threads 8   # threads for neural admixture (optional)
 ```
 
 Results saved to `my_results/`:
-- `pca/pca_50.csv` - PCA coordinates
+- `pca/fit_pca_50.csv` - PCA coordinates for fit subset (3,452 samples)
+- `pca/transform_pca_50.csv` - PCA coordinates for project subset (4,094 samples)
 - `admixture/*.Q` - Admixture files for K=2 to 10
 - `embeddings/phate_2d.csv` - PHATE 2D embedding
 - `figures/*.png` - Visualization plots
@@ -83,8 +75,8 @@ Results saved to `my_results/`:
 ### About the Example Data
 
 The HGDP+1KGP example includes:
-- **Fit subset:** 3,400 unrelated samples (for model training)
-- **Transform subset:** 4,094 QC-passing samples (for model application)
+- **Fit subset:** 3,452 unrelated samples (for model training)
+- **Project subset:** 4,094 QC-passing samples (for model application)
 - **172,152 SNPs** (LD-pruned, MAF ≥0.01)
 - **7 genetic regions:** Africa, Americas, Central/South Asia, East Asia, Europe, Middle East, Oceania
 
@@ -98,13 +90,16 @@ from manifold_genetics import PCA, NeuralAdmixture, PHATE, visualize
 # Compute PCA
 pca = PCA(n_components=50)
 pca_coords = pca.fit_transform("data/hgdp.plink", output_path="pca_50.csv")
+# Or fit/project workflow
+pca.fit("data/hgdp_fit.plink")
+projected = pca.project("data/hgdp_transform.plink", output_path="pca_transform_50.csv")
 
 # Train admixture
 admix = NeuralAdmixture(k_min=2, k_max=10)
 q_files = admix.fit_transform("data/hgdp.plink", output_dir="admixture/")
 
 # Compute PHATE embedding
-phate = PHATE(n_components=2, knn=25)
+phate = PHATE(n_components=2, knn=100, t=3)
 embedding = phate.fit_transform("pca_50.csv", output_path="phate_2d.csv")
 
 # Visualize
@@ -123,7 +118,7 @@ manifold-genetics pca --input data.plink --output pca_50.csv --n-pcs 50
 manifold-genetics admixture --input data.plink --output admixture/ --k-min 2 --k-max 10
 
 # Embedding
-manifold-genetics embed --input pca_50.csv --output phate_2d.csv --method phate --knn 25
+manifold-genetics embed --input pca_50.csv --output phate_2d.csv --method phate --knn 100 --t 3
 
 # Visualization
 manifold-genetics plot --input phate_2d.csv --labels labels.csv --colormap colormap.json
@@ -133,13 +128,14 @@ manifold-genetics plot --input phate_2d.csv --labels labels.csv --colormap color
 
 ```bash
 manifold-genetics pipeline \
-    --plink data/hgdp \
-    --labels labels.csv \
+    --fit-plink data/fit_subset \
+    --project-plink data/project_subset \
+    --labels labels_project.csv \
     --colormap colormap.json \
     --output results/ \
     --n-pcs 50 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 25
+    --embedding phate --knn 100 --t 3
 ```
 
 Skip steps as needed:
@@ -153,7 +149,8 @@ manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
 
 **PLINK files**: Binary format (`.bed`, `.bim`, `.fam`). Specify the prefix:
 ```bash
---plink data/hgdp  # for hgdp.bed, hgdp.bim, hgdp.fam
+--fit-plink data/fit_subset       # PCA/admixture reference set (training)
+--project-plink data/project_subset  # projection/application set
 ```
 
 **Labels CSV**: Must have `sample_id` column + label columns:
@@ -191,10 +188,10 @@ HGDP00002,0.234,-0.567,...
 
 ## Embedding Methods
 
-- **PHATE**: `--embedding phate --knn 25`
+- **PHATE**: `--embedding phate --knn 100`
 - **UMAP**: `--embedding umap --n-neighbors 15 --min-dist 0.1`
 - **t-SNE**: `--embedding tsne --perplexity 30`
-- **Diffusion Maps**: `--embedding diffusion_map --knn 25`
+- **Diffusion Maps**: `--embedding diffusion_map --knn 100`
 
 ## Requirements
 
@@ -215,11 +212,6 @@ No manual installation needed!
 **Virtual environment not activated**:
 ```bash
 source .venv/bin/activate
-```
-
-**Memory errors**:
-```bash
-salloc --mem=32GB ...
 ```
 
 **Import errors after installation**:

@@ -36,7 +36,7 @@ class PCA:
         >>> # Project new samples onto reference PCA
         >>> pca = PCA(n_components=50)
         >>> pca.fit(plink_prefix="data/hgdp_ref")
-        >>> new_coords = pca.transform(plink_prefix="data/ukbb")
+        >>> new_coords = pca.project(plink_prefix="data/ukbb")
     """
 
     def __init__(
@@ -108,8 +108,11 @@ class PCA:
         logger.info(f"PCA fitted with {self.n_components} components")
         return self
 
-    def transform(
-        self, plink_prefix: Union[str, Path], output_path: Optional[Union[str, Path]] = None
+    def project(
+        self,
+        plink_prefix: Union[str, Path],
+        output_path: Optional[Union[str, Path]] = None,
+        output_dir: Optional[Union[str, Path]] = None,
     ) -> pd.DataFrame:
         """
         Project samples onto fitted PCA space.
@@ -117,6 +120,7 @@ class PCA:
         Args:
             plink_prefix: Path to PLINK file prefix
             output_path: Optional path to save CSV output
+            output_dir: Optional directory for raw FlashPCA projection outputs
 
         Returns:
             DataFrame with sample_id and PCA coordinates (dim_1, dim_2, ...)
@@ -127,7 +131,15 @@ class PCA:
         plink_prefix = validate_plink_files(plink_prefix)
 
         # Run FlashPCA projection
-        output_prefix = self._fit_output_dir / "transform"
+        if output_dir is None:
+            output_dir = self._fit_output_dir or Path.cwd() / "pca_outputs"
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Use dataset-specific prefix so we don't reuse a cached projection from
+        # a different PLINK dataset (e.g., fit vs. transform subset).
+        dataset_name = Path(plink_prefix).name
+        output_prefix = output_dir / f"transform_{dataset_name}"
         pc_file = self._run_flashpca_project(plink_prefix, output_prefix)
 
         # Convert to manylatents format
@@ -138,6 +150,7 @@ class PCA:
             write_embedding_csv(df, output_path)
 
         return df
+
 
     def fit_transform(
         self, plink_prefix: Union[str, Path], output_path: Optional[Union[str, Path]] = None

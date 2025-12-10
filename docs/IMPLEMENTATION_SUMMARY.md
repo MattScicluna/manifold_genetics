@@ -22,7 +22,7 @@ manifold_genetics/
 │   │
 │   ├── pca/                # PCA module
 │   │   ├── __init__.py
-│   │   └── flashpca.py     # FlashPCA wrapper with fit/transform API
+│   │   └── flashpca.py     # FlashPCA wrapper with fit/project API
 │   │
 │   ├── admixture/          # Admixture module
 │   │   ├── __init__.py
@@ -70,7 +70,7 @@ manifold_genetics/
 
 1. **PCA Module** (`pca/flashpca.py`)
    - FlashPCA wrapper with automatic tool resolution
-   - Fit/transform API for reference + projection workflow
+   - Fit/project API for reference + projection workflow
    - Automatic output formatting to "manylatents" CSV format
    - Checkpointing to skip completed steps
 
@@ -85,7 +85,7 @@ manifold_genetics/
    - **UMAP**: Uniform Manifold Approximation and Projection
    - **t-SNE**: t-Distributed Stochastic Neighbor Embedding
    - **Diffusion Maps**: Diffusion-based manifold learning
-   - Unified API across all methods (fit/transform/fit_transform)
+   - Unified API across all methods (fit/project/fit_transform)
    - Support for numpy arrays, DataFrames, and CSV files
 
 4. **Visualization Module** (`visualization/plotting.py`)
@@ -126,7 +126,7 @@ manifold_genetics/
 
 2. **API-First**
    - Clean Python API for programmatic use
-   - Consistent fit/transform interface across all methods
+   - Consistent fit/project interface across all methods
    - DataFrame-friendly with pandas integration
 
 3. **Production-Ready**
@@ -200,20 +200,22 @@ visualize("phate_2d.csv", "labels.csv", "colormap.json", output_dir="figures/")
 ```bash
 # Full pipeline
 manifold-genetics pipeline \
-    --plink data/hgdp \
+    --fit-plink data/fit_subset \
+    --project-plink data/project_subset \
     --labels labels.csv \
     --colormap colormap.json \
     --output results/ \
     --n-pcs 50 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 25
+    --embedding phate --knn 25 \
+    --threads 8
 ```
 
 ## File Formats
 
 ### Input
 
-- **PLINK**: Binary format (`.bed`, `.bim`, `.fam`)
+- **PLINK**: Binary format (`.bed`, `.bim`, `.fam`). Use `--fit-plink` for the reference/training set and `--project-plink` for the projection/application set.
 - **Labels CSV**: `sample_id` column + label columns
 - **Colormap JSON**: `{label_col: {value: hex_color}}`
 
@@ -260,7 +262,8 @@ Or use standalone for simpler workflows.
 2. **Run on Real Data**:
    ```bash
    manifold-genetics pipeline \
-       --plink /path/to/hgdp \
+       --fit-plink /path/to/fit_subset \
+       --project-plink /path/to/project_subset \
        --labels /path/to/labels.csv \
        --colormap /path/to/colormap.json \
        --output results/
