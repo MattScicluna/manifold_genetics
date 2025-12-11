@@ -363,7 +363,6 @@ def cmd_pipeline(args):
         admix_threads=args.threads,
         admix_gpus=args.num_gpus,
         flashpca_output_dir=args.flashpca_output_dir,
-        neuraladmixture_output_dir=args.neuraladmixture_output_dir,
     )
 
     print(f"Pipeline complete!")
