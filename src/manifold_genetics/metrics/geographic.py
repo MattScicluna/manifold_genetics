@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 def compute_geographic_preservation(
     embedding: Union[pd.DataFrame, str, Path],
     geographic_coords: Union[pd.DataFrame, str, Path],
-    longitude_col: str = "Longitude",
-    latitude_col: str = "Latitude",
+    longitude_col: str = "longitude",
+    latitude_col: str = "latitude",
     num_samples: int = 50000,
     ignore_missing: bool = True,
 ) -> dict:

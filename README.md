@@ -75,8 +75,6 @@ manifold-genetics pipeline \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --colormap examples/hgdp_1kgp/data/colormap.json \
     --output examples/hgdp_1kgp/outputs \
-    --flashpca-output-dir examples/hgdp_1kgp/outputs/pca/flashpca_outputs \
-    --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
     --n-pcs 50 \
     --k-min 2 --k-max 5 \
     --embedding phate --knn 100 --t 3 \
@@ -107,11 +105,10 @@ manifold-genetics pca \
 manifold-genetics admixture \
     --fit-plink examples/hgdp_1kgp/data/fit_subset \
     --project-plink examples/hgdp_1kgp/data/project_subset \
-    --output examples/hgdp_1kgp/outputs/admixture \
     --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
-    --fit-output examples/hgdp_1kgp/data/fit \
-    --project-output examples/hgdp_1kgp/data/transform \
-    --k-min 2 --k-max 5
+    --fit-output examples/hgdp_1kgp/outputs/admixture/fit \
+    --project-output examples/hgdp_1kgp/outputs/admixture/transform \
+    --k-min 2 --k-max 5 --threads 8
 # Outputs (per K): examples/hgdp_1kgp/outputs/admixture/admixture_fit_k*.csv and admixture_transform_k*.csv
 
 # 3) Embedding (PHATE): run on transform PCA coordinates

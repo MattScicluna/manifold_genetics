@@ -88,6 +88,7 @@ class Pipeline:
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
         flashpca_output_dir: Optional[Union[str, Path]] = None,
+        neuraladmixture_output_dir: Optional[Union[str, Path]] = None,
     ) -> Dict:
         """
         Run full pipeline.
@@ -123,6 +124,8 @@ class Pipeline:
 
             fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
             transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+            flashpca_dir = pca_dir / "flashpca_outputs"
+            flashpca_dir.mkdir(parents=True, exist_ok=True)
 
             # Check if existing PCA outputs have correct number of components
             force_pca = False
@@ -151,11 +154,11 @@ class Pipeline:
                 str(fit_pca_file),
                 "--project-output",
                 str(transform_pca_file),
+                "--flashpca-output-dir",
+                str(flashpca_dir),
                 "--n-pcs",
                 str(n_pcs),
             ]
-            if flashpca_output_dir:
-                pca_cmd.extend(["--flashpca-output-dir", str(flashpca_output_dir)])
             if force_pca:
                 pca_cmd.append("--force")
 
@@ -216,6 +219,8 @@ class Pipeline:
 
             admix_dir = self.output_dir / "admixture"
             admix_dir.mkdir(exist_ok=True)
+            admix_checkpoints_dir = admix_dir / "checkpoints"
+            admix_checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
             logger.info("Running admixture via CLI")
             admix_cmd = [
@@ -225,12 +230,12 @@ class Pipeline:
                 str(self.fit_plink_prefix),
                 "--project-plink",
                 str(self.transform_plink_prefix),
-                "--output",
-                str(admix_dir),
+                "--neuraladmixture-output-dir",
+                str(admix_checkpoints_dir),
                 "--fit-output",
-                "fit",
+                str(admix_dir / "fit"),
                 "--project-output",
-                "transform",
+                str(admix_dir / "transform"),
                 "--k-min",
                 str(k_min),
                 "--k-max",
@@ -247,6 +252,7 @@ class Pipeline:
             transform_q_files = {k: admix_dir / f"admixture_transform_k{k}.csv" for k in range(k_min, k_max + 1)}
 
             results["admixture_dir"] = admix_dir
+            results["admixture_checkpoints_dir"] = admix_checkpoints_dir
             results["fit_q_files"] = fit_q_files
             results["transform_q_files"] = transform_q_files
             results["q_files"] = transform_q_files
