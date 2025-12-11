@@ -86,12 +86,20 @@ class PCA:
             Self (for method chaining)
         """
         plink_prefix = validate_plink_files(plink_prefix)
+        plink_prefix = Path(plink_prefix).expanduser()
+        if not plink_prefix.is_absolute():
+            plink_prefix = Path.cwd() / plink_prefix
+        plink_prefix = Path(plink_prefix).expanduser()
+        if not plink_prefix.is_absolute():
+            plink_prefix = Path.cwd() / plink_prefix
 
         # Set default output directory
         if output_dir is None:
             output_dir = Path.cwd() / "pca_outputs"
         else:
-            output_dir = Path(output_dir)
+            output_dir = Path(output_dir).expanduser()
+            if not output_dir.is_absolute():
+                output_dir = Path.cwd() / output_dir
 
         output_dir.mkdir(parents=True, exist_ok=True)
         self._fit_output_dir = output_dir
@@ -101,8 +109,8 @@ class PCA:
         outputs = self._run_flashpca_fit(plink_prefix, output_prefix)
 
         # Store reference files for projection
-        self._loadings_path = outputs["loadings"]
-        self._meansd_path = outputs["meansd"]
+        self._loadings_path = outputs["loadings"].resolve()
+        self._meansd_path = outputs["meansd"].resolve()
         self._is_fitted = True
 
         logger.info(f"PCA fitted with {self.n_components} components")
@@ -129,11 +137,16 @@ class PCA:
             raise RuntimeError("PCA not fitted. Call fit() first.")
 
         plink_prefix = validate_plink_files(plink_prefix)
+        plink_prefix = Path(plink_prefix).expanduser()
+        if not plink_prefix.is_absolute():
+            plink_prefix = Path.cwd() / plink_prefix
 
         # Run FlashPCA projection
         if output_dir is None:
             output_dir = self._fit_output_dir or Path.cwd() / "pca_outputs"
-        output_dir = Path(output_dir)
+        output_dir = Path(output_dir).expanduser()
+        if not output_dir.is_absolute():
+            output_dir = Path.cwd() / output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Use dataset-specific prefix so we don't reuse a cached projection from
@@ -172,10 +185,14 @@ class PCA:
             output_dir = Path(output_path).parent / "pca_outputs"
         else:
             output_dir = Path.cwd() / "pca_outputs"
+        output_dir = output_dir.expanduser()
+        if not output_dir.is_absolute():
+            output_dir = Path.cwd() / output_dir
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Run FlashPCA fit
+        output_dir = output_dir if output_dir.is_absolute() else (Path.cwd() / output_dir)
         output_prefix = output_dir / "fit"
         outputs = self._run_flashpca_fit(plink_prefix, output_prefix)
 
@@ -247,12 +264,21 @@ class PCA:
         # Run FlashPCA
         # Set cwd to output directory to catch any extra files (like pve.txt)
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, cwd=output_prefix.parent)
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=output_prefix.parent,
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"FlashPCA fit failed: {e}")
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
-            raise
+            raise RuntimeError(
+                "FlashPCA fit failed. See logs for stdout/stderr. "
+                f"Command: {' '.join(cmd)}\nstdout:\n{e.stdout}\nstderr:\n{e.stderr}"
+            )
 
         # Verify outputs were created
         missing = [name for name, path in outputs.items() if not path.exists()]
@@ -302,12 +328,21 @@ class PCA:
         # Run FlashPCA projection
         # Set cwd to output directory to catch any extra files (like pve.txt)
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, cwd=output_prefix.parent)
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=output_prefix.parent,
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"FlashPCA project failed: {e}")
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
-            raise
+            raise RuntimeError(
+                "FlashPCA project failed. See logs for stdout/stderr. "
+                f"Command: {' '.join(cmd)}\nstdout:\n{e.stdout}\nstderr:\n{e.stderr}"
+            )
 
         # Verify output was created
         if not output_pc.exists():

@@ -208,7 +208,8 @@ manifold-genetics pipeline \
     --n-pcs 50 \
     --k-min 2 --k-max 10 \
     --embedding phate --knn 25 \
-    --threads 8
+    --threads 8 \
+    --num-gpus 1
 ```
 
 ## File Formats

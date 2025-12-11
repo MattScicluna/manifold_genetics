@@ -59,6 +59,7 @@ LABELS_CSV="${DATA_DIR}/hgdp_project_labels.csv"
 COLORMAP_JSON="${DATA_DIR}/colormap.json"
 GEOGRAPHIC_CSV="${DATA_DIR}/hgdp_project_geographic.csv"
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
+NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 
 # Step 1: Check if raw data exists
 print_status "Checking for raw data..."
@@ -146,6 +147,7 @@ echo "    --n-pcs 50 \\"
 echo "    --k-min 2 --k-max 5 \\"
 echo "    --embedding phate --knn 100 --t 3 \\"
 echo "    --threads ${THREADS}"
+[ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
 echo ""
 
 # Create output directory
@@ -162,7 +164,8 @@ manifold-genetics pipeline \
     --n-pcs 50 \
     --k-min 2 --k-max 5 \
     --embedding phate --knn 100 --t 3 \
-    --threads "$THREADS"
+    --threads "$THREADS" \
+    ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 
 # Step 6: Summary
 echo ""

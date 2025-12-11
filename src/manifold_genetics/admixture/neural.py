@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union
 
+import torch
+
 # Assuming these imports exist in your project structure
 from ..utils.io import validate_plink_files
 from ..utils.tools import ToolResolver
@@ -29,7 +31,8 @@ class NeuralAdmixture:
         k_max: int = 10,
         neural_admixture_path: Optional[str] = None,
         force: bool = False,
-        threads: Optional[int] = None,  # Added threads argument
+        threads: Optional[int] = None,
+        num_gpus: Optional[int] = None,
     ):
         """
         Initialize Neural Admixture analyzer.
@@ -41,11 +44,14 @@ class NeuralAdmixture:
             force: If True, retrain even if models exist
             threads: Number of threads to use. If None, attempts to detect
                      available CPUs (respecting SLURM/HPC limits).
+            num_gpus: Number of GPUs to use. If None, uses 1 when CUDA is
+                      available and 0 otherwise.
         """
         self.k_min = k_min
         self.k_max = k_max
         self.force = force
-        self.threads = self._resolve_threads(threads) # Resolve threads immediately
+        self.threads = self._resolve_threads(threads)
+        self.num_gpus = self._resolve_num_gpus(num_gpus)
 
         # Resolve neural-admixture path
         if neural_admixture_path is None:
@@ -55,6 +61,7 @@ class NeuralAdmixture:
         self.nadm_exec = neural_admixture_path
         logger.debug(f"Using neural-admixture: {self.nadm_exec}")
         logger.debug(f"Using threads: {self.threads}")
+        logger.debug(f"Using GPUs: {self.num_gpus}")
 
         # Fitted state
         self._is_fitted = False
@@ -88,6 +95,12 @@ class NeuralAdmixture:
         # 3. Fallback to total system CPUs (Risky on shared nodes, but standard fallback)
         count = os.cpu_count()
         return count if count else 1
+
+    def _resolve_num_gpus(self, requested_gpus: Optional[int]) -> int:
+        """Resolve number of GPUs to use (default: 1 if CUDA available)."""
+        if requested_gpus is not None:
+            return max(0, requested_gpus)
+        return 1 if torch.cuda.is_available() else 0
 
     def fit(
         self,
@@ -136,7 +149,9 @@ class NeuralAdmixture:
         q_files = self._infer(plink_prefix, output_dir, out_name)
         
         # Convert Q files to standardized CSV format
-        csv_files = self._convert_q_files_to_csv(q_files, plink_prefix, output_dir)
+        csv_files = self._convert_q_files_to_csv(
+            q_files, plink_prefix, output_dir, dataset_label=out_name
+        )
         
         return csv_files  # Return CSV files instead of raw Q files
 
@@ -159,7 +174,9 @@ class NeuralAdmixture:
         q_files = self._infer_on_training_data(output_dir)
         
         # Convert Q files to standardized CSV format
-        csv_files = self._convert_q_files_to_csv(q_files, plink_prefix, output_dir)
+        csv_files = self._convert_q_files_to_csv(
+            q_files, plink_prefix, output_dir, dataset_label="fit"
+        )
 
         self._model_dir = output_dir
         self._model_name = "fit"
@@ -186,6 +203,7 @@ class NeuralAdmixture:
 
         logger.info(f"Training models K={self.k_min}-{self.k_max}")
         logger.info(f"  Threads: {self.threads}")
+        logger.info(f"  GPUs: {self.num_gpus}")
 
         for k in range(self.k_min, self.k_max + 1):
             k_specific_name = f"{model_name}_k{k}"
@@ -198,7 +216,8 @@ class NeuralAdmixture:
                 "--name", k_specific_name,
                 "--data_path", str(plink_bed),
                 "--save_dir", str(output_dir),
-                "--threads", str(self.threads)  # Passed as a clean string integer
+                "--threads", str(self.threads),
+                "--num_gpus", str(self.num_gpus),
             ]
 
             try:
@@ -241,7 +260,8 @@ class NeuralAdmixture:
                 "--save_dir", str(self._model_dir),
                 "--data_path", str(plink_bed),
                 "--out_name", out_name,
-                "--threads", str(self.threads) 
+                "--threads", str(self.threads),
+                "--num_gpus", str(self.num_gpus),
             ]
 
             try:
@@ -266,10 +286,11 @@ class NeuralAdmixture:
         return q_files
 
     def _convert_q_files_to_csv(
-        self, 
-        q_files: Dict[int, Path], 
-        plink_prefix: Path, 
-        output_dir: Path
+        self,
+        q_files: Dict[int, Path],
+        plink_prefix: Path,
+        output_dir: Path,
+        dataset_label: Optional[str] = None,
     ) -> Dict[int, Path]:
         """
         Convert raw Q files to standardized CSV format with sample_id column.
@@ -314,7 +335,8 @@ class NeuralAdmixture:
             df.insert(0, 'sample_id', sample_ids_subset)
             
             # Save to CSV
-            csv_file = output_dir / f"admixture_k{k}.csv"
+            suffix = f"_{dataset_label}" if dataset_label else ""
+            csv_file = output_dir / f"admixture{suffix}_k{k}.csv"
             df.to_csv(csv_file, index=False)
             csv_files[k] = csv_file
             

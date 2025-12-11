@@ -5,8 +5,12 @@ Coordinates PCA, Admixture, Embeddings, Visualization, and Metrics.
 """
 
 import logging
+import subprocess
+import json
 from pathlib import Path
 from typing import Dict, Optional, Union
+
+import pandas as pd
 
 from ..pca import PCA
 from ..admixture import NeuralAdmixture
@@ -82,6 +86,8 @@ class Pipeline:
         skip_pca_visualization: bool = False,
         skip_metrics: bool = False,
         admix_threads: Optional[int] = None,
+        admix_gpus: Optional[int] = None,
+        flashpca_output_dir: Optional[Union[str, Path]] = None,
     ) -> Dict:
         """
         Run full pipeline.
@@ -99,6 +105,7 @@ class Pipeline:
             skip_pca_visualization: Skip PCA visualization step
             skip_metrics: Skip metrics computation
             admix_threads: Threads to use for neural admixture (None = auto-detect)
+            admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
 
         Returns:
             Dictionary with paths to outputs and computed metrics
@@ -121,7 +128,6 @@ class Pipeline:
             force_pca = False
             if transform_pca_file.exists():
                 try:
-                    import pandas as pd
                     existing_pca = pd.read_csv(transform_pca_file, nrows=1)
                     # Count dimension columns (dim_1, dim_2, ...)
                     existing_n_pcs = len([col for col in existing_pca.columns if col.startswith('dim_')])
@@ -133,16 +139,29 @@ class Pipeline:
                     logger.warning(f"Could not check existing PCA file: {e}")
                     force_pca = True
 
-            pca = PCA(n_components=n_pcs, force=force_pca)
+            logger.info(f"Running PCA via CLI (fit: {self.fit_plink_prefix}, project: {self.transform_plink_prefix})")
+            pca_cmd = [
+                "manifold-genetics",
+                "pca",
+                "--fit-plink",
+                str(self.fit_plink_prefix),
+                "--project-plink",
+                str(self.transform_plink_prefix),
+                "--fit-output",
+                str(fit_pca_file),
+                "--project-output",
+                str(transform_pca_file),
+                "--n-pcs",
+                str(n_pcs),
+            ]
+            if flashpca_output_dir:
+                pca_cmd.extend(["--flashpca-output-dir", str(flashpca_output_dir)])
+            if force_pca:
+                pca_cmd.append("--force")
 
-            logger.info(f"Fitting PCA on fit subset: {self.fit_plink_prefix}")
-            pca.fit(self.fit_plink_prefix, output_dir=pca_dir / "pca_outputs")
+            subprocess.run(pca_cmd, check=True)
 
-            logger.info(f"Projecting fit subset...")
-            pca.project(self.fit_plink_prefix, output_path=fit_pca_file)
-
-            logger.info(f"Projecting transform subset...")
-            pca_coords = pca.project(self.transform_plink_prefix, output_path=transform_pca_file)
+            pca_coords = pd.read_csv(transform_pca_file)
 
             results["fit_pca_file"] = fit_pca_file
             results["transform_pca_file"] = transform_pca_file
@@ -162,29 +181,24 @@ class Pipeline:
                 pca_figures_dir = self.output_dir / "figures" / "pca"
                 pca_figures_dir.mkdir(parents=True, exist_ok=True)
 
-                # Use plot_pca_pairs for multi-pair PCA plotting
+                logger.info("Plotting PCA pairs grid via plot_pca_pairs")
+                # Use plot_pca_pairs to generate a single grid covering PC pairs
+                from ..visualization import plot_pca_pairs
                 from ..utils.io import read_colormap
 
-                # Read colormap to get label columns
-                if isinstance(self.colormap, (str, Path)):
-                    colormap_dict = read_colormap(self.colormap)
-                else:
-                    colormap_dict = self.colormap
-
+                colormap_dict = read_colormap(self.colormap)
                 pca_figure_paths = []
                 for label_col in colormap_dict.keys():
                     output_path = pca_figures_dir / f"pca_pairs_by_{label_col}.png"
-
                     plot_path = plot_pca_pairs(
                         pca_coords=pca_file,
                         labels=self.labels,
-                        colormap=self.colormap,
+                        colormap=colormap_dict,
                         output_path=output_path,
                         label_column=label_col,
                         n_pcs=n_pcs,
                         title=f"PCA Pairs by {label_col}",
                     )
-
                     pca_figure_paths.append(plot_path)
                     logger.info(f"Saved PCA pairs plot: {plot_path}")
 
@@ -201,16 +215,36 @@ class Pipeline:
             logger.info("=" * 70)
 
             admix_dir = self.output_dir / "admixture"
-            admix = NeuralAdmixture(k_min=k_min, k_max=k_max, threads=admix_threads)
+            admix_dir.mkdir(exist_ok=True)
 
-            logger.info(f"Fitting admixture on fit subset: {self.fit_plink_prefix}")
-            admix.fit(self.fit_plink_prefix, output_dir=admix_dir, model_name="fit")
+            logger.info("Running admixture via CLI")
+            admix_cmd = [
+                "manifold-genetics",
+                "admixture",
+                "--fit-plink",
+                str(self.fit_plink_prefix),
+                "--project-plink",
+                str(self.transform_plink_prefix),
+                "--output",
+                str(admix_dir),
+                "--fit-output",
+                "fit",
+                "--project-output",
+                "transform",
+                "--k-min",
+                str(k_min),
+                "--k-max",
+                str(k_max),
+            ]
+            if admix_threads:
+                admix_cmd.extend(["--threads", str(admix_threads)])
+            if admix_gpus is not None:
+                admix_cmd.extend(["--num-gpus", str(admix_gpus)])
 
-            logger.info(f"Transforming fit subset...")
-            fit_q_files = admix.transform(self.fit_plink_prefix, output_dir=admix_dir, out_name="fit")
+            subprocess.run(admix_cmd, check=True)
 
-            logger.info(f"Transforming transform subset...")
-            transform_q_files = admix.transform(self.transform_plink_prefix, output_dir=admix_dir, out_name="transform")
+            fit_q_files = {k: admix_dir / f"admixture_fit_k{k}.csv" for k in range(k_min, k_max + 1)}
+            transform_q_files = {k: admix_dir / f"admixture_transform_k{k}.csv" for k in range(k_min, k_max + 1)}
 
             results["admixture_dir"] = admix_dir
             results["fit_q_files"] = fit_q_files
@@ -227,13 +261,32 @@ class Pipeline:
             embedding_dir.mkdir(exist_ok=True)
             embedding_file = embedding_dir / f"{embedding}_2d.csv"
 
-            # Get embedding model
-            embedding_model = self._get_embedding_model(embedding, embedding_params)
+            logger.info("Running embedding via CLI on transform PCA coordinates")
+            embed_cmd = [
+                "manifold-genetics",
+                "embed",
+                "--method",
+                embedding,
+                "--input",
+                str(results["transform_pca_file"]),
+                "--project-output",
+                str(embedding_file),
+            ]
 
-            # Run embedding on transform PCA coordinates (4,094 samples)
-            embedding_coords = embedding_model.fit_transform(
-                results["transform_pca_file"], output_path=embedding_file
-            )
+            if embedding == "phate":
+                embed_cmd.extend(["--knn", str(embedding_params.get("knn", 25))])
+                t_val = embedding_params.get("t", "auto")
+                embed_cmd.extend(["--t", str(t_val)])
+            elif embedding == "umap":
+                embed_cmd.extend(["--n-neighbors", str(embedding_params.get("n_neighbors", 15))])
+                embed_cmd.extend(["--min-dist", str(embedding_params.get("min_dist", 0.1))])
+            elif embedding == "tsne":
+                embed_cmd.extend(["--perplexity", str(embedding_params.get("perplexity", 30))])
+            elif embedding == "diffusion_map":
+                embed_cmd.extend(["--knn", str(embedding_params.get("knn", 25))])
+
+            subprocess.run(embed_cmd, check=True)
+            embedding_coords = pd.read_csv(embedding_file)
 
             results["embedding_file"] = embedding_file
             results["embedding_coords"] = embedding_coords
@@ -265,24 +318,48 @@ class Pipeline:
 
             metrics = {}
 
-            # Geographic preservation
-            if self.geographic_coords:
-                logger.info("Computing geographic preservation...")
-                geo_metrics = compute_geographic_preservation(
-                    embedding=embedding_file,
-                    geographic_coords=self.geographic_coords,
-                    longitude_col="longitude",
-                    latitude_col="latitude"
-                )
-                metrics["geographic"] = geo_metrics
+            metrics_dir = self.output_dir / "metrics"
+            metrics_dir.mkdir(parents=True, exist_ok=True)
 
-            # Admixture preservation
-            if not skip_admixture and "q_files" in results:
-                logger.info("Computing admixture preservation...")
-                admix_metrics = compute_admixture_preservation(
-                    embedding=embedding_file, q_files=results["q_files"]
-                )
-                metrics["admixture"] = admix_metrics
+            # Geographic preservation via CLI
+            if self.geographic_coords:
+                logger.info("Computing geographic preservation via CLI...")
+                geo_out = metrics_dir / "geographic.json"
+                geo_cmd = [
+                    "manifold-genetics",
+                    "metrics-geographic",
+                    "--embedding",
+                    str(embedding_file),
+                    "--geographic",
+                    str(self.geographic_coords),
+                    "--output",
+                    str(geo_out),
+                ]
+                subprocess.run(geo_cmd, check=True)
+                with open(geo_out) as f:
+                    metrics["geographic"] = json.load(f)
+
+            # Admixture preservation via CLI
+            if not skip_admixture and "admixture_dir" in results:
+                logger.info("Computing admixture preservation via CLI...")
+                admix_out = metrics_dir / "admixture.json"
+                admix_cmd = [
+                    "manifold-genetics",
+                    "metrics-admixture",
+                    "--embedding",
+                    str(embedding_file),
+                    "--q-dir",
+                    str(results["admixture_dir"]),
+                    "--output",
+                    str(admix_out),
+                    "--k-min",
+                    str(k_min),
+                    "--k-max",
+                    str(k_max),
+                ]
+                subprocess.run(admix_cmd, check=True)
+                with open(admix_out) as f:
+                    metrics["admixture"] = json.load(f)
 
             results["metrics"] = metrics
 

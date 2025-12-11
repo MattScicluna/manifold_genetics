@@ -42,30 +42,10 @@ bash examples/hgdp_1kgp/prepare_data.sh
 # Run pipeline
 cd /path/to/manifold_genetics/
 source .venv/bin/activate
-bash examples/hgdp_1kgp/run_pipeline.py
+bash examples/hgdp_1kgp/run_pipeline.sh
 ```
 
-Results will be in `examples/hgdp_1kgp/outputs/`
-
-## Usage
-
-### CLI Pipeline
-
-```bash
-# With environment activated
-manifold-genetics pipeline \
-    --fit-plink examples/hgdp_1kgp/data/fit_subset \
-    --project-plink examples/hgdp_1kgp/data/project_subset \
-    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/hgdp_1kgp/data/colormap.json \
-    --output my_results/ \
-    --n-pcs 50 \
-    --k-min 2 --k-max 10 \
-    --embedding phate --knn 100 --t 3 \
-    --threads 8   # threads for neural admixture (optional)
-```
-
-Results saved to `my_results/`:
+Results saved to `examples/hgdp_1kgp/outputs`:
 - `pca/fit_pca_50.csv` - PCA coordinates for fit subset (3,452 samples)
 - `pca/transform_pca_50.csv` - PCA coordinates for project subset (4,094 samples)
 - `admixture/*.Q` - Admixture files for K=2 to 10
@@ -82,65 +62,96 @@ The HGDP+1KGP example includes:
 
 For detailed data processing information, see `docs/details_for_paper.md`.
 
-## Python API
-
-```python
-from manifold_genetics import PCA, NeuralAdmixture, PHATE, visualize
-
-# Compute PCA
-pca = PCA(n_components=50)
-pca_coords = pca.fit_transform("data/hgdp.plink", output_path="pca_50.csv")
-# Or fit/project workflow
-pca.fit("data/hgdp_fit.plink")
-projected = pca.project("data/hgdp_transform.plink", output_path="pca_transform_50.csv")
-
-# Train admixture
-admix = NeuralAdmixture(k_min=2, k_max=10)
-q_files = admix.fit_transform("data/hgdp.plink", output_dir="admixture/")
-
-# Compute PHATE embedding
-phate = PHATE(n_components=2, knn=100, t=3)
-embedding = phate.fit_transform("pca_50.csv", output_path="phate_2d.csv")
-
-# Visualize
-visualize("phate_2d.csv", "labels.csv", "colormap.json", output_dir="figures/")
-```
-
 ## Command-Line Interface
 
-### Individual Commands
+### Pipeline (recommended)
 
-```bash
-# PCA
-manifold-genetics pca --input data.plink --output pca_50.csv --n-pcs 50
-
-# Admixture
-manifold-genetics admixture --input data.plink --output admixture/ --k-min 2 --k-max 10
-
-# Embedding
-manifold-genetics embed --input pca_50.csv --output phate_2d.csv --method phate --knn 100 --t 3
-
-# Visualization
-manifold-genetics plot --input phate_2d.csv --labels labels.csv --colormap colormap.json
-```
-
-### Full Pipeline
+Run from the repository root. Outputs land under `examples/hgdp_1kgp/outputs/` in subfolders (`pca/`, `admixture/`, `embeddings/`, `figures/`), and metrics are computed from the pipeline run.
 
 ```bash
 manifold-genetics pipeline \
-    --fit-plink data/fit_subset \
-    --project-plink data/project_subset \
-    --labels labels_project.csv \
-    --colormap colormap.json \
-    --output results/ \
+    --fit-plink examples/hgdp_1kgp/data/fit_subset \
+    --project-plink examples/hgdp_1kgp/data/project_subset \
+    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --output examples/hgdp_1kgp/outputs \
+    --flashpca-output-dir examples/hgdp_1kgp/outputs/pca/flashpca_outputs \
+    --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
     --n-pcs 50 \
-    --k-min 2 --k-max 10 \
-    --embedding phate --knn 100 --t 3
+    --k-min 2 --k-max 5 \
+    --embedding phate --knn 100 --t 3 \
+    --threads 8
+# Optional: --num-gpus 1
 ```
 
 Skip steps as needed:
 ```bash
 manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
+```
+
+### Equivalent Individual Commands (same outputs as pipeline)
+
+Run from repo root; paths below match the pipeline output layout. Metrics are produced by the pipeline; individual commands do not compute metrics (use the pipeline to get `outputs/metrics/*.json`).
+
+```bash
+# 1) PCA: fit on fit_subset, project on project_subset
+manifold-genetics pca \
+    --fit-plink examples/hgdp_1kgp/data/fit_subset \
+    --project-plink examples/hgdp_1kgp/data/project_subset \
+    --fit-output examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
+    --project-output examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --flashpca-output-dir examples/hgdp_1kgp/outputs/pca/flashpca_outputs \
+    --n-pcs 50
+
+# 2) Admixture: fit on fit_subset, project on project_subset
+manifold-genetics admixture \
+    --fit-plink examples/hgdp_1kgp/data/fit_subset \
+    --project-plink examples/hgdp_1kgp/data/project_subset \
+    --output examples/hgdp_1kgp/outputs/admixture \
+    --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
+    --fit-output examples/hgdp_1kgp/data/fit \
+    --project-output examples/hgdp_1kgp/data/transform \
+    --k-min 2 --k-max 5
+# Outputs (per K): examples/hgdp_1kgp/outputs/admixture/admixture_fit_k*.csv and admixture_transform_k*.csv
+
+# 3) Embedding (PHATE): run on transform PCA coordinates
+manifold-genetics embed \
+    --method phate \
+    --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --project-output examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
+    --knn 100 --t 3 --n-landmark None
+
+# 4) Visualization
+
+# PCA
+manifold-genetics plot-pca \
+    --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --output examples/hgdp_1kgp/outputs/figures/pca \
+    --n-pcs 50
+
+# PHATE
+manifold-genetics plot \
+    --input examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
+    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --output examples/hgdp_1kgp/outputs/figures/embeddings/phate.png
+
+
+# 5) Metrics (optional, standalone)
+manifold-genetics metrics-geographic \
+    --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
+    --geographic examples/hgdp_1kgp/data/hgdp_project_geographic.csv \
+    --output examples/hgdp_1kgp/outputs/metrics/geographic.json \
+    --num-dists-sampled 50000
+
+manifold-genetics metrics-admixture \
+    --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
+    --q-dir examples/hgdp_1kgp/outputs/admixture \
+    --output examples/hgdp_1kgp/outputs/metrics/admixture.json \
+    --k-min 2 --k-max 5 \
+    --num-dists-sampled 50000
 ```
 
 ## Data Formats
@@ -149,8 +160,8 @@ manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
 
 **PLINK files**: Binary format (`.bed`, `.bim`, `.fam`). Specify the prefix:
 ```bash
---fit-plink data/fit_subset       # PCA/admixture reference set (training)
---project-plink data/project_subset  # projection/application set
+--fit-plink examples/hgdp_1kgp/data/fit_subset       # PCA/admixture reference set (training)
+--project-plink examples/hgdp_1kgp/data/project_subset  # projection/application set
 ```
 
 **Labels CSV**: Must have `sample_id` column + label columns:
