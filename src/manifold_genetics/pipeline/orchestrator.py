@@ -248,8 +248,8 @@ class Pipeline:
 
             subprocess.run(admix_cmd, check=True)
 
-            fit_q_files = {k: admix_dir / f"admixture_fit_k{k}.csv" for k in range(k_min, k_max + 1)}
-            transform_q_files = {k: admix_dir / f"admixture_transform_k{k}.csv" for k in range(k_min, k_max + 1)}
+            fit_q_files = {k: admix_dir / f"fit.{k}.csv" for k in range(k_min, k_max + 1)}
+            transform_q_files = {k: admix_dir / f"transform.{k}.csv" for k in range(k_min, k_max + 1)}
 
             results["admixture_dir"] = admix_dir
             results["admixture_checkpoints_dir"] = admix_checkpoints_dir

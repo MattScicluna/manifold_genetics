@@ -68,13 +68,13 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
         def fit(self, prefix, output_dir=None, model_name=None):
             calls.append(("fit", prefix, output_dir, model_name))
 
-        def transform(self, prefix, output_dir=None, out_name=None):
-            calls.append(("transform", prefix, output_dir, out_name))
-            output_dir = Path(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
+        def transform(self, prefix, output_prefix=None):
+            calls.append(("transform", prefix, output_prefix))
+            output_prefix = Path(output_prefix)
+            output_prefix.parent.mkdir(parents=True, exist_ok=True)
             paths = {}
             for k in (2, 3):
-                csv = output_dir / f"admixture_{out_name}_k{k}.csv"
+                csv = Path(f"{output_prefix}.{k}.csv")
                 pd.DataFrame({"sample_id": ["s1"], f"component_{k}": [0.5]}).to_csv(
                     csv, index=False
                 )
@@ -93,8 +93,8 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
         project_plink="project_prefix",
         output=str(out_dir),
         model_name="fit",
-        fit_output="fit",
-        project_output="transform",
+        fit_output=str(out_dir / "fit"),
+        project_output=str(out_dir / "transform"),
         k_min=2,
         k_max=3,
         force=False,
@@ -105,15 +105,15 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
 
     mg_cli.cmd_admixture(args)
 
-    expected_fit = out_dir / "admixture_fit_k2.csv"
-    expected_proj = out_dir / "admixture_transform_k3.csv"
+    expected_fit = out_dir / "fit.2.csv"
+    expected_proj = out_dir / "transform.3.csv"
     assert expected_fit.exists()
     assert expected_proj.exists()
     # Verify call order: init -> fit -> transform fit -> transform project
     assert calls[0][0] == "init"
     assert ("fit", "fit_prefix", out_dir, "fit") in calls
-    assert ("transform", "fit_prefix", out_dir, "fit") in calls
-    assert ("transform", "project_prefix", out_dir, "transform") in calls
+    assert ("transform", "fit_prefix", out_dir / "fit") in calls
+    assert ("transform", "project_prefix", out_dir / "transform") in calls
 
 
 def test_cli_embed_fit_project(monkeypatch, tmp_path):

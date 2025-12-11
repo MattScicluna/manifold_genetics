@@ -88,8 +88,8 @@ def cmd_admixture(args):
         raise ValueError("Please provide --fit-output and --project-output for admixture outputs.")
     fit_output_path = Path(args.fit_output)
     project_output_path = Path(args.project_output)
-    q_output_dir = fit_output_path.parent if fit_output_path.parent == project_output_path.parent else fit_output_path.parent
-    q_output_dir.mkdir(parents=True, exist_ok=True)
+    fit_output_path.parent.mkdir(parents=True, exist_ok=True)
+    project_output_path.parent.mkdir(parents=True, exist_ok=True)
 
     admix = NeuralAdmixture(
         k_min=args.k_min,
@@ -102,26 +102,21 @@ def cmd_admixture(args):
     # Fit models
     admix.fit(fit_prefix, output_dir=checkpoint_dir, model_name=args.model_name)
 
-    # Sanitize output name prefixes (prevent paths from being embedded)
-    fit_prefix_name = fit_output_path.stem
-    project_prefix_name = project_output_path.stem or "transform"
-
     # Optional: infer on fit subset
-    fit_q_files = None
-    if fit_prefix_name:
-        fit_q_files = admix.transform(
-            fit_prefix, output_dir=q_output_dir, out_name=fit_prefix_name
-        )
+    fit_q_files = admix.transform(
+        fit_prefix,
+        output_prefix=fit_output_path,
+    )
 
     # Project/infer on project subset
     project_q_files = admix.transform(
-        project_prefix, output_dir=q_output_dir, out_name=project_prefix_name
+        project_prefix,
+        output_prefix=project_output_path,
     )
 
     print(f"Admixture fit on {fit_prefix} and projected {project_prefix}")
-    if fit_q_files:
-        print(f"Fit Q files written with prefix '{fit_prefix_name}' to: {q_output_dir}")
-    print(f"Projected Q files written with prefix '{project_prefix_name}' to: {q_output_dir}")
+    print(f"Fit Q CSVs written to prefix: {fit_output_path}")
+    print(f"Projected Q CSVs written to prefix: {project_output_path}")
     return 0
 
 
@@ -433,8 +428,8 @@ def main():
     admix_parser.add_argument("--project-plink", help="PLINK prefix to project admixture (defaults to fit prefix)")
     admix_parser.add_argument("--output", help="Output directory (deprecated; use --neuraladmixture-output-dir and explicit --fit-output/--project-output)")
     admix_parser.add_argument("--model-name", default="fit", help="Model name prefix (default: fit)")
-    admix_parser.add_argument("--fit-output", help="Prefix for fit Q files (optional)")
-    admix_parser.add_argument("--project-output", default="transform", help="Prefix for projected Q files")
+    admix_parser.add_argument("--fit-output", help="Prefix for fit admixture CSV outputs (required)")
+    admix_parser.add_argument("--project-output", help="Prefix for projected admixture CSV outputs (required)")
     admix_parser.add_argument(
         "--neuraladmixture-output-dir",
         help="Directory for neural admixture checkpoints/outputs (defaults to --output or ./admixture_outputs)",

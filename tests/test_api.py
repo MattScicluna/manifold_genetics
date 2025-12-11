@@ -113,13 +113,13 @@ def test_python_api_admixture_fit_and_project(monkeypatch, tmp_path):
     admix = NeuralAdmixture(k_min=2, k_max=3, force=True, threads=1, num_gpus=0)
 
     # Fit + infer same data
-    fit_outputs = admix.fit_transform("fit_prefix", output_dir=tmp_path)
+    fit_outputs = admix.fit_transform("fit_prefix", output_prefix=tmp_path / "fit")
     # Fit then project another dataset
     admix.fit("fit_prefix", output_dir=tmp_path, model_name="fit")
-    proj_outputs = admix.transform("project_prefix", output_dir=tmp_path, out_name="proj")
+    proj_outputs = admix.transform("project_prefix", output_prefix=tmp_path / "proj")
 
-    assert (tmp_path / "admixture_fit_k2.csv").exists()
-    assert (tmp_path / "admixture_proj_k3.csv").exists()
+    assert (tmp_path / "fit.2.csv").exists()
+    assert (tmp_path / "proj.3.csv").exists()
     assert set(fit_outputs.keys()) == {2, 3}
     assert set(proj_outputs.keys()) == {2, 3}
     assert any(call[0] == "train" for call in calls)

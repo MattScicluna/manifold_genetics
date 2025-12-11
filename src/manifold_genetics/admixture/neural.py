@@ -130,8 +130,7 @@ class NeuralAdmixture:
     def transform(
         self,
         plink_prefix: Union[str, Path],
-        output_dir: Optional[Union[str, Path]] = None,
-        out_name: str = "transform",
+        output_prefix: Union[str, Path],
     ) -> Dict[int, Path]:
         """Infer ancestry proportions on new samples."""
         if not self._is_fitted:
@@ -139,43 +138,52 @@ class NeuralAdmixture:
 
         plink_prefix = validate_plink_files(plink_prefix)
 
-        if output_dir is None:
-            output_dir = self._model_dir
-        else:
-            output_dir = Path(output_dir)
+        if self._model_dir is None:
+            raise RuntimeError("Model directory not set; fit() must be called before transform().")
 
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Where to write CSVs (prefix without K/extension).
+        csv_prefix = Path(output_prefix)
+        out_name = csv_prefix.stem
 
-        q_files = self._infer(plink_prefix, output_dir, out_name)
+        csv_prefix.parent.mkdir(parents=True, exist_ok=True)
+        q_output_dir = self._model_dir
+
+        q_files = self._infer(plink_prefix, q_output_dir, out_name)
         
         # Convert Q files to standardized CSV format
         csv_files = self._convert_q_files_to_csv(
-            q_files, plink_prefix, output_dir, dataset_label=out_name
+            q_files, plink_prefix, csv_prefix
         )
+
+        # Remove raw inference Q files to avoid duplicates once CSVs are created
+        for q_path in q_files.values():
+            try:
+                Path(q_path).unlink(missing_ok=True)
+            except Exception as e:
+                logger.debug(f"Could not remove raw Q file {q_path}: {e}")
         
         return csv_files  # Return CSV files instead of raw Q files
 
     def fit_transform(
         self,
         plink_prefix: Union[str, Path],
-        output_dir: Optional[Union[str, Path]] = None,
+        output_prefix: Union[str, Path],
     ) -> Dict[int, Path]:
         """Train models and infer on the same data."""
         plink_prefix = validate_plink_files(plink_prefix)
 
-        if output_dir is None:
-            output_dir = Path.cwd() / "admixture_outputs"
-        else:
-            output_dir = Path(output_dir)
+        csv_prefix = Path(output_prefix)
+        output_dir = csv_prefix.parent
 
         output_dir.mkdir(parents=True, exist_ok=True)
+        csv_prefix.parent.mkdir(parents=True, exist_ok=True)
 
         self._train(plink_prefix, output_dir, model_name="fit")
         q_files = self._infer_on_training_data(output_dir)
         
         # Convert Q files to standardized CSV format
         csv_files = self._convert_q_files_to_csv(
-            q_files, plink_prefix, output_dir, dataset_label="fit"
+            q_files, plink_prefix, csv_prefix
         )
 
         self._model_dir = output_dir
@@ -231,17 +239,21 @@ class NeuralAdmixture:
         logger.info(f"✓ Training complete")
 
     def _infer(
-        self, plink_prefix: Path, output_dir: Path, out_name: str
+        self, plink_prefix: Path, q_dir: Path, out_name: str
     ) -> Dict[int, Path]:
         """Infer ancestry proportions."""
         logger.info("=" * 60)
         logger.info("NEURAL ADMIXTURE INFERENCE")
         logger.info("=" * 60)
 
+        if self._model_dir is None:
+            raise RuntimeError("Model directory not set; fit() must be called before inference.")
+
         plink_bed = plink_prefix.with_suffix(".bed")
+        q_dir.mkdir(parents=True, exist_ok=True)
 
         q_files = {
-            k: output_dir / f"{out_name}.{k}.Q" for k in range(self.k_min, self.k_max + 1)
+            k: q_dir / f"{out_name}.{k}.Q" for k in range(self.k_min, self.k_max + 1)
         }
         
         # Check existing
@@ -289,8 +301,7 @@ class NeuralAdmixture:
         self,
         q_files: Dict[int, Path],
         plink_prefix: Path,
-        output_dir: Path,
-        dataset_label: Optional[str] = None,
+        csv_prefix: Path,
     ) -> Dict[int, Path]:
         """
         Convert raw Q files to standardized CSV format with sample_id column.
@@ -298,7 +309,7 @@ class NeuralAdmixture:
         Args:
             q_files: Dictionary mapping K values to raw Q file paths
             plink_prefix: PLINK file prefix to get sample IDs
-            output_dir: Output directory for converted files
+            csv_prefix: Output path prefix (files will be written as <prefix>.<K>.csv)
             
         Returns:
             Dictionary mapping K values to CSV file paths
@@ -310,6 +321,8 @@ class NeuralAdmixture:
         
         csv_files = {}
         
+        base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
+
         for k, q_file in q_files.items():
             # Read raw Q matrix
             import pandas as pd
@@ -335,8 +348,7 @@ class NeuralAdmixture:
             df.insert(0, 'sample_id', sample_ids_subset)
             
             # Save to CSV
-            suffix = f"_{dataset_label}" if dataset_label else ""
-            csv_file = output_dir / f"admixture{suffix}_k{k}.csv"
+            csv_file = Path(f"{base_prefix}.{k}.csv")
             df.to_csv(csv_file, index=False)
             csv_files[k] = csv_file
             
