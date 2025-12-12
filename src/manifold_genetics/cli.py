@@ -10,13 +10,20 @@ import logging
 import sys
 import re
 from pathlib import Path
+from typing import List, Optional
 
 from .pca import PCA
 from .admixture import NeuralAdmixture
 from .embeddings import PHATE, UMAP, TSNE, DiffusionMap
-from .visualization import visualize, plot_pca_pairs
+from .visualization import (
+    visualize,
+    plot_pca_pairs,
+    plot_admixture_bar_grid,
+    plot_admixture_embedding_grid,
+)
 from .pipeline import Pipeline
 from .metrics import compute_geographic_preservation, compute_admixture_preservation
+from .utils.io import read_colormap
 
 
 def setup_logging(verbose: bool = False):
@@ -25,6 +32,26 @@ def setup_logging(verbose: bool = False):
     logging.basicConfig(
         level=level, format="%(asctime)s - %(name)-40s - %(levelname)s - %(message)s"
     )
+
+
+def _resolve_k_values(k_min: Optional[int], k_max: Optional[int], ks: Optional[List[int]], q_prefix: Optional[Path] = None) -> List[int]:
+    """Resolve list of K values from explicit list, range, or filesystem."""
+    if ks:
+        return sorted(set(ks))
+    if k_min is not None and k_max is not None:
+        return list(range(k_min, k_max + 1))
+    if q_prefix is not None:
+        prefix = Path(q_prefix)
+        found = []
+        for path in prefix.parent.glob(f"{prefix.name}.*.csv"):
+            try:
+                k = int(path.stem.split(".")[-1])
+                found.append(k)
+            except Exception:
+                continue
+        if found:
+            return sorted(set(found))
+    raise ValueError("Please provide --ks or both --k-min/--k-max (or ensure <prefix>.<K>.csv files exist to auto-detect).")
 
 
 def cmd_pca(args):
@@ -117,6 +144,62 @@ def cmd_admixture(args):
     print(f"Admixture fit on {fit_prefix} and projected {project_prefix}")
     print(f"Fit Q CSVs written to prefix: {fit_output_path}")
     print(f"Projected Q CSVs written to prefix: {project_output_path}")
+    return 0
+
+
+def cmd_plot_admixture(args):
+    """Plot stacked admixture barplots across Ks."""
+    setup_logging(args.verbose)
+
+    q_prefix = Path(args.q_prefix)
+    labels = args.labels
+    group_col = args.group_column
+    k_values = _resolve_k_values(args.k_min, args.k_max, args.ks, q_prefix=q_prefix)
+
+    output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture.png"
+
+    group_order = None
+    if args.colormap:
+        cmap = read_colormap(args.colormap)
+        # Try to pull order from the matching key (case-insensitive)
+        for key in cmap:
+            if key.lower() == group_col.lower():
+                group_order = list(cmap[key].keys())
+                break
+
+    plot_admixture_bar_grid(
+        q_prefix=q_prefix,
+        labels=labels,
+        group_column=group_col,
+        k_values=k_values,
+        output_path=output_path,
+        subsample_per_group=args.subsample_per_group,
+        group_order=group_order,
+        colormap=args.colormap,
+    )
+    print(f"Admixture bar plot written to: {output_path}")
+    return 0
+
+
+def cmd_plot_admixture_embedding(args):
+    """Plot embedding colored by admixture components for multiple Ks."""
+    setup_logging(args.verbose)
+
+    q_prefix = Path(args.q_prefix)
+    embedding = args.embedding
+    k_values = _resolve_k_values(args.k_min, args.k_max, args.ks, q_prefix=q_prefix)
+    output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture_embedding.png"
+
+    plot_admixture_embedding_grid(
+        embedding=embedding,
+        q_prefix=q_prefix,
+        k_values=k_values,
+        output_path=output_path,
+        pc_x=args.pc_x,
+        pc_y=args.pc_y,
+        subsample=args.subsample,
+    )
+    print(f"Admixture-embedding plot written to: {output_path}")
     return 0
 
 
@@ -354,7 +437,9 @@ def cmd_pipeline(args):
         skip_embedding=args.skip_embedding,
         skip_visualization=args.skip_embedding_visualization,
         skip_pca_visualization=args.skip_pca_visualization,
+        skip_admixture_visualization=args.skip_admixture_visualization,
         skip_metrics=args.skip_metrics,
+        admix_group_column=args.admixture_group_column,
         admix_threads=args.threads,
         admix_gpus=args.num_gpus,
         flashpca_output_dir=args.flashpca_output_dir,
@@ -443,6 +528,34 @@ def main():
     )
     admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_parser.set_defaults(func=cmd_admixture)
+
+    # Admixture visualization: stacked barplots
+    plot_admix_parser = subparsers.add_parser("plot-admixture", help="Plot stacked admixture barplots for Ks")
+    plot_admix_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
+    plot_admix_parser.add_argument("--labels", required=True, help="Labels CSV with sample_id and grouping column")
+    plot_admix_parser.add_argument("--group-column", required=True, help="Column in labels used to order bars (e.g., Population)")
+    plot_admix_parser.add_argument("--colormap", required=True, help="Colormap JSON (used to derive group ordering for the chosen column)")
+    plot_admix_parser.add_argument("--k-min", type=int, help="Minimum K (if Ks not provided)")
+    plot_admix_parser.add_argument("--k-max", type=int, help="Maximum K (if Ks not provided)")
+    plot_admix_parser.add_argument("--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)")
+    plot_admix_parser.add_argument("--subsample-per-group", type=int, help="Subsample each group to N samples (optional)")
+    plot_admix_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture.png)")
+    plot_admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    plot_admix_parser.set_defaults(func=cmd_plot_admixture)
+
+    # Admixture visualization: embedding colored by admixture components
+    plot_admix_emb_parser = subparsers.add_parser("plot-admixture-embedding", help="Plot embedding colored by admixture components")
+    plot_admix_emb_parser.add_argument("--embedding", required=True, help="Embedding CSV (sample_id, dim_1, dim_2, ...)")
+    plot_admix_emb_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
+    plot_admix_emb_parser.add_argument("--k-min", type=int, help="Minimum K (if Ks not provided)")
+    plot_admix_emb_parser.add_argument("--k-max", type=int, help="Maximum K (if Ks not provided)")
+    plot_admix_emb_parser.add_argument("--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)")
+    plot_admix_emb_parser.add_argument("--pc-x", type=int, default=1, help="PC for x-axis (default: 1)")
+    plot_admix_emb_parser.add_argument("--pc-y", type=int, default=2, help="PC for y-axis (default: 2)")
+    plot_admix_emb_parser.add_argument("--subsample", type=int, help="Optional subsample size for plotting")
+    plot_admix_emb_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture_embedding.png)")
+    plot_admix_emb_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    plot_admix_emb_parser.set_defaults(func=cmd_plot_admixture_embedding)
 
     # Embedding command
     embed_parser = subparsers.add_parser("embed", help="Run manifold embedding")
@@ -572,6 +685,13 @@ def main():
     )
     pipeline_parser.add_argument(
         "--skip-pca-visualization", action="store_true", help="Skip PCA visualization"
+    )
+    pipeline_parser.add_argument(
+        "--skip-admixture-visualization", action="store_true", help="Skip admixture visualizations (bar/embedding)"
+    )
+    pipeline_parser.add_argument(
+        "--admixture-group-column",
+        help="Grouping column for admixture barplots (defaults to first colormap key; e.g., Genetic_region_merged)",
     )
     pipeline_parser.add_argument("--skip-metrics", action="store_true", help="Skip metrics")
     pipeline_parser.add_argument("--verbose", action="store_true", help="Verbose output")

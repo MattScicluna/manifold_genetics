@@ -15,7 +15,13 @@ import pandas as pd
 from ..pca import PCA
 from ..admixture import NeuralAdmixture
 from ..embeddings import PHATE, UMAP, TSNE, DiffusionMap
-from ..visualization import visualize, plot_pca_pairs
+from ..visualization import (
+    visualize,
+    plot_pca_pairs,
+    plot_admixture_bar_grid,
+    plot_admixture_embedding_grid,
+)
+from ..utils.io import read_colormap
 from ..metrics import compute_geographic_preservation, compute_admixture_preservation
 
 logger = logging.getLogger(__name__)
@@ -84,6 +90,8 @@ class Pipeline:
         skip_embedding: bool = False,
         skip_visualization: bool = False,
         skip_pca_visualization: bool = False,
+        skip_admixture_visualization: bool = False,
+        admix_group_column: Optional[str] = None,
         skip_metrics: bool = False,
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
@@ -256,6 +264,43 @@ class Pipeline:
             results["fit_q_files"] = fit_q_files
             results["transform_q_files"] = transform_q_files
             results["q_files"] = transform_q_files
+
+            # Admixture-specific visualizations (bar + embedding grid)
+            if not skip_admixture_visualization:
+                admix_figures_dir = admix_dir / "figures"
+                admix_figures_dir.mkdir(parents=True, exist_ok=True)
+
+                cmap_dict = read_colormap(self.colormap)
+                # Grouping column: user-specified if provided, else first colormap key
+                group_col = admix_group_column
+                if not group_col:
+                    group_col = next(iter(cmap_dict.keys()))
+
+                # Bar plot (using transform set by default)
+                bar_plot_path = admix_figures_dir / "admixture_bars_transform.png"
+                plot_admixture_bar_grid(
+                    q_prefix=admix_dir / "transform",
+                    labels=self.labels,
+                    group_column=group_col,
+                    k_values=range(k_min, k_max + 1),
+                    output_path=bar_plot_path,
+                    colormap=cmap_dict,
+                )
+
+                # Embedding-based plot (requires embedding step)
+                if not skip_embedding:
+                    embedding_file = results.get("embedding_file")
+                    if embedding_file:
+                        emb_plot_path = admix_figures_dir / "admixture_embedding_transform.png"
+                        plot_admixture_embedding_grid(
+                            embedding=embedding_file,
+                            q_prefix=admix_dir / "transform",
+                            k_values=range(k_min, k_max + 1),
+                            output_path=emb_plot_path,
+                        )
+                        results.setdefault("admixture_figures", {})["embedding"] = emb_plot_path
+
+                results.setdefault("admixture_figures", {})["bars"] = bar_plot_path
 
         # Step 3: Embedding
         if not skip_embedding and not skip_pca:

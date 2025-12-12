@@ -6,7 +6,7 @@ Provides publication-ready plots with customizable colormaps.
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -325,3 +325,229 @@ def visualize(
 
     logger.info(f"Generated {len(output_paths)} visualization plots")
     return output_paths
+
+
+# --------------------------------------------------------------------------- #
+# Admixture visualizations
+# --------------------------------------------------------------------------- #
+
+def _load_admixture_csv(
+    q_prefix: Union[str, Path],
+    k_values: Sequence[int],
+) -> Dict[int, pd.DataFrame]:
+    """
+    Load admixture CSV files of the form <prefix>.<K>.csv into DataFrames.
+
+    Returns a dict mapping K -> DataFrame.
+    """
+    q_prefix = Path(q_prefix)
+    admixture = {}
+    for k in k_values:
+        path = Path(f"{q_prefix}.{k}.csv")
+        if not path.exists():
+            logger.warning(f"Admixture file not found for K={k}: {path}")
+            continue
+        df = pd.read_csv(path)
+        if "sample_id" not in df.columns:
+            logger.warning(f"K={k}: sample_id column missing in {path}, skipping")
+            continue
+        admixture[k] = df
+    return admixture
+
+
+def _get_component_columns(df: pd.DataFrame, k: Optional[int] = None) -> List[str]:
+    """Return ordered component columns (component_1 ... component_k)."""
+    comp_cols = [c for c in df.columns if str(c).startswith("component_")]
+    if k:
+        comp_cols = [f"component_{i}" for i in range(1, k + 1) if f"component_{i}" in comp_cols]
+    comp_cols = sorted(comp_cols, key=lambda c: int(c.split("_")[1]))
+    return comp_cols
+
+
+def plot_admixture_bar_grid(
+    q_prefix: Union[str, Path],
+    labels: Union[pd.DataFrame, str, Path],
+    group_column: str,
+    k_values: Sequence[int],
+    output_path: Union[str, Path],
+    colors: Optional[List[str]] = None,
+    subsample_per_group: Optional[int] = None,
+    sort_groups: bool = True,
+    group_order: Optional[Sequence[str]] = None,
+    colormap: Optional[Union[Dict, str, Path]] = None,
+) -> Path:
+    """
+    Plot stacked admixture barplots for multiple K values (one row per K).
+
+    Args:
+        q_prefix: Prefix for admixture CSVs (<prefix>.<K>.csv)
+        labels: Labels table (path or DataFrame) with sample_id and grouping column
+        group_column: Column in labels used for grouping/sorting bars
+        k_values: Iterable of K values to plot
+        output_path: Where to save the figure
+        colors: Optional list of colors to reuse across Ks
+        subsample_per_group: If set, subsample each group to this many rows
+        sort_groups: If True, sort by group name; otherwise keep input order
+    """
+    if isinstance(labels, (str, Path)):
+        labels_df = read_labels_csv(labels)
+    else:
+        labels_df = labels
+
+    admixture = _load_admixture_csv(q_prefix, k_values)
+    if not admixture:
+        raise ValueError("No admixture CSVs found for requested K values.")
+
+    k_values = [k for k in k_values if k in admixture]
+    n_rows = len(k_values)
+    fig, axes = plt.subplots(n_rows, 1, figsize=(12, 3 * n_rows), sharex=False)
+    if n_rows == 1:
+        axes = [axes]
+
+    for ax, k in zip(axes, k_values):
+        df = admixture[k].merge(labels_df, on="sample_id", how="inner")
+        if group_column not in df.columns:
+            raise ValueError(f"Group column '{group_column}' not found in merged data for K={k}.")
+
+        # Optional subsample per group
+        if subsample_per_group:
+            parts = []
+            for _, sub in df.groupby(group_column):
+                if len(sub) > subsample_per_group:
+                    sub = sub.sample(n=subsample_per_group, random_state=42)
+                parts.append(sub)
+            df = pd.concat(parts, axis=0)
+
+        # Derive ordering: explicit > colormap (matching group_column) > optional sort
+        derived_order = group_order
+        if derived_order is None and colormap is not None:
+            cmap_dict = read_colormap(colormap) if isinstance(colormap, (str, Path)) else colormap
+            for key, entry in cmap_dict.items():
+                if key.lower() == group_column.lower():
+                    derived_order = list(entry.keys())
+                    break
+
+        if derived_order:
+            # Keep only groups present in data, preserve specified order
+            order = [g for g in derived_order if g in set(df[group_column])]
+            cat = pd.Categorical(df[group_column], categories=order, ordered=True)
+            df[group_column] = cat
+            df = df.sort_values(group_column)
+        elif sort_groups:
+            df = df.sort_values(group_column)
+
+        comp_cols = _get_component_columns(df, k)
+        if colors and len(colors) >= len(comp_cols):
+            df[comp_cols].plot(kind="bar", stacked=True, ax=ax, width=1.0, edgecolor="none", color=colors[: len(comp_cols)])
+        else:
+            df[comp_cols].plot(kind="bar", stacked=True, ax=ax, width=1.0, edgecolor="none")
+
+        # Remove ticks/legend; add group separators
+        ax.set_xticks([])
+        ax.set_xticklabels([])
+        ax.get_legend().remove()
+        ax.set_ylabel(f"K={k}")
+
+        # Draw separators between groups
+        boundaries = []
+        offset = 0
+        for _, sub in df.groupby(group_column, sort=False, observed=False):
+            offset += len(sub)
+            boundaries.append(offset)
+        for pos in boundaries[:-1]:
+            ax.axvline(x=pos - 0.5, linestyle="--", color="black", alpha=0.5)
+
+        # Add group labels only on the last subplot
+        if ax is axes[-1]:
+            group_sizes = df[group_column].value_counts(sort=False)
+            labels_order = list(group_sizes.index)
+            cum_sizes = np.cumsum(group_sizes.values)
+            starts = [0] + list(cum_sizes[:-1])
+            mids = [(s + e) / 2 for s, e in zip(starts, cum_sizes)]
+            ax.set_xticks(mids)
+            ax.set_xticklabels(labels_order, rotation=45, ha="right", fontsize=10)
+
+    plt.tight_layout()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    logger.info(f"Saved admixture bar plot: {output_path}")
+    return output_path
+
+
+def plot_admixture_embedding_grid(
+    embedding: Union[pd.DataFrame, str, Path],
+    q_prefix: Union[str, Path],
+    k_values: Sequence[int],
+    output_path: Union[str, Path],
+    pc_x: int = 1,
+    pc_y: int = 2,
+    subsample: Optional[int] = None,
+) -> Path:
+    """
+    Plot embedding colored by admixture components in a grid.
+
+    One row per K, columns = max(Ks). Each cell is a component heatmap (seismic 0-1).
+    """
+    if isinstance(embedding, (str, Path)):
+        emb_df = read_embedding_csv(embedding)
+    else:
+        emb_df = embedding
+
+    admixture = _load_admixture_csv(q_prefix, k_values)
+    if not admixture:
+        raise ValueError("No admixture CSVs found for requested K values.")
+
+    k_values = [k for k in k_values if k in admixture]
+    max_k = max(k_values)
+    n_rows = len(k_values)
+    n_cols = max_k
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows), squeeze=False)
+
+    pc_x_col = f"dim_{pc_x}"
+    pc_y_col = f"dim_{pc_y}"
+    if pc_x_col not in emb_df.columns or pc_y_col not in emb_df.columns:
+        raise ValueError(f"PC columns {pc_x_col} and/or {pc_y_col} not found in embedding.")
+
+    for row_idx, k in enumerate(k_values):
+        q_df = admixture[k]
+        merged = emb_df.merge(q_df, on="sample_id", how="inner")
+        if subsample and len(merged) > subsample:
+            merged = merged.sample(n=subsample, random_state=42)
+
+        comp_cols = _get_component_columns(merged, k)
+        for col_idx in range(n_cols):
+            ax = axes[row_idx, col_idx]
+            comp_idx = col_idx + 1
+            if comp_idx > k:
+                ax.axis("off")
+                continue
+            comp_col = f"component_{comp_idx}"
+            scatter = ax.scatter(
+                merged[pc_x_col],
+                merged[pc_y_col],
+                c=merged[comp_col],
+                cmap="seismic",
+                s=3,
+                alpha=0.6,
+                vmin=0,
+                vmax=1,
+            )
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_title(f"K={k} • Comp {comp_idx}", fontsize=10)
+
+            # Add a colorbar on the last column for each row
+            if col_idx == n_cols - 1:
+                plt.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04, label="Admixture proportion")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    logger.info(f"Saved admixture embedding grid: {output_path}")
+    return output_path
