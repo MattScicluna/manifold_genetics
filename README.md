@@ -109,7 +109,7 @@ manifold-genetics admixture \
     --fit-output examples/hgdp_1kgp/outputs/admixture/fit \
     --project-output examples/hgdp_1kgp/outputs/admixture/transform \
     --k-min 2 --k-max 5 --threads 8
-# Outputs (per K): examples/hgdp_1kgp/outputs/admixture/admixture_fit_k*.csv and admixture_transform_k*.csv
+# Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and transform.{K}.csv
 
 # 3) Embedding (PHATE): run on transform PCA coordinates
 manifold-genetics embed \
@@ -134,6 +134,22 @@ manifold-genetics plot \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --colormap examples/hgdp_1kgp/data/colormap.json \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/phate.png
+
+# Admixture barplots (stacked bars per K)
+manifold-genetics plot-admixture \
+    --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
+    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --group-column Genetic_region_merged \
+    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --k-min 2 --k-max 5 \
+    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_bars.png
+
+# Admixture embedding grid (seismic colormap per component)
+manifold-genetics plot-admixture-embedding \
+    --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
+    --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
+    --k-min 2 --k-max 5 \
+    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png
 
 
 # 5) Metrics (optional, standalone)
