@@ -83,7 +83,7 @@ if [[ -f "${FIT_BED}" ]] && [[ -f "${PROJECT_BED}" ]] && \
     echo "  - hgdp_project_geographic.csv"
     echo "  - colormap.json"
     echo ""
-    echo "You can run: python examples/hgdp_1kgp/run_pipeline.py"
+    echo "You can run: bash examples/hgdp_1kgp/run_pipeline.sh"
     exit 0
 fi
 
@@ -177,22 +177,27 @@ from pathlib import Path
 metadata_path = Path("examples/hgdp_1kgp/data/raw/metadata.csv")
 metadata = pd.read_csv(metadata_path)
 
-# Filter for unrelated samples
+# Filter for unrelated AND QC-passing samples (all filters combined)
 # filter_king_related == False means NOT related (i.e., unrelated)
-unrelated = metadata[metadata['filter_king_related'] == False].copy()
+fit_samples = metadata[
+    (metadata['filter_pca_outlier'] == False) &
+    (metadata['hard_filtered'] == False) &
+    (metadata['filter_king_related'] == False) &
+    (metadata['filter_contaminated'] == False)
+].copy()
 
 # Create FID IID format for plink2 --keep
 # Use project_meta.sample_id for both FID and IID
 keep_df = pd.DataFrame({
-    'FID': unrelated['project_meta.sample_id'],
-    'IID': unrelated['project_meta.sample_id']
+    'FID': fit_samples['project_meta.sample_id'],
+    'IID': fit_samples['project_meta.sample_id']
 })
 
 # Write indices
 output_path = Path("examples/hgdp_1kgp/data/fit_indices.txt")
 keep_df.to_csv(output_path, sep='\t', header=False, index=False)
 
-print(f"Created fit indices: {len(keep_df)} samples")
+print(f"Created fit indices: {len(keep_df)} samples (unrelated + QC-passing)")
 PYEOF
 
 if [[ ! -f "${DATA_DIR}/fit_indices.txt" ]]; then

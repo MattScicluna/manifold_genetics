@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --cpus-per-task=8
 #SBATCH --account=ctb-hussinju
-#SBATCH --time=4:00:00
+#SBATCH --time=8:00:00
 #SBATCH --mem=32GB
 #SBATCH --job-name=hgdp_1kgp
 #SBATCH --output=/lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics/logs/hgdp_1kgp_%j.out

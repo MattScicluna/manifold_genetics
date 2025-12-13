@@ -418,13 +418,14 @@ class Pipeline:
             if not skip_admixture and "admixture_dir" in results:
                 logger.info("Computing admixture preservation via CLI...")
                 admix_out = metrics_dir / "admixture.json"
+                admix_prefix = results["admixture_dir"] / "transform"
                 admix_cmd = [
                     "manifold-genetics",
                     "metrics-admixture",
                     "--embedding",
                     str(embedding_file),
-                    "--q-dir",
-                    str(results["admixture_dir"]),
+                    "--admixture-output",
+                    str(admix_prefix),
                     "--output",
                     str(admix_out),
                     "--k-min",

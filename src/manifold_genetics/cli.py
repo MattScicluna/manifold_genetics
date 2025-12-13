@@ -300,23 +300,18 @@ def cmd_metrics_admixture(args):
     """Compute admixture preservation metrics."""
     setup_logging(args.verbose)
 
-    q_dir = Path(args.q_dir)
-    if not q_dir.exists():
-        raise FileNotFoundError(f"Q directory not found: {q_dir}")
+    admixture_prefix = Path(args.admixture_output)
 
+    # Build Q files dict from prefix: {k: path/to/prefix.k.csv}
     q_files = {}
-    for f in q_dir.glob("*.csv"):
-        match = re.search(r"_k(\\d+)\\.csv$", f.name)
-        if match:
-            k = int(match.group(1))
-            if args.k_min is not None and k < args.k_min:
-                continue
-            if args.k_max is not None and k > args.k_max:
-                continue
-            q_files[k] = f
+    for k in range(args.k_min, args.k_max + 1):
+        q_file = Path(f"{admixture_prefix}.{k}.csv")
+        if not q_file.exists():
+            raise FileNotFoundError(f"Admixture file not found: {q_file}")
+        q_files[k] = q_file
 
     if not q_files:
-        raise ValueError(f"No Q CSV files found in {q_dir} matching pattern *_kN.csv")
+        raise ValueError(f"No admixture files found for K={args.k_min} to {args.k_max}")
 
     metrics = compute_admixture_preservation(
         embedding=args.embedding,
@@ -633,10 +628,10 @@ def main():
     # Metrics: admixture
     admix_metrics_parser = subparsers.add_parser("metrics-admixture", help="Compute admixture preservation")
     admix_metrics_parser.add_argument("--embedding", required=True, help="Embedding CSV")
-    admix_metrics_parser.add_argument("--q-dir", required=True, help="Directory with admixture CSVs (admixture_*_k*.csv)")
+    admix_metrics_parser.add_argument("--admixture-output", required=True, help="Prefix for admixture CSVs (<prefix>.K.csv, e.g., path/to/transform)")
     admix_metrics_parser.add_argument("--output", required=True, help="Output JSON path")
-    admix_metrics_parser.add_argument("--k-min", type=int, help="Minimum K to include")
-    admix_metrics_parser.add_argument("--k-max", type=int, help="Maximum K to include")
+    admix_metrics_parser.add_argument("--k-min", type=int, required=True, help="Minimum K to include")
+    admix_metrics_parser.add_argument("--k-max", type=int, required=True, help="Maximum K to include")
     admix_metrics_parser.add_argument("--k-value", type=int, help="Compute only a single K")
     admix_metrics_parser.add_argument("--num-dists-sampled", type=int, default=50000, help="Max pairwise distances to sample")
     admix_metrics_parser.add_argument("--verbose", action="store_true", help="Verbose output")

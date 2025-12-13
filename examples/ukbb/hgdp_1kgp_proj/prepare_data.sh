@@ -107,7 +107,6 @@ REQUIRED_FILES=(
     "${HGDP_PLINK}.bed"
     "${HGDP_PLINK}.bim"
     "${HGDP_PLINK}.fam"
-    "${UKBB_METADATA}"
     "${HGDP_METADATA}"
 )
 
@@ -290,58 +289,14 @@ ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
 
 print_success "Intersected datasets created"
 
-# Step 9: Create sample subsets and labels
-print_status "Creating sample subsets and labels..."
+# Step 9: Save UKBB sample list for user
+print_status "Saving UKBB sample list..."
 
-# Create Python script for processing UKBB metadata
-cat > "${TEMP_DIR}/process_ukbb.py" << 'EOF'
-#!/usr/bin/env python3
-import pandas as pd
-import json
-import sys
+# Extract sample IDs from intersected UKBB data (FID IID format for plink2 --keep)
+awk '{print $1, $2}' "${TEMP_DIR}/ukbb_intersected.fam" > "${DATA_DIR}/ukbb_samples.txt"
+UKBB_SAMPLE_COUNT=$(wc -l < "${DATA_DIR}/ukbb_samples.txt")
 
-# Read command line args
-ukbb_metadata = sys.argv[1]
-ukbb_fam = sys.argv[2]
-output_dir = sys.argv[3]
-
-# Read UKBB metadata
-print("Reading UKBB metadata...")
-meta = pd.read_csv(ukbb_metadata)
-print(f"  Total UKBB samples: {len(meta)}")
-
-# Read intersected UKBB .fam file to get available samples
-fam = pd.read_csv(ukbb_fam, sep='\s+', header=None, names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
-available_samples = set(fam['IID'].astype(str))
-print(f"  Available in intersected data: {len(available_samples)}")
-
-# Filter metadata for available samples
-meta['IDs'] = meta['IDs'].astype(str)  # Ensure string type
-meta_available = meta[meta['IDs'].isin(available_samples)]
-print(f"  UKBB samples with metadata: {len(meta_available)}")
-
-# Create simplified subset (for example purposes)
-# You might want to add additional filtering here
-ukbb_subset = meta_available.copy()
-
-# Save UKBB labels (rename IDs to sample_id for consistency)
-ukbb_labels = ukbb_subset[['IDs', 'self_described_ancestry', 'Population']].copy()
-ukbb_labels.rename(columns={'IDs': 'sample_id'}, inplace=True)
-ukbb_labels.to_csv(f"{output_dir}/ukbb_labels.csv", index=False)
-print(f"  Saved UKBB labels: {len(ukbb_labels)} samples")
-
-# Create UKBB sample list for PLINK
-ukbb_samples = ukbb_subset[['IDs', 'IDs']].copy()
-ukbb_samples.columns = ['FID', 'IID']
-ukbb_samples.to_csv(f"{output_dir}/ukbb_samples.txt", sep='\t', index=False, header=False)
-print(f"  Saved UKBB sample list: {len(ukbb_samples)} samples")
-EOF
-
-# Process UKBB metadata
-python3 "${TEMP_DIR}/process_ukbb.py" \
-    "$UKBB_METADATA" \
-    "${TEMP_DIR}/ukbb_intersected.fam" \
-    "$DATA_DIR"
+print_success "Saved ${UKBB_SAMPLE_COUNT} UKBB sample IDs to ukbb_samples.txt"
 
 # Create HGDP labels from existing labels file
 print_status "Creating HGDP labels..."
@@ -408,7 +363,7 @@ rm -f "${TEMP_DIR}/process_ukbb.py"
 
 print_success "Cleanup complete"
 
-# Step 9: Summary
+# Step 10: Summary
 echo ""
 echo "========================================="
 print_success "Data preparation complete!"
@@ -421,19 +376,29 @@ echo "    - data/project_subset.{bed,bim,fam} (UKBB, $PROJECT_SAMPLES samples)"
 echo ""
 echo "  🏷️ Sample labels:"
 echo "    - data/hgdp_labels.csv    (HGDP sample metadata)"
-echo "    - data/ukbb_labels.csv    (UKBB sample metadata)"
+echo "    - data/ukbb_samples.txt   (UKBB sample IDs - $PROJECT_SAMPLES samples)"
 echo ""
-echo "  🎨 Visualization colormaps (create manually):"
+print_warning "NEXT STEP: Create data/ukbb_project_labels.csv"
+echo "  This file must contain labels for the $PROJECT_SAMPLES UKBB samples in ukbb_samples.txt"
+echo ""
+echo "  Required format (CSV with header):"
+echo "    sample_id,self_described_ancestry,Population"
+echo "    1234567,British,European"
+echo "    2345678,Caribbean,African"
+echo "    ..."
+echo ""
+echo "  Notes:"
+echo "    - sample_id must match the IID column (2nd column) from ukbb_samples.txt"
+echo "    - Column names and values must match what you define in ukbb_colormap.json"
+echo ""
+echo "  🎨 Optional: Create visualization colormaps:"
 echo "    - data/hgdp_colormap.json (HGDP population colors)"
 echo "    - data/ukbb_colormap.json (UKBB ancestry colors)"
 echo ""
-echo "  📋 Processing logs:"
-echo "    - data/temp/ukbb_standardized.{bed,bim,fam}  (UKBB with standardized SNP IDs)"
-echo "    - data/temp/hgdp_standardized.{bed,bim,fam}  (HGDP with standardized SNP IDs)"
-echo "    - data/temp/common_snps.txt                  (SNP intersection)"
-echo "    - data/temp/flip_list.txt                    (SNPs requiring strand flip)"
-echo "    - data/temp/exclude_list.txt                 (Excluded incompatible SNPs)"
+echo "  📋 Processing logs (in data/temp/):"
+echo "    - ukbb_standardized.{bed,bim,fam}, hgdp_standardized.{bed,bim,fam}"
+echo "    - common_snps.txt, flip_list.txt, exclude_list.txt"
 echo ""
-echo "You can now run the cross-projection pipeline:"
+echo "After creating ukbb_project_labels.csv, run the cross-projection pipeline:"
 echo "  bash run_pipeline.sh"
 echo ""
