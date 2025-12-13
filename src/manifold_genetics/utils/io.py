@@ -6,10 +6,11 @@ Handles reading/writing PLINK files, CSV files, and format conversions.
 
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Tuple, Set
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -238,3 +239,108 @@ def read_colormap(colormap_path: Union[str, Path]) -> dict:
         colormap = json.load(f)
 
     return colormap
+
+
+def read_bim_file(bim_path: Union[str, Path]) -> Dict[str, Tuple[str, str]]:
+    """
+    Read PLINK .bim file and return SNP allele information.
+
+    BIM format: chr, snp_id, genetic_dist, position, allele1, allele2
+
+    Args:
+        bim_path: Path to .bim file
+
+    Returns:
+        Dictionary mapping SNP ID to (allele1, allele2) tuple
+    """
+    bim_path = Path(bim_path)
+    if not bim_path.exists():
+        raise FileNotFoundError(f"BIM file not found: {bim_path}")
+
+    snp_alleles = {}
+    with open(bim_path, 'r') as f:
+        for line in f:
+            fields = line.strip().split()
+            if len(fields) < 6:
+                continue
+
+            snp_id = fields[1]  # Column 2: SNP ID
+            allele1 = fields[4]  # Column 5: Allele 1
+            allele2 = fields[5]  # Column 6: Allele 2
+
+            snp_alleles[snp_id] = (allele1, allele2)
+
+    return snp_alleles
+
+
+def check_allele_compatibility(
+    bim1_path: Union[str, Path],
+    bim2_path: Union[str, Path],
+    common_snps: Set[str]
+) -> Tuple[Set[str], Set[str], Set[str]]:
+    """
+    Check allele compatibility between two PLINK datasets.
+
+    Compares alleles for common SNPs and determines which SNPs need flipping
+    and which are incompatible.
+
+    Compatible allele combinations:
+    - Exact match: A/T matches A/T
+    - Complementary: A/T matches T/A (needs flipping)
+    - Complementary: C/G matches G/C (needs flipping)
+
+    Incompatible combinations (e.g., A/T vs C/G) are excluded.
+
+    Args:
+        bim1_path: Path to first .bim file
+        bim2_path: Path to second .bim file
+        common_snps: Set of common SNP IDs
+
+    Returns:
+        Tuple of (exact_matches, need_flip, incompatible) SNP ID sets
+    """
+    logger.info(f"Reading BIM files...")
+    logger.info(f"  {bim1_path}")
+    logger.info(f"  {bim2_path}")
+
+    # Read allele information from both BIM files
+    snps1 = read_bim_file(bim1_path)
+    snps2 = read_bim_file(bim2_path)
+
+    exact_matches = set()
+    need_flip = set()
+    incompatible = set()
+
+    logger.info(f"Checking {len(common_snps)} common SNPs...")
+
+    # Use tqdm for progress bar
+    for snp in tqdm(common_snps, desc="Checking alleles", unit="SNP"):
+        if snp not in snps1:
+            logger.warning(f"SNP {snp} not found in first BIM file")
+            incompatible.add(snp)
+            continue
+        if snp not in snps2:
+            logger.warning(f"SNP {snp} not found in second BIM file")
+            incompatible.add(snp)
+            continue
+
+        a1_1, a2_1 = snps1[snp]
+        a1_2, a2_2 = snps2[snp]
+
+        # Check for exact match
+        if (a1_1 == a1_2 and a2_1 == a2_2):
+            exact_matches.add(snp)
+        # Check for complementary (needs flip)
+        elif (a1_1 == a2_2 and a2_1 == a1_2):
+            need_flip.add(snp)
+        # Incompatible alleles
+        else:
+            incompatible.add(snp)
+
+    logger.info(f"\nResults:")
+    logger.info(f"  Exact matches: {len(exact_matches)}")
+    logger.info(f"  Compatible flips: {len(need_flip)}")
+    logger.info(f"  Incompatible/missing: {len(incompatible)}")
+    logger.info(f"  Total usable SNPs: {len(exact_matches) + len(need_flip)}")
+
+    return exact_matches, need_flip, incompatible

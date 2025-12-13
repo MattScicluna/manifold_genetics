@@ -55,6 +55,10 @@ class Pipeline:
         colormap: Union[str, Path],
         output_dir: Union[str, Path],
         geographic_coords: Optional[Union[str, Path]] = None,
+        fit_labels: Optional[Union[str, Path]] = None,
+        project_labels: Optional[Union[str, Path]] = None,
+        fit_colormap: Optional[Union[str, Path]] = None,
+        project_colormap: Optional[Union[str, Path]] = None,
     ):
         """
         Initialize pipeline.
@@ -62,10 +66,14 @@ class Pipeline:
         Args:
             fit_plink_prefix: Path to fit subset PLINK files
             transform_plink_prefix: Path to transform subset PLINK files
-            labels: Path to labels CSV
-            colormap: Path to colormap JSON
+            labels: Path to labels CSV (primary parameter)
+            colormap: Path to colormap JSON (primary parameter)
             output_dir: Directory for outputs
             geographic_coords: Optional path to geographic coordinates
+            fit_labels: Optional override labels CSV for fit dataset
+            project_labels: Optional override labels CSV for project dataset
+            fit_colormap: Optional override colormap JSON for fit dataset
+            project_colormap: Optional override colormap JSON for project dataset
         """
         self.fit_plink_prefix = Path(fit_plink_prefix)
         self.transform_plink_prefix = Path(transform_plink_prefix)
@@ -75,6 +83,12 @@ class Pipeline:
         self.geographic_coords = (
             Path(geographic_coords) if geographic_coords else None
         )
+
+        # Use override parameters if provided, otherwise fall back to primary parameters
+        self.fit_labels = Path(fit_labels) if fit_labels else self.labels
+        self.project_labels = Path(project_labels) if project_labels else self.labels
+        self.fit_colormap = Path(fit_colormap) if fit_colormap else self.colormap
+        self.project_colormap = Path(project_colormap) if project_colormap else self.colormap
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -197,13 +211,13 @@ class Pipeline:
                 from ..visualization import plot_pca_pairs
                 from ..utils.io import read_colormap
 
-                colormap_dict = read_colormap(self.colormap)
+                colormap_dict = read_colormap(self.project_colormap)
                 pca_figure_paths = []
                 for label_col in colormap_dict.keys():
                     output_path = pca_figures_dir / f"pca_pairs_by_{label_col}.png"
                     plot_path = plot_pca_pairs(
                         pca_coords=pca_file,
-                        labels=self.labels,
+                        labels=self.project_labels,
                         colormap=colormap_dict,
                         output_path=output_path,
                         label_column=label_col,
@@ -265,40 +279,27 @@ class Pipeline:
             results["transform_q_files"] = transform_q_files
             results["q_files"] = transform_q_files
 
-            # Admixture-specific visualizations (bar + embedding grid)
+            # Admixture bar plot (placed in figures/admixture/)
             if not skip_admixture_visualization:
-                admix_figures_dir = admix_dir / "figures"
+                admix_figures_dir = self.output_dir / "figures" / "admixture"
                 admix_figures_dir.mkdir(parents=True, exist_ok=True)
 
-                cmap_dict = read_colormap(self.colormap)
+                cmap_dict = read_colormap(self.project_colormap)
                 # Grouping column: user-specified if provided, else first colormap key
                 group_col = admix_group_column
                 if not group_col:
                     group_col = next(iter(cmap_dict.keys()))
 
                 # Bar plot (using transform set by default)
-                bar_plot_path = admix_figures_dir / "admixture_bars_transform.png"
+                bar_plot_path = admix_figures_dir / "transform_bars.png"
                 plot_admixture_bar_grid(
                     q_prefix=admix_dir / "transform",
-                    labels=self.labels,
+                    labels=self.project_labels,
                     group_column=group_col,
                     k_values=range(k_min, k_max + 1),
                     output_path=bar_plot_path,
                     colormap=cmap_dict,
                 )
-
-                # Embedding-based plot (requires embedding step)
-                if not skip_embedding:
-                    embedding_file = results.get("embedding_file")
-                    if embedding_file:
-                        emb_plot_path = admix_figures_dir / "admixture_embedding_transform.png"
-                        plot_admixture_embedding_grid(
-                            embedding=embedding_file,
-                            q_prefix=admix_dir / "transform",
-                            k_values=range(k_min, k_max + 1),
-                            output_path=emb_plot_path,
-                        )
-                        results.setdefault("admixture_figures", {})["embedding"] = emb_plot_path
 
                 results.setdefault("admixture_figures", {})["bars"] = bar_plot_path
 
@@ -353,13 +354,36 @@ class Pipeline:
 
             figure_paths = visualize(
                 embedding=embedding_file,
-                labels=self.labels,
-                colormap=self.colormap,
+                labels=self.project_labels,
+                colormap=self.project_colormap,
                 output_dir=embedding_figures_dir,
                 output_prefix=embedding,
             )
 
             results["embedding_figures"] = figure_paths
+
+        # Step 4.5: Admixture-Colored Embedding Visualization (requires embedding to exist)
+        if not skip_admixture_visualization and not skip_embedding and not skip_admixture:
+            logger.info("=" * 70)
+            logger.info("STEP 4.5: ADMIXTURE-COLORED EMBEDDING VISUALIZATION")
+            logger.info("=" * 70)
+
+            if "embedding_file" in results and "admixture_dir" in results:
+                admix_figures_dir = self.output_dir / "figures" / "admixture"
+                admix_figures_dir.mkdir(parents=True, exist_ok=True)
+
+                # Admixture-colored embedding grid plot
+                emb_plot_path = admix_figures_dir / "transform_admixture_colored_embedding.png"
+                plot_admixture_embedding_grid(
+                    embedding=results["embedding_file"],
+                    q_prefix=results["admixture_dir"] / "transform",
+                    k_values=range(k_min, k_max + 1),
+                    output_path=emb_plot_path,
+                )
+                results.setdefault("admixture_figures", {})["admixture_colored_embedding"] = emb_plot_path
+                logger.info(f"Saved admixture-colored embedding plot: {emb_plot_path}")
+            else:
+                logger.warning("Skipping admixture-colored embedding visualization - missing embedding or admixture data")
 
         # Step 5: Metrics
         if not skip_metrics and not skip_embedding:

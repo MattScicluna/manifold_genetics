@@ -417,6 +417,12 @@ def cmd_pipeline(args):
     elif args.embedding == "diffusion_map":
         embedding_params["knn"] = args.knn
 
+    # Handle separate labels/colormaps for cross-cohort analysis
+    fit_labels = args.fit_labels if hasattr(args, "fit_labels") and args.fit_labels else args.labels
+    project_labels = args.project_labels if hasattr(args, "project_labels") and args.project_labels else args.labels
+    fit_colormap = args.fit_colormap if hasattr(args, "fit_colormap") and args.fit_colormap else args.colormap
+    project_colormap = args.project_colormap if hasattr(args, "project_colormap") and args.project_colormap else args.colormap
+
     pipeline = Pipeline(
         fit_plink_prefix=args.fit_plink,
         transform_plink_prefix=args.project_plink,
@@ -424,6 +430,10 @@ def cmd_pipeline(args):
         colormap=args.colormap,
         output_dir=args.output,
         geographic_coords=args.geographic if hasattr(args, "geographic") else None,
+        fit_labels=fit_labels,
+        project_labels=project_labels,
+        fit_colormap=fit_colormap,
+        project_colormap=project_colormap,
     )
 
     results = pipeline.run(
@@ -646,6 +656,10 @@ def main():
     )
     pipeline_parser.add_argument("--labels", required=True, help="Labels CSV file")
     pipeline_parser.add_argument("--colormap", required=True, help="Colormap JSON file")
+    pipeline_parser.add_argument("--fit-labels", help="Labels CSV file for fit dataset (optional, for cross-cohort analysis)")
+    pipeline_parser.add_argument("--project-labels", help="Labels CSV file for project dataset (optional, for cross-cohort analysis)")
+    pipeline_parser.add_argument("--fit-colormap", help="Colormap JSON file for fit dataset (optional, for cross-cohort analysis)")
+    pipeline_parser.add_argument("--project-colormap", help="Colormap JSON file for project dataset (optional, for cross-cohort analysis)")
     pipeline_parser.add_argument("--output", required=True, help="Output directory")
     pipeline_parser.add_argument("--geographic", help="Geographic coordinates CSV")
     pipeline_parser.add_argument(

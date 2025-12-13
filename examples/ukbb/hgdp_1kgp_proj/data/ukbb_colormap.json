@@ -1,0 +1,36 @@
+{
+  "Self_described_ancestry": {
+    "African": "#228B22",
+    "Caribbean": "#66CDAA",
+    "Any other Black background": "#2E8B57",
+    "Black or Black British": "#006400",
+    "White and Black African": "#8FBC8F",
+    "British": "#9370DB",
+    "Irish": "#8A2BE2",
+    "White": "#BA55D3",
+    "Any other white background": "#DDA0DD",
+    "Indian": "#FFA500",
+    "Pakistani": "#FF8C00",
+    "Bangladeshi": "#FFB347",
+    "Chinese": "#1E90FF",
+    "Asian or Asian British": "#4682B4",
+    "White and Black Caribbean": "#D3D3D3",
+    "White and Asian": "#D3D3D3",
+    "Any other mixed background": "#D3D3D3",
+    "Mixed": "#D3D3D3",
+    "Other ethnic group": "#D3D3D3",
+    "Prefer not to answer": "#D3D3D3",
+    "Do not know": "#D3D3D3",
+    "Any other Asian background": "#D3D3D3",
+    "Other": "#D3D3D3"
+  },
+  "Populations": {
+    "AFR": "#228B22",
+    "EUR": "#9370DB",
+    "CSA": "#FFA500",
+    "EAS": "#1E90FF",
+    "MID": "#D3D3D3",
+    "AMR": "#FF0000",
+    "Do not know": "#D3D3D3"
+  }
+}
