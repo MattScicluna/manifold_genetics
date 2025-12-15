@@ -33,6 +33,7 @@ class NeuralAdmixture:
         force: bool = False,
         threads: Optional[int] = None,
         num_gpus: Optional[int] = None,
+        batch_size: Optional[int] = None,
     ):
         """
         Initialize Neural Admixture analyzer.
@@ -46,12 +47,15 @@ class NeuralAdmixture:
                      available CPUs (respecting SLURM/HPC limits).
             num_gpus: Number of GPUs to use. If None, uses 1 when CUDA is
                       available and 0 otherwise.
+            batch_size: Batch size for training and inference. If None, uses
+                        neural-admixture defaults.
         """
         self.k_min = k_min
         self.k_max = k_max
         self.force = force
         self.threads = self._resolve_threads(threads)
         self.num_gpus = self._resolve_num_gpus(num_gpus)
+        self.batch_size = batch_size
 
         # Resolve neural-admixture path
         if neural_admixture_path is None:
@@ -228,6 +232,9 @@ class NeuralAdmixture:
                 "--num_gpus", str(self.num_gpus),
             ]
 
+            if self.batch_size is not None:
+                cmd.extend(["--batch_size", str(self.batch_size)])
+
             try:
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as e:
@@ -275,6 +282,9 @@ class NeuralAdmixture:
                 "--threads", str(self.threads),
                 "--num_gpus", str(self.num_gpus),
             ]
+
+            if self.batch_size is not None:
+                cmd.extend(["--batch_size", str(self.batch_size)])
 
             try:
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
