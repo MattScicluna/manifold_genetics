@@ -164,9 +164,10 @@ echo "    --project-colormap ${UKBB_COLORMAP} \\"
 echo "    --output ${OUTPUT_DIR} \\"
 echo "    --n-pcs 20 \\"
 echo "    --k-min 2 --k-max 5 \\"
-echo "    --embedding phate --knn 100 --t 3 \\"
+echo "    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \\"
 echo "    --skip-metrics \\"
-echo "    --threads ${THREADS}"
+echo "    --threads ${THREADS} \\"
+echo "    --batch-size 400"
 [ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
 echo ""
 
@@ -186,9 +187,10 @@ manifold-genetics pipeline \
     --output "$OUTPUT_DIR" \
     --n-pcs 20 \
     --k-min 2 --k-max 5 \
-    --embedding phate --knn 100 --t 3 \
+    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
     --skip-metrics \
     --threads "$THREADS" \
+    --batch-size 400 \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 
 # Step 6: Summary

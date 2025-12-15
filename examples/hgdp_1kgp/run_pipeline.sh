@@ -164,6 +164,7 @@ manifold-genetics pipeline \
     --n-pcs 50 \
     --k-min 2 --k-max 5 \
     --embedding phate --knn 100 --t 3 \
+    --embedding-input project \
     --threads "$THREADS" \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 

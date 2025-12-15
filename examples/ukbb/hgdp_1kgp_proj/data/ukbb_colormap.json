@@ -1,5 +1,5 @@
 {
-  "Self_described_ancestry": {
+  "self_described_ancestry": {
     "African": "#228B22",
     "Caribbean": "#66CDAA",
     "Any other Black background": "#2E8B57",
@@ -24,7 +24,7 @@
     "Any other Asian background": "#D3D3D3",
     "Other": "#D3D3D3"
   },
-  "Populations": {
+  "Population": {
     "AFR": "#228B22",
     "EUR": "#9370DB",
     "CSA": "#FFA500",

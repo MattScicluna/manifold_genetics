@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --cpus-per-task=8
 #SBATCH --account=ctb-hussinju
-#SBATCH --time=6:00:00
-#SBATCH --mem=64GB
+#SBATCH --time=12:00:00
+#SBATCH --mem=128GB
 #SBATCH --job-name=ukbb_hgdp_proj
 #SBATCH --output=/lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics/logs/ukbb_hgdp_proj_%j.out
 #SBATCH --error=/lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics/logs/ukbb_hgdp_proj_%j.err
