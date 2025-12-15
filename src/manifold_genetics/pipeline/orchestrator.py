@@ -51,9 +51,9 @@ class Pipeline:
         self,
         fit_plink_prefix: Union[str, Path],
         transform_plink_prefix: Union[str, Path],
-        labels: Union[str, Path],
-        colormap: Union[str, Path],
-        output_dir: Union[str, Path],
+        labels: Optional[Union[str, Path]] = None,
+        colormap: Optional[Union[str, Path]] = None,
+        output_dir: Union[str, Path] = None,
         geographic_coords: Optional[Union[str, Path]] = None,
         fit_labels: Optional[Union[str, Path]] = None,
         project_labels: Optional[Union[str, Path]] = None,
@@ -66,29 +66,54 @@ class Pipeline:
         Args:
             fit_plink_prefix: Path to fit subset PLINK files
             transform_plink_prefix: Path to transform subset PLINK files
-            labels: Path to labels CSV (primary parameter)
-            colormap: Path to colormap JSON (primary parameter)
+            labels: Path to labels CSV (used for both fit and project if not overridden)
+            colormap: Path to colormap JSON (used for both fit and project if not overridden)
             output_dir: Directory for outputs
             geographic_coords: Optional path to geographic coordinates
             fit_labels: Optional override labels CSV for fit dataset
             project_labels: Optional override labels CSV for project dataset
             fit_colormap: Optional override colormap JSON for fit dataset
             project_colormap: Optional override colormap JSON for project dataset
+
+        Note:
+            Must provide either (labels + colormap) OR (fit_labels + project_labels + fit_colormap + project_colormap)
         """
         self.fit_plink_prefix = Path(fit_plink_prefix)
         self.transform_plink_prefix = Path(transform_plink_prefix)
-        self.labels = Path(labels)
-        self.colormap = Path(colormap)
         self.output_dir = Path(output_dir)
         self.geographic_coords = (
             Path(geographic_coords) if geographic_coords else None
         )
 
-        # Use override parameters if provided, otherwise fall back to primary parameters
-        self.fit_labels = Path(fit_labels) if fit_labels else self.labels
-        self.project_labels = Path(project_labels) if project_labels else self.labels
-        self.fit_colormap = Path(fit_colormap) if fit_colormap else self.colormap
-        self.project_colormap = Path(project_colormap) if project_colormap else self.colormap
+        # Handle labels: either use shared labels or separate fit/project labels
+        if labels is not None:
+            self.labels = Path(labels)
+            self.fit_labels = Path(fit_labels) if fit_labels else self.labels
+            self.project_labels = Path(project_labels) if project_labels else self.labels
+        else:
+            # No shared labels provided, must have separate fit/project labels
+            if not fit_labels or not project_labels:
+                raise ValueError(
+                    "Must provide either 'labels' OR both 'fit_labels' and 'project_labels'"
+                )
+            self.labels = None
+            self.fit_labels = Path(fit_labels)
+            self.project_labels = Path(project_labels)
+
+        # Handle colormap: either use shared colormap or separate fit/project colormaps
+        if colormap is not None:
+            self.colormap = Path(colormap)
+            self.fit_colormap = Path(fit_colormap) if fit_colormap else self.colormap
+            self.project_colormap = Path(project_colormap) if project_colormap else self.colormap
+        else:
+            # No shared colormap provided, must have separate fit/project colormaps
+            if not fit_colormap or not project_colormap:
+                raise ValueError(
+                    "Must provide either 'colormap' OR both 'fit_colormap' and 'project_colormap'"
+                )
+            self.colormap = None
+            self.fit_colormap = Path(fit_colormap)
+            self.project_colormap = Path(project_colormap)
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,6 +124,7 @@ class Pipeline:
         k_max: int = 10,
         embedding: str = "phate",
         embedding_params: Optional[Dict] = None,
+        embedding_input: str = "both",
         skip_pca: bool = False,
         skip_admixture: bool = False,
         skip_embedding: bool = False,
@@ -109,6 +135,7 @@ class Pipeline:
         skip_metrics: bool = False,
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
+        admix_batch_size: Optional[int] = None,
         flashpca_output_dir: Optional[Union[str, Path]] = None,
         neuraladmixture_output_dir: Optional[Union[str, Path]] = None,
     ) -> Dict:
@@ -121,6 +148,7 @@ class Pipeline:
             k_max: Maximum K for admixture
             embedding: Embedding method ('phate', 'umap', 'tsne', 'diffusion_map')
             embedding_params: Optional parameters for embedding
+            embedding_input: Which dataset to embed - 'fit', 'project', or 'both' (default)
             skip_pca: Skip PCA step
             skip_admixture: Skip admixture step
             skip_embedding: Skip embedding step
@@ -267,6 +295,8 @@ class Pipeline:
                 admix_cmd.extend(["--threads", str(admix_threads)])
             if admix_gpus is not None:
                 admix_cmd.extend(["--num-gpus", str(admix_gpus)])
+            if admix_batch_size is not None:
+                admix_cmd.extend(["--batch-size", str(admix_batch_size)])
 
             subprocess.run(admix_cmd, check=True)
 
@@ -313,17 +343,43 @@ class Pipeline:
             embedding_dir.mkdir(exist_ok=True)
             embedding_file = embedding_dir / f"{embedding}_2d.csv"
 
-            logger.info("Running embedding via CLI on transform PCA coordinates")
+            # Determine which PCA coordinates to embed based on embedding_input mode
+            if embedding_input == "fit":
+                # Mode 1: Fit+transform embedding on fit PCA coordinates only
+                logger.info(f"Embedding fit PCA coordinates only (mode: fit-only)")
+                fit_input = results["fit_pca_file"]
+                project_input = None
+            elif embedding_input == "project":
+                # Mode 2: Fit+transform embedding on project PCA coordinates only
+                logger.info(f"Embedding project PCA coordinates only (mode: project-only)")
+                fit_input = results["transform_pca_file"]
+                project_input = None
+            else:  # embedding_input == "both"
+                # Mode 3: Fit embedding on fit PCA, transform on project PCA
+                logger.info(f"Embedding: fit on fit PCA, transform on project PCA (mode: both)")
+                fit_input = results["fit_pca_file"]
+                project_input = results["transform_pca_file"]
+
             embed_cmd = [
                 "manifold-genetics",
                 "embed",
                 "--method",
                 embedding,
                 "--input",
-                str(results["transform_pca_file"]),
-                "--project-output",
-                str(embedding_file),
+                str(fit_input),
             ]
+
+            # Add fit or project output based on mode
+            if project_input is None:
+                # Modes 1 & 2: fit_transform only (output goes to main embedding file)
+                embed_cmd.extend(["--project-output", str(embedding_file)])
+            else:
+                # Mode 3: fit on one dataset, transform on another
+                embed_cmd.extend([
+                    "--fit-output", str(embedding_dir / f"{embedding}_fit_2d.csv"),
+                    "--project-input", str(project_input),
+                    "--project-output", str(embedding_file),
+                ])
 
             if embedding == "phate":
                 embed_cmd.extend(["--knn", str(embedding_params.get("knn", 25))])

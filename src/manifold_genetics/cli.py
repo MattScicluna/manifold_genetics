@@ -93,7 +93,10 @@ def cmd_pca(args):
         pca_coords = pca.fit_transform(fit_prefix, output_path=project_output)
         print(f"PCA complete: {project_output}")
 
-    print(f"Shape: {pca_coords.shape}")
+    # Report shape excluding sample_id column
+    n_samples = pca_coords.shape[0]
+    n_pcs = pca_coords.shape[1] - 1  # Exclude sample_id column
+    print(f"Shape: ({n_samples}, {n_pcs}) [excluding sample_id column]")
     return 0
 
 
@@ -124,6 +127,7 @@ def cmd_admixture(args):
         force=args.force,
         threads=args.threads,
         num_gpus=args.num_gpus,
+        batch_size=getattr(args, 'batch_size', None),
     )
 
     # Fit models
@@ -270,7 +274,10 @@ def cmd_embed(args):
     if fit_output:
         print(f"Fit embedding saved to: {fit_output}")
     print(f"Projected embedding saved to: {project_output}")
-    print(f"Shape: {embedding.shape}")
+    # Report shape excluding sample_id column
+    n_samples = embedding.shape[0]
+    n_dims = embedding.shape[1] - 1  # Exclude sample_id column
+    print(f"Shape: ({n_samples}, {n_dims}) [excluding sample_id column]")
     return 0
 
 
@@ -412,6 +419,12 @@ def cmd_pipeline(args):
     elif args.embedding == "diffusion_map":
         embedding_params["knn"] = args.knn
 
+    # Validate labels/colormaps arguments
+    if not args.labels and not (args.fit_labels and args.project_labels):
+        raise ValueError("Must provide either --labels OR both --fit-labels and --project-labels")
+    if not args.colormap and not (args.fit_colormap and args.project_colormap):
+        raise ValueError("Must provide either --colormap OR both --fit-colormap and --project-colormap")
+
     # Handle separate labels/colormaps for cross-cohort analysis
     fit_labels = args.fit_labels if hasattr(args, "fit_labels") and args.fit_labels else args.labels
     project_labels = args.project_labels if hasattr(args, "project_labels") and args.project_labels else args.labels
@@ -437,6 +450,7 @@ def cmd_pipeline(args):
         k_max=args.k_max,
         embedding=args.embedding,
         embedding_params=embedding_params,
+        embedding_input=args.embedding_input,
         skip_pca=args.skip_pca,
         skip_admixture=args.skip_admixture,
         skip_embedding=args.skip_embedding,
@@ -447,6 +461,7 @@ def cmd_pipeline(args):
         admix_group_column=args.admixture_group_column,
         admix_threads=args.threads,
         admix_gpus=args.num_gpus,
+        admix_batch_size=getattr(args, 'batch_size', None),
         flashpca_output_dir=args.flashpca_output_dir,
     )
 
@@ -530,6 +545,9 @@ def main():
     admix_parser.add_argument("--threads", type=int, help="Threads for neural admixture")
     admix_parser.add_argument(
         "--num-gpus", type=int, help="GPUs for neural admixture (default: auto)"
+    )
+    admix_parser.add_argument(
+        "--batch-size", type=int, help="Batch size for training and inference (helps avoid OOM on large datasets)"
     )
     admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_parser.set_defaults(func=cmd_admixture)
@@ -649,10 +667,10 @@ def main():
         required=True,
         help="PLINK prefix to project/apply the fitted models (transform subset)",
     )
-    pipeline_parser.add_argument("--labels", required=True, help="Labels CSV file")
-    pipeline_parser.add_argument("--colormap", required=True, help="Colormap JSON file")
-    pipeline_parser.add_argument("--fit-labels", help="Labels CSV file for fit dataset (optional, for cross-cohort analysis)")
-    pipeline_parser.add_argument("--project-labels", help="Labels CSV file for project dataset (optional, for cross-cohort analysis)")
+    pipeline_parser.add_argument("--labels", help="Labels CSV file (used for both fit and project if --fit-labels/--project-labels not provided)")
+    pipeline_parser.add_argument("--colormap", help="Colormap JSON file (used for both fit and project if --fit-colormap/--project-colormap not provided)")
+    pipeline_parser.add_argument("--fit-labels", help="Labels CSV file for fit dataset (for separate fit/project labels)")
+    pipeline_parser.add_argument("--project-labels", help="Labels CSV file for project dataset (for separate fit/project labels)")
     pipeline_parser.add_argument("--fit-colormap", help="Colormap JSON file for fit dataset (optional, for cross-cohort analysis)")
     pipeline_parser.add_argument("--project-colormap", help="Colormap JSON file for project dataset (optional, for cross-cohort analysis)")
     pipeline_parser.add_argument("--output", required=True, help="Output directory")
@@ -670,6 +688,11 @@ def main():
         "--num-gpus",
         type=int,
         help="GPUs for neural admixture (default: auto-detect if CUDA available)",
+    )
+    pipeline_parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="Batch size for neural admixture training and inference (helps avoid OOM on large datasets)",
     )
     pipeline_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")
     pipeline_parser.add_argument("--k-min", type=int, default=2, help="Min K (admixture)")
@@ -689,6 +712,12 @@ def main():
     pipeline_parser.add_argument("--skip-pca", action="store_true", help="Skip PCA")
     pipeline_parser.add_argument("--skip-admixture", action="store_true", help="Skip admixture")
     pipeline_parser.add_argument("--skip-embedding", action="store_true", help="Skip embedding")
+    pipeline_parser.add_argument(
+        "--embedding-input",
+        choices=["fit", "project", "both"],
+        default="both",
+        help="Which dataset to embed: 'fit' (fit+transform on fit set), 'project' (fit+transform on project set), 'both' (fit on fit, transform on project)"
+    )
     pipeline_parser.add_argument(
         "--skip-embedding-visualization", action="store_true", help="Skip embedding visualization"
     )
