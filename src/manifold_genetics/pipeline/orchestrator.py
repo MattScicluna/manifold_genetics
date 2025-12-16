@@ -329,6 +329,7 @@ class Pipeline:
                     k_values=range(k_min, k_max + 1),
                     output_path=bar_plot_path,
                     colormap=cmap_dict,
+                    subsample_per_group=300,
                 )
 
                 results.setdefault("admixture_figures", {})["bars"] = bar_plot_path
@@ -385,6 +386,18 @@ class Pipeline:
                 embed_cmd.extend(["--knn", str(embedding_params.get("knn", 25))])
                 t_val = embedding_params.get("t", "auto")
                 embed_cmd.extend(["--t", str(t_val)])
+
+                # Add n_landmark if specified
+                if "n_landmark" in embedding_params and embedding_params["n_landmark"] is not None:
+                    embed_cmd.extend(["--n-landmark", str(embedding_params["n_landmark"])])
+
+                # Add random_landmarking flag if specified
+                if embedding_params.get("random_landmarking", False):
+                    embed_cmd.append("--random-landmarking")
+
+                # Add embed_batch_size if specified
+                if "embed_batch_size" in embedding_params and embedding_params["embed_batch_size"] is not None:
+                    embed_cmd.extend(["--embed-batch-size", str(embedding_params["embed_batch_size"])])
             elif embedding == "umap":
                 embed_cmd.extend(["--n-neighbors", str(embedding_params.get("n_neighbors", 15))])
                 embed_cmd.extend(["--min-dist", str(embedding_params.get("min_dist", 0.1))])

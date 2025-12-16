@@ -5,10 +5,10 @@
     "Any other Black background": "#2E8B57",
     "Black or Black British": "#006400",
     "White and Black African": "#8FBC8F",
-    "British": "#9370DB",
     "Irish": "#8A2BE2",
     "White": "#BA55D3",
     "Any other white background": "#DDA0DD",
+    "British": "#9370DB",
     "Indian": "#FFA500",
     "Pakistani": "#FF8C00",
     "Bangladeshi": "#FFB347",
@@ -21,8 +21,7 @@
     "Other ethnic group": "#D3D3D3",
     "Prefer not to answer": "#D3D3D3",
     "Do not know": "#D3D3D3",
-    "Any other Asian background": "#D3D3D3",
-    "Other": "#D3D3D3"
+    "Any other Asian background": "#D3D3D3"
   },
   "Population": {
     "AFR": "#228B22",

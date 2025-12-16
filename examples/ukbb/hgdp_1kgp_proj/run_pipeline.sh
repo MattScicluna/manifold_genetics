@@ -165,6 +165,7 @@ echo "    --output ${OUTPUT_DIR} \\"
 echo "    --n-pcs 20 \\"
 echo "    --k-min 2 --k-max 5 \\"
 echo "    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \\"
+echo "    --embed-batch-size 60000 \\"
 echo "    --skip-metrics \\"
 echo "    --threads ${THREADS} \\"
 echo "    --batch-size 400"
@@ -188,6 +189,7 @@ manifold-genetics pipeline \
     --n-pcs 20 \
     --k-min 2 --k-max 5 \
     --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
+    --embed-batch-size 60000 \
     --skip-metrics \
     --threads "$THREADS" \
     --batch-size 400 \

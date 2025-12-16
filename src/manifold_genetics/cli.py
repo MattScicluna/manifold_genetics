@@ -246,7 +246,12 @@ def cmd_embed(args):
 
         if args.random_landmarking and n_landmark is None:
             raise ValueError("random-landmarking requires --n-landmark to be set")
-        embed_params = {"knn": args.knn, "t": t_param, "n_landmark": n_landmark}
+        embed_params = {
+            "knn": args.knn,
+            "t": t_param,
+            "n_landmark": n_landmark,
+            "embed_batch_size": getattr(args, "embed_batch_size", None),
+        }
         model = PHATE(n_components=2, **embed_params)
     elif args.method == "umap":
         embed_params = {"n_neighbors": args.n_neighbors, "min_dist": args.min_dist}
@@ -412,6 +417,7 @@ def cmd_pipeline(args):
         if args.random_landmarking and n_landmark is None:
             raise ValueError("random-landmarking requires --n-landmark to be set")
         embedding_params["n_landmark"] = n_landmark
+        embedding_params["embed_batch_size"] = getattr(args, "embed_batch_size", None)
     elif args.embedding == "umap":
         embedding_params["n_neighbors"] = args.n_neighbors
     elif args.embedding == "tsne":
@@ -609,6 +615,11 @@ def main():
     embed_parser.add_argument("--n-neighbors", type=int, default=15, help="Neighbors (UMAP)")
     embed_parser.add_argument("--min-dist", type=float, default=0.1, help="Min dist (UMAP)")
     embed_parser.add_argument("--perplexity", type=float, default=30, help="Perplexity (t-SNE)")
+    embed_parser.add_argument(
+        "--embed-batch-size",
+        type=int,
+        help="Batch size for embedding transform (to avoid OOM on large datasets; None=no batching)",
+    )
     embed_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     embed_parser.set_defaults(func=cmd_embed)
 
@@ -709,6 +720,11 @@ def main():
     pipeline_parser.add_argument("--random-landmarking", action="store_true", help="Use random landmarking for PHATE (requires --n-landmark)")
     pipeline_parser.add_argument("--n-neighbors", type=int, default=15, help="Neighbors (UMAP)")
     pipeline_parser.add_argument("--perplexity", type=float, default=30, help="Perplexity (t-SNE)")
+    pipeline_parser.add_argument(
+        "--embed-batch-size",
+        type=int,
+        help="Batch size for embedding transform (to avoid OOM on large datasets; None=no batching)",
+    )
     pipeline_parser.add_argument("--skip-pca", action="store_true", help="Skip PCA")
     pipeline_parser.add_argument("--skip-admixture", action="store_true", help="Skip admixture")
     pipeline_parser.add_argument("--skip-embedding", action="store_true", help="Skip embedding")

@@ -12,6 +12,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch
 
 from ..utils.io import read_colormap, read_embedding_csv, read_labels_csv
 
@@ -82,25 +83,49 @@ def plot_embedding(
             logger.warning(f"Column '{label_col}' not found in labels, skipping")
             continue
 
-        # Get unique labels
-        unique_labels = sorted(merged_df[label_col].unique())
+        # FIRST: Plot samples with missing data in gray (background layer)
+        missing_mask = merged_df[label_col].isna()
+        if missing_mask.sum() > 0:
+            ax.scatter(
+                merged_df.loc[missing_mask, "dim_1"],
+                merged_df.loc[missing_mask, "dim_2"],
+                s=20,
+                alpha=alpha * 0.5,  # More transparent for background
+                color='lightgray',
+                edgecolors='none',
+                label='Unknown',
+                zorder=1,  # Low z-order for background
+            )
 
-        # Plot each label
-        for label in unique_labels:
+        # SECOND: Plot each color group separately (foreground layer)
+        # Use the ordering from the color_dict (Python 3.7+ preserves insertion order)
+        # Plot in REVERSE order so that the first items in colormap appear on top
+        color_groups = [k for k in color_dict.keys() if k in merged_df[label_col].values]
+        for label in reversed(color_groups):
             mask = merged_df[label_col] == label
             label_data = merged_df[mask]
-
             color = color_dict.get(label, "#D3D3D3")  # Default to gray
 
             ax.scatter(
                 label_data["dim_1"],
                 label_data["dim_2"],
                 s=20,
-                alpha=0.6,
+                alpha=alpha,
                 color=color,
                 edgecolors='none',
                 label=label,
+                zorder=2,  # Higher z-order for foreground
             )
+
+        # THIRD: Create legend using Patches instead of scatter handles
+        # This ensures legend follows the color_dict order
+        legend_elements = [
+            Patch(facecolor=color_dict[g], label=g)
+            for g in color_dict.keys()
+            if g in merged_df[label_col].values
+        ]
+        if merged_df[label_col].isna().any():
+            legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
 
         # Remove ticks, tick labels, axis labels, and titles
         ax.set_xticks([])
@@ -110,13 +135,13 @@ def plot_embedding(
         ax.set_title("")
 
         # Add legend if requested and reasonable number of labels
-        if show_legend and len(unique_labels) <= 50:
+        if show_legend and len(legend_elements) <= 50:
             ax.legend(
-                bbox_to_anchor=(1.05, 1),
-                loc="upper left",
-                frameon=False,
+                handles=legend_elements,
                 fontsize=8,
-                markerscale=2,
+                framealpha=0.9,
+                loc='center left',
+                bbox_to_anchor=(1.02, 0.5),
             )
 
     # No titles needed
@@ -200,6 +225,10 @@ def plot_pca_pairs(
         unique_labels = merged_df[label_column].unique()
         color_dict = {label: f"C{i}" for i, label in enumerate(unique_labels)}
 
+    # Store all handles and labels for unified legend
+    all_handles = []
+    all_labels = []
+
     # Plot each PC pair
     for pair_idx in range(n_pairs):
         ax = axes[pair_idx]
@@ -209,14 +238,26 @@ def plot_pca_pairs(
         pc_x_col = available_pcs[pc_x_idx]
         pc_y_col = available_pcs[pc_y_idx]
 
-        # Get unique labels
-        unique_labels = sorted(merged_df[label_column].unique())
+        # FIRST: Plot samples with missing data in gray (background layer)
+        missing_mask = merged_df[label_column].isna()
+        if missing_mask.sum() > 0:
+            ax.scatter(
+                merged_df.loc[missing_mask, pc_x_col],
+                merged_df.loc[missing_mask, pc_y_col],
+                s=5,
+                alpha=0.3,  # More transparent for background
+                color='lightgray',
+                edgecolors='none',
+                label='Unknown' if pair_idx == 0 else '',
+                zorder=1,  # Low z-order for background
+            )
 
-        # Plot each label
-        for label in unique_labels:
+        # SECOND: Plot each color group separately (foreground layer)
+        # Plot in REVERSE order so that the first items in colormap appear on top
+        color_groups = [k for k in color_dict.keys() if k in merged_df[label_column].values]
+        for label in reversed(color_groups):
             mask = merged_df[label_column] == label
             label_data = merged_df[mask]
-
             color = color_dict.get(label, "#D3D3D3")
 
             ax.scatter(
@@ -226,7 +267,8 @@ def plot_pca_pairs(
                 alpha=0.6,
                 color=color,
                 edgecolors='none',
-                label=label,
+                label=label if pair_idx == 0 else '',  # Only label on first plot
+                zorder=2,  # Higher z-order for foreground
             )
 
         # Remove ticks, tick labels, axis labels, and titles
@@ -240,27 +282,24 @@ def plot_pca_pairs(
     for idx in range(n_pairs, len(axes)):
         axes[idx].axis("off")
 
-    # Add legend
-    if len(unique_labels) <= 50:
-        handles = [
-            plt.Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor=color_dict.get(label, "#D3D3D3"),
-                markersize=8,
-                label=label,
-            )
-            for label in unique_labels
-        ]
+    # Create legend using Patches to match the color_dict order
+    legend_elements = [
+        Patch(facecolor=color_dict[g], label=g)
+        for g in color_dict.keys()
+        if g in merged_df[label_column].values
+    ]
+    if merged_df[label_column].isna().any():
+        legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
+
+    # Add legend with patches
+    if len(legend_elements) <= 50:
         fig.legend(
-            handles=handles,
+            handles=legend_elements,
             loc="center left",
             bbox_to_anchor=(1, 0.5),
             title=label_column,
-            frameon=False,
             fontsize=8,
+            framealpha=0.9,
         )
 
     # No titles needed
