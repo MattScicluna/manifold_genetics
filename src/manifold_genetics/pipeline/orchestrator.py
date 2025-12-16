@@ -439,7 +439,7 @@ class Pipeline:
             results["embedding_figures"] = figure_paths
 
             # Step 4.1: Projection Plot (fit + project together) if cross-projection mode
-            if "fit_embedding_file" in results and self.fit_plink and self.project_plink:
+            if "fit_embedding_file" in results and self.fit_plink_prefix and self.transform_plink_prefix:
                 logger.info("Creating projection plot (fit + project together)...")
 
                 projection_plot_path = embedding_figures_dir / f"{embedding}_projection.png"

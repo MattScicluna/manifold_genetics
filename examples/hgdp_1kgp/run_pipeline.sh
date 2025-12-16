@@ -44,7 +44,7 @@ echo "========================================="
 echo ""
 echo "This will run the complete analysis pipeline:"
 echo "  - PCA (50 components)"
-echo "  - Neural Admixture (K=2-5)"
+echo "  - Neural Admixture (K=2-10)"
 echo "  - PHATE Embedding"
 echo "  - PCA Visualization"
 echo "  - Embedding Visualization"
@@ -144,8 +144,10 @@ echo "    --colormap ${COLORMAP_JSON} \\"
 echo "    --geographic ${GEOGRAPHIC_CSV} \\"
 echo "    --output ${OUTPUT_DIR} \\"
 echo "    --n-pcs 50 \\"
-echo "    --k-min 2 --k-max 5 \\"
+echo "    --k-min 2 --k-max 10 \\"
 echo "    --embedding phate --knn 100 --t 3 \\"
+echo "    --embedding-input project \\"
+echo "    --admix-group-column Genetic_region_merged \\"
 echo "    --threads ${THREADS}"
 [ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
 echo ""
@@ -162,9 +164,10 @@ manifold-genetics pipeline \
     --geographic "$GEOGRAPHIC_CSV" \
     --output "$OUTPUT_DIR" \
     --n-pcs 50 \
-    --k-min 2 --k-max 5 \
+    --k-min 2 --k-max 10 \
     --embedding phate --knn 100 --t 3 \
     --embedding-input project \
+    --admix-group-column Genetic_region_merged \
     --threads "$THREADS" \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 

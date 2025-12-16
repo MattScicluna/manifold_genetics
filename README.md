@@ -73,11 +73,12 @@ manifold-genetics pipeline \
     --fit-plink examples/hgdp_1kgp/data/fit_subset \
     --project-plink examples/hgdp_1kgp/data/project_subset \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --colormap examples/colormaps/hgdp_1kgp.json \
     --output examples/hgdp_1kgp/outputs \
     --n-pcs 50 \
     --k-min 2 --k-max 5 \
     --embedding phate --knn 100 --t 3 \
+    --embedding-input project \
     --threads 8
 # Optional: --num-gpus 1
 ```
@@ -111,7 +112,7 @@ manifold-genetics admixture \
     --k-min 2 --k-max 5 --threads 8
 # Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and transform.{K}.csv
 
-# 3) Embedding (PHATE): run on transform PCA coordinates
+# 3) Embedding (PHATE): fit and transform on project (transform) PCA coordinates
 manifold-genetics embed \
     --method phate \
     --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
@@ -124,7 +125,7 @@ manifold-genetics embed \
 manifold-genetics plot-pca \
     --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --colormap examples/colormaps/hgdp_1kgp.json \
     --output examples/hgdp_1kgp/outputs/figures/pca \
     --n-pcs 50
 
@@ -132,7 +133,7 @@ manifold-genetics plot-pca \
 manifold-genetics plot \
     --input examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --colormap examples/colormaps/hgdp_1kgp.json \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/phate.png
 
 # Admixture barplots (stacked bars per K)
@@ -140,7 +141,7 @@ manifold-genetics plot-admixture \
     --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --group-column Genetic_region_merged \
-    --colormap examples/hgdp_1kgp/data/colormap.json \
+    --colormap examples/colormaps/hgdp_1kgp.json \
     --k-min 2 --k-max 5 \
     --output examples/hgdp_1kgp/outputs/figures/admixture/transform_bars.png
 

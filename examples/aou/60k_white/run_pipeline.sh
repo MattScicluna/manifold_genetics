@@ -165,6 +165,7 @@ manifold-genetics pipeline \
     --k-min 2 --k-max 10 \
     --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
     --embedding-input fit \
+    --admix-group-column race_ethnicity \
     --threads ${THREADS} \
     --batch-size 400 \
     ${GPU_ARGS} \
