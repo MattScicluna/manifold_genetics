@@ -3,6 +3,7 @@
 from .plotting import (
     plot_embedding,
     plot_pca_pairs,
+    plot_projection,
     visualize,
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
@@ -11,6 +12,7 @@ from .plotting import (
 __all__ = [
     "plot_embedding",
     "plot_pca_pairs",
+    "plot_projection",
     "visualize",
     "plot_admixture_bar_grid",
     "plot_admixture_embedding_grid",

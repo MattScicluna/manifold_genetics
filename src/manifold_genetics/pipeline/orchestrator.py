@@ -18,6 +18,7 @@ from ..embeddings import PHATE, UMAP, TSNE, DiffusionMap
 from ..visualization import (
     visualize,
     plot_pca_pairs,
+    plot_projection,
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
 )
@@ -371,13 +372,15 @@ class Pipeline:
             ]
 
             # Add fit or project output based on mode
+            fit_embedding_file = None
             if project_input is None:
                 # Modes 1 & 2: fit_transform only (output goes to main embedding file)
                 embed_cmd.extend(["--project-output", str(embedding_file)])
             else:
                 # Mode 3: fit on one dataset, transform on another
+                fit_embedding_file = embedding_dir / f"{embedding}_fit_2d.csv"
                 embed_cmd.extend([
-                    "--fit-output", str(embedding_dir / f"{embedding}_fit_2d.csv"),
+                    "--fit-output", str(fit_embedding_file),
                     "--project-input", str(project_input),
                     "--project-output", str(embedding_file),
                 ])
@@ -412,6 +415,10 @@ class Pipeline:
             results["embedding_file"] = embedding_file
             results["embedding_coords"] = embedding_coords
 
+            # Track fit embedding file if it exists (Mode 3: cross-projection)
+            if fit_embedding_file is not None:
+                results["fit_embedding_file"] = fit_embedding_file
+
         # Step 4: Embedding Visualization
         if not skip_visualization and not skip_embedding:
             logger.info("=" * 70)
@@ -430,6 +437,28 @@ class Pipeline:
             )
 
             results["embedding_figures"] = figure_paths
+
+            # Step 4.1: Projection Plot (fit + project together) if cross-projection mode
+            if "fit_embedding_file" in results and self.fit_plink and self.project_plink:
+                logger.info("Creating projection plot (fit + project together)...")
+
+                projection_plot_path = embedding_figures_dir / f"{embedding}_projection.png"
+
+                try:
+                    plot_projection(
+                        fit_embedding=results["fit_embedding_file"],
+                        project_embedding=results["embedding_file"],
+                        fit_labels=self.fit_labels,
+                        project_labels=self.project_labels,
+                        fit_colormap=self.fit_colormap,
+                        project_colormap=self.project_colormap,
+                        output_path=projection_plot_path,
+                    )
+
+                    results["projection_plot"] = projection_plot_path
+                    logger.info(f"Projection plot saved: {projection_plot_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to create projection plot: {e}")
 
         # Step 4.5: Admixture-Colored Embedding Visualization (requires embedding to exist)
         if not skip_admixture_visualization and not skip_embedding and not skip_admixture:

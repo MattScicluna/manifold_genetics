@@ -18,6 +18,7 @@ from .embeddings import PHATE, UMAP, TSNE, DiffusionMap
 from .visualization import (
     visualize,
     plot_pca_pairs,
+    plot_projection,
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
 )
@@ -393,6 +394,27 @@ def cmd_plot_pca(args):
     return 0
 
 
+def cmd_plot_projection(args):
+    """Run projection plot command."""
+    setup_logging(args.verbose)
+
+    figure_path = plot_projection(
+        fit_embedding=args.fit_embedding,
+        project_embedding=args.project_embedding,
+        fit_labels=args.fit_labels,
+        project_labels=args.project_labels,
+        fit_colormap=args.fit_colormap,
+        project_colormap=args.project_colormap,
+        output_path=args.output,
+        point_size=args.point_size,
+        alpha=args.alpha,
+        linewidth=args.linewidth,
+    )
+
+    print(f"Projection plot saved: {figure_path}")
+    return 0
+
+
 def cmd_pipeline(args):
     """Run full pipeline command."""
     setup_logging(args.verbose)
@@ -641,6 +663,21 @@ def main():
     plot_pca_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs to plot")
     plot_pca_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_pca_parser.set_defaults(func=cmd_plot_pca)
+
+    # Plot: projection (fit + project together)
+    plot_proj_parser = subparsers.add_parser("plot-projection", help="Plot fit and projection embeddings together")
+    plot_proj_parser.add_argument("--fit-embedding", required=True, help="Fit embedding CSV file")
+    plot_proj_parser.add_argument("--project-embedding", required=True, help="Project embedding CSV file")
+    plot_proj_parser.add_argument("--fit-labels", required=True, help="Fit labels CSV file")
+    plot_proj_parser.add_argument("--project-labels", required=True, help="Project labels CSV file")
+    plot_proj_parser.add_argument("--fit-colormap", required=True, help="Fit colormap JSON file")
+    plot_proj_parser.add_argument("--project-colormap", required=True, help="Project colormap JSON file")
+    plot_proj_parser.add_argument("--output", required=True, help="Output figure path")
+    plot_proj_parser.add_argument("--point-size", type=float, default=4.0, help="Size of scatter points")
+    plot_proj_parser.add_argument("--alpha", type=float, default=0.6, help="Transparency of points")
+    plot_proj_parser.add_argument("--linewidth", type=float, default=0.8, help="Edge width for hollow markers")
+    plot_proj_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    plot_proj_parser.set_defaults(func=cmd_plot_projection)
 
     # Metrics: geographic
     geo_metrics_parser = subparsers.add_parser("metrics-geographic", help="Compute geographic preservation")
