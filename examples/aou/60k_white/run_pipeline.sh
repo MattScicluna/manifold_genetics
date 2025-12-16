@@ -167,7 +167,7 @@ manifold-genetics pipeline \
     --embedding-input fit \
     --admixture-group-column race_ethnicity \
     --threads ${THREADS} \
-    --batch-size 400 \
+    --neuraladmixture-batch-size 400 \
     ${GPU_ARGS} \
     --skip-metrics
 

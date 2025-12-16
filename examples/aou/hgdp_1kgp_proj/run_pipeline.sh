@@ -145,7 +145,7 @@ echo "    --k-min 2 --k-max 10 \\"
 echo "    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \\"
 echo "    --skip-metrics \\"
 echo "    --threads ${THREADS} \\"
-echo "    --batch-size 400"
+echo "    --neuraladmixture-batch-size 400"
 [ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
 echo ""
 
@@ -169,7 +169,7 @@ manifold-genetics pipeline \
     --admixture-group-column race_ethnicity \
     --skip-metrics \
     --threads "$THREADS" \
-    --batch-size 400 \
+    --neuraladmixture-batch-size 400 \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 
 # Summary

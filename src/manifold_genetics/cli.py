@@ -128,7 +128,7 @@ def cmd_admixture(args):
         force=args.force,
         threads=args.threads,
         num_gpus=args.num_gpus,
-        batch_size=getattr(args, 'batch_size', None),
+        batch_size=getattr(args, 'neuraladmixture_batch_size', None),
     )
 
     # Fit models
@@ -489,7 +489,7 @@ def cmd_pipeline(args):
         admix_group_column=args.admixture_group_column,
         admix_threads=args.threads,
         admix_gpus=args.num_gpus,
-        admix_batch_size=getattr(args, 'batch_size', None),
+        admix_batch_size=getattr(args, 'neuraladmixture_batch_size', None),
         flashpca_output_dir=args.flashpca_output_dir,
     )
 
@@ -575,7 +575,7 @@ def main():
         "--num-gpus", type=int, help="GPUs for neural admixture (default: auto)"
     )
     admix_parser.add_argument(
-        "--batch-size", type=int, help="Batch size for training and inference (helps avoid OOM on large datasets)"
+        "--neuraladmixture-batch-size", type=int, help="Batch size for training and inference (helps avoid OOM on large datasets)"
     )
     admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_parser.set_defaults(func=cmd_admixture)
@@ -738,7 +738,7 @@ def main():
         help="GPUs for neural admixture (default: auto-detect if CUDA available)",
     )
     pipeline_parser.add_argument(
-        "--batch-size",
+        "--neuraladmixture-batch-size",
         type=int,
         help="Batch size for neural admixture training and inference (helps avoid OOM on large datasets)",
     )

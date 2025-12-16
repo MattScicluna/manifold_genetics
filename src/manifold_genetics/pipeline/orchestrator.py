@@ -297,7 +297,7 @@ class Pipeline:
             if admix_gpus is not None:
                 admix_cmd.extend(["--num-gpus", str(admix_gpus)])
             if admix_batch_size is not None:
-                admix_cmd.extend(["--batch-size", str(admix_batch_size)])
+                admix_cmd.extend(["--neuraladmixture-batch-size", str(admix_batch_size)])
 
             subprocess.run(admix_cmd, check=True)
 

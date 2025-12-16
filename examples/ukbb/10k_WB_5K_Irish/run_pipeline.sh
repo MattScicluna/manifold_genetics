@@ -153,7 +153,7 @@ manifold-genetics pipeline \
     --embedding-input fit \
     --admixture-group-column self_described_ancestry \
     --threads ${THREADS} \
-    --batch-size 400 \
+    --neuraladmixture-batch-size 400 \
     ${GPU_ARGS} \
     --skip-metrics
 
