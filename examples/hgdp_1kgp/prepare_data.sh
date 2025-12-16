@@ -66,12 +66,10 @@ FIT_LABELS="${DATA_DIR}/hgdp_fit_labels.csv"
 PROJECT_LABELS="${DATA_DIR}/hgdp_project_labels.csv"
 FIT_GEOGRAPHIC="${DATA_DIR}/hgdp_fit_geographic.csv"
 PROJECT_GEOGRAPHIC="${DATA_DIR}/hgdp_project_geographic.csv"
-COLORMAP="${DATA_DIR}/colormap.json"
 
 if [[ -f "${FIT_BED}" ]] && [[ -f "${PROJECT_BED}" ]] && \
    [[ -f "${FIT_LABELS}" ]] && [[ -f "${PROJECT_LABELS}" ]] && \
-   [[ -f "${FIT_GEOGRAPHIC}" ]] && [[ -f "${PROJECT_GEOGRAPHIC}" ]] && \
-   [[ -f "${COLORMAP}" ]]; then
+   [[ -f "${FIT_GEOGRAPHIC}" ]] && [[ -f "${PROJECT_GEOGRAPHIC}" ]]; then
     print_success "Data already processed!"
     echo ""
     echo "Found:"
@@ -81,7 +79,6 @@ if [[ -f "${FIT_BED}" ]] && [[ -f "${PROJECT_BED}" ]] && \
     echo "  - hgdp_project_labels.csv"
     echo "  - hgdp_fit_geographic.csv"
     echo "  - hgdp_project_geographic.csv"
-    echo "  - colormap.json"
     echo ""
     echo "You can run: bash examples/hgdp_1kgp/run_pipeline.sh"
     exit 0
@@ -438,16 +435,6 @@ else
     exit 1
 fi
 
-# Step 10: Copy colormap
-print_status "Copying colormap..."
-
-if [[ -f "${RAW_DIR}/colormap.json" ]]; then
-    cp "${RAW_DIR}/colormap.json" "${DATA_DIR}/colormap.json"
-    print_success "Copied colormap.json"
-else
-    print_warning "colormap.json not found in raw/, skipping..."
-fi
-
 # Step 10: Print success summary
 echo ""
 echo "========================================="
@@ -461,7 +448,6 @@ echo "  - hgdp_fit_labels.csv"
 echo "  - hgdp_project_labels.csv"
 echo "  - hgdp_fit_geographic.csv (geographic coordinates, Americas excluded)"
 echo "  - hgdp_project_geographic.csv (geographic coordinates, Americas excluded)"
-echo "  - colormap.json"
 echo ""
 echo "Next steps:"
 echo "  bash examples/hgdp_1kgp/run_pipeline.sh"

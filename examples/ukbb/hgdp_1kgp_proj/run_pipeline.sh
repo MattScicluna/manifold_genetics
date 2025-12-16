@@ -188,7 +188,7 @@ manifold-genetics pipeline \
     --n-pcs 20 \
     --k-min 2 --k-max 10 \
     --embedding phate --knn 100 --t 3 \
-    --admix-group-column self_described_ancestry \
+    --admixture-group-column self_described_ancestry \
     --skip-metrics \
     --threads "$THREADS" \
     --batch-size 400 \

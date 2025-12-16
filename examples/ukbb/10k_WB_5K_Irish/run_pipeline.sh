@@ -151,7 +151,7 @@ manifold-genetics pipeline \
     --k-min 2 --k-max 10 \
     --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
     --embedding-input fit \
-    --admix-group-column self_described_ancestry \
+    --admixture-group-column self_described_ancestry \
     --threads ${THREADS} \
     --batch-size 400 \
     ${GPU_ARGS} \

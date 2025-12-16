@@ -166,7 +166,7 @@ manifold-genetics pipeline \
     --n-pcs 20 \
     --k-min 2 --k-max 10 \
     --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
-    --admix-group-column race_ethnicity \
+    --admixture-group-column race_ethnicity \
     --skip-metrics \
     --threads "$THREADS" \
     --batch-size 400 \

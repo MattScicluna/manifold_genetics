@@ -147,7 +147,7 @@ echo "    --n-pcs 50 \\"
 echo "    --k-min 2 --k-max 10 \\"
 echo "    --embedding phate --knn 100 --t 3 \\"
 echo "    --embedding-input project \\"
-echo "    --admix-group-column Genetic_region_merged \\"
+echo "    --admixture-group-column Genetic_region_merged \\"
 echo "    --threads ${THREADS}"
 [ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
 echo ""
@@ -167,7 +167,7 @@ manifold-genetics pipeline \
     --k-min 2 --k-max 10 \
     --embedding phate --knn 100 --t 3 \
     --embedding-input project \
-    --admix-group-column Genetic_region_merged \
+    --admixture-group-column Genetic_region_merged \
     --threads "$THREADS" \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 
