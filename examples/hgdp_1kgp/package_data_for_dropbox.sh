@@ -49,13 +49,6 @@ if [ ! -f "$METADATA_FILE" ]; then
 fi
 echo "✓ Found: metadata CSV"
 
-# Check colormap
-if [ ! -f "${SOURCE_DIR}/colormap.json" ]; then
-    echo "ERROR: Missing colormap: ${SOURCE_DIR}/colormap.json"
-    exit 1
-fi
-echo "✓ Found: colormap.json"
-
 echo ""
 echo "Step 2: Create staging directory"
 echo "----------------------------------"
@@ -80,10 +73,6 @@ echo "✓ Copied: full_dataset.{bed,bim,fam}"
 cp "$METADATA_FILE" "${PACKAGE_DIR}/metadata.csv"
 echo "✓ Copied: metadata.csv"
 
-# Copy colormap
-cp "${SOURCE_DIR}/colormap.json" "${PACKAGE_DIR}/colormap.json"
-echo "✓ Copied: colormap.json"
-
 echo ""
 echo "Step 4: Create README"
 echo "----------------------------------"
@@ -101,7 +90,6 @@ testing the manifold-genetics package.
 - `full_dataset.bim` - PLINK variant information
 - `full_dataset.fam` - PLINK sample information
 - `metadata.csv` - Sample metadata with population labels and QC flags
-- `colormap.json` - Color mapping for population visualization
 - `README.txt` - This file
 
 ## Data Processing
@@ -131,11 +119,10 @@ After downloading this archive, run the data preparation script to create
 analysis-ready subsets:
 
 1. Extract the archive (done automatically by download_data.sh)
-2. Run `bash scripts/prepare_data.sh` to create:
+2. Run `bash prepare_data.sh` to create:
    - fit_subset (3,400 unrelated samples for training)
-   - transform_subset (4,094 QC-passing samples for testing)
+   - project_subset (4,094 QC-passing samples for testing/projection)
    - Label CSV files
-   - Colormap
 
 See the manifold-genetics README for detailed instructions.
 
@@ -156,9 +143,14 @@ See the manifold-genetics README for detailed instructions.
   - `Genetic_region_merged`: Coarse genetic region
   - `filter_pca_outlier`, `hard_filtered`, `filter_contaminated`: QC flags
 
-**Colormap JSON**:
-- Maps population labels to hex colors for plotting
-- Three label types: Population, Genetic_region_merged, self_described_ancestry
+Note: The metadata comes from this file:
+https://storage.googleapis.com/gcp-public-data--gnomad/release/3.1/secondary_analyses/hgdp_1kg_v2/metadata_and_qc/gnomad_meta_updated.tsv
+
+With the following exceptions:
+- The relatedness filter was inferred from:
+  gs://gcp-public-data--gnomad/release/3.1/secondary_analyses/hgdp_1kg_v2/pca_results/unrelateds_without_outliers.mt
+- The PCA outliers filter was inferred from:
+  gs://gcp-public-data--gnomad/release/3.1/secondary_analyses/hgdp_1kg_v2/pca/pca_outliers.txt
 
 ## References
 
@@ -186,7 +178,6 @@ tar -czf "hgdp_1kgp_full.tar.gz" \
     full_dataset.bim \
     full_dataset.fam \
     metadata.csv \
-    colormap.json \
     README.txt
 
 echo "✓ Created: hgdp_1kgp_full.tar.gz"
