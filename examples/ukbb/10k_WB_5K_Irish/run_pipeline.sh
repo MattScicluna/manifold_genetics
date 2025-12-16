@@ -52,7 +52,7 @@ FIT_PLINK="${DATA_DIR}/fit_subset"
 PROJECT_PLINK="${DATA_DIR}/project_subset"
 FIT_LABELS="${DATA_DIR}/fit_labels.csv"
 PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
-COLORMAP="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/ukbb_colormap.json"
+COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
 NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 

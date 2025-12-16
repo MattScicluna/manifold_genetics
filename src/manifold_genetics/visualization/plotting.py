@@ -27,7 +27,7 @@ def plot_embedding(
     output_path: Union[str, Path],
     title: Optional[str] = None,
     figsize: tuple = (6, 4),
-    point_size: float = 1.0,
+    point_size: float = 4.0,
     alpha: float = 0.6,
     show_legend: bool = True,
 ) -> Path:
@@ -59,6 +59,10 @@ def plot_embedding(
     else:
         labels_df = labels
 
+    # Reset index if sample_id is the index (from read_labels_csv)
+    if labels_df.index.name == 'sample_id':
+        labels_df = labels_df.reset_index()
+
     if isinstance(colormap, (str, Path)):
         colormap_dict = read_colormap(colormap)
     else:
@@ -89,11 +93,12 @@ def plot_embedding(
             ax.scatter(
                 merged_df.loc[missing_mask, "dim_1"],
                 merged_df.loc[missing_mask, "dim_2"],
-                s=20,
+                s=point_size,
                 alpha=alpha * 0.5,  # More transparent for background
                 color='lightgray',
                 edgecolors='none',
                 label='Unknown',
+                rasterized=True,
                 zorder=1,  # Low z-order for background
             )
 
@@ -109,11 +114,12 @@ def plot_embedding(
             ax.scatter(
                 label_data["dim_1"],
                 label_data["dim_2"],
-                s=20,
+                s=point_size,
                 alpha=alpha,
                 color=color,
                 edgecolors='none',
                 label=label,
+                rasterized=True,
                 zorder=2,  # Higher z-order for foreground
             )
 
@@ -161,6 +167,8 @@ def plot_pca_pairs(
     output_path: Union[str, Path],
     label_column: str,
     n_pcs: int = 20,
+    point_size: float = 4.0,
+    alpha: float = 0.6,
     title: Optional[str] = None,
 ) -> Path:
     """
@@ -188,6 +196,10 @@ def plot_pca_pairs(
         labels_df = read_labels_csv(labels)
     else:
         labels_df = labels
+
+    # Reset index if sample_id is the index (from read_labels_csv)
+    if labels_df.index.name == 'sample_id':
+        labels_df = labels_df.reset_index()
 
     if isinstance(colormap, (str, Path)):
         colormap_dict = read_colormap(colormap)
@@ -244,11 +256,12 @@ def plot_pca_pairs(
             ax.scatter(
                 merged_df.loc[missing_mask, pc_x_col],
                 merged_df.loc[missing_mask, pc_y_col],
-                s=5,
-                alpha=0.3,  # More transparent for background
+                s=point_size,
+                alpha=alpha * 0.5,  # More transparent for background
                 color='lightgray',
                 edgecolors='none',
                 label='Unknown' if pair_idx == 0 else '',
+                rasterized=True,
                 zorder=1,  # Low z-order for background
             )
 
@@ -263,11 +276,12 @@ def plot_pca_pairs(
             ax.scatter(
                 label_data[pc_x_col],
                 label_data[pc_y_col],
-                s=5,
-                alpha=0.6,
+                s=point_size,
+                alpha=alpha,
                 color=color,
                 edgecolors='none',
                 label=label if pair_idx == 0 else '',  # Only label on first plot
+                rasterized=True,
                 zorder=2,  # Higher z-order for foreground
             )
 

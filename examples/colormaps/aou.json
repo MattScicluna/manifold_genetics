@@ -1,0 +1,12 @@
+{
+  "race_ethnicity": {
+    "Asian": "#B71C1C",
+    "Black or African American": "#283593",
+    "Native Hawaiian or Other Pacific Islander": "#E040FB",
+    "Middle Eastern or North African": "#80461B",
+    "Hispanic or Latino": "#41C9F8",
+    "White": "#FFA000",
+    "More than one population": "#26867d",
+    "No information": "#e8e8e8"
+  }
+}
