@@ -167,7 +167,8 @@ echo "    --k-min 2 --k-max 10 \\"
 echo "    --embedding phate --knn 100 --t 3 \\"
 echo "    --skip-metrics \\"
 echo "    --threads ${THREADS} \\"
-echo "    --batch-size 400"
+echo "    --batch-size 400 \\"
+echo "    --embed-batch-size 60000"
 [ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
 echo ""
 
@@ -192,6 +193,7 @@ manifold-genetics pipeline \
     --skip-metrics \
     --threads "$THREADS" \
     --batch-size 400 \
+    --embed-batch-size 60000 \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
 
 # Step 6: Summary
