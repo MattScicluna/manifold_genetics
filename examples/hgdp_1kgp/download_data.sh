@@ -19,7 +19,7 @@ echo ""
 
 # Configuration
 # Note: Dropbox URLs need "?dl=1" at the end to direct download (not "?dl=0")
-DROPBOX_URL="https://www.dropbox.com/scl/fi/f8kay7kgpgb2s5ncsykpg/hgdp_1kgp_full.tar.gz?rlkey=pp7fj711zxlg4o2lbskxj5rwe&st=8clcouxv&dl=1"
+DROPBOX_URL="https://www.dropbox.com/scl/fi/f8kay7kgpgb2s5ncsykpg/hgdp_1kgp_full.tar.gz?rlkey=pp7fj711zxlg4o2lbskxj5rwe&st=jv1xh8vo&dl=1"
 
 DATA_DIR="${SCRIPT_DIR}/data"
 RAW_DIR="${DATA_DIR}/raw"
@@ -166,7 +166,6 @@ REQUIRED_FILES=(
     "full_dataset.bim"
     "full_dataset.fam"
     "metadata.csv"
-    "colormap.json"
     "README.txt"
 )
 
@@ -208,7 +207,6 @@ echo ""
 echo "Files downloaded:"
 echo "  - full_dataset.{bed,bim,fam} (4,151 samples, 172,152 SNPs)"
 echo "  - metadata.csv (sample information and QC flags)"
-echo "  - colormap.json (population colors)"
 echo "  - README.txt (data description)"
 echo ""
 echo "Next step:"
