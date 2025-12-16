@@ -23,6 +23,8 @@ CDR_VERSION="${WORKSPACE_CDR:-}"
 
 # Directories
 REF_DIR="${DATA_DIR}/1KGPHGDP"
+SHARED_AOU_DIR="${SCRIPT_DIR}/../shared/data/AllofUs_V8"
+SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
 
 echo "=========================================="
 echo "  AoU-HGDP Data Preparation"
@@ -96,8 +98,36 @@ echo "=========================================="
 echo "Step 3-4: All of Us Data Download"
 echo "=========================================="
 echo ""
-echo "Using shared AoU download script..."
-bash "${SCRIPT_DIR}/../shared/download_aou_data.sh" "${DATA_DIR}"
+
+# Check if shared AoU data is complete
+AOU_DATA_COMPLETE=true
+
+# Check for main files
+for ext in bed bim fam; do
+    if [[ ! -f "${SHARED_AOU_DIR}/extractedChrAll.${ext}" ]]; then
+        AOU_DATA_COMPLETE=false
+        break
+    fi
+done
+
+# Check for all chromosome splits (1-22)
+if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
+    for chr in {1..22}; do
+        if [[ ! -f "${SHARED_AOU_DIR}/extractedChr${chr}.bed" ]]; then
+            AOU_DATA_COMPLETE=false
+            break
+        fi
+    done
+fi
+
+if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
+    echo "✓ Shared AoU data already downloaded at: ${SHARED_AOU_DIR}"
+    echo "  Skipping download (shared across all AoU experiments)"
+else
+    echo "Downloading AoU data to shared location..."
+    echo "  This will be cached for all AoU experiments"
+    bash "${SCRIPT_DIR}/../shared/download_aou_data.sh"
+fi
 echo ""
 
 # =============================================================================
@@ -149,11 +179,15 @@ echo "TODO:"
 echo "  - Step 5: Find common SNPs and create fit/project subsets"
 echo "  - Step 6: Create labels and colormaps"
 echo ""
+echo "Shared AoU data location:"
+echo "  ${SHARED_AOU_DIR}/"
+echo "  (This is shared across all AoU experiments)"
+echo ""
 echo "Expected final outputs in ${DATA_DIR}:"
 echo "  - fit_subset.{bed,bim,fam}     (HGDP+1KGP reference)"
 echo "  - project_subset.{bed,bim,fam} (AoU samples)"
 echo "  - hgdp_labels.csv"
 echo "  - aou_labels.csv"
-echo "  - hgdp_colormap.json"
-echo "  - aou_colormap.json"
+echo ""
+echo "Note: Use ${SHARED_AOU_DIR}/extractedChr{1..22} for AoU genotypes"
 echo ""

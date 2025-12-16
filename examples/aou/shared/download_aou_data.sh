@@ -9,10 +9,9 @@
 # 4. Optionally extracts metadata from BigQuery
 #
 # Usage:
-#   bash examples/aou/shared/download_aou_data.sh OUTPUT_DIR [SKIP_METADATA]
+#   bash examples/aou/shared/download_aou_data.sh [SKIP_METADATA]
 #
 # Arguments:
-#   OUTPUT_DIR: Directory where AoU data will be stored
 #   SKIP_METADATA: Optional flag to skip metadata extraction (pass "skip" to skip)
 #
 # Environment variables:
@@ -20,18 +19,16 @@
 #   WORKSPACE_CDR: CDR version for metadata extraction (optional)
 #   SLURM_CPUS_PER_TASK: Number of CPU cores for parallel processing (default: 4)
 #
+# Data is downloaded to: examples/aou/shared/data/
+# This allows multiple experiments to share the same downloaded data.
+#
 
 set -e
 
-# Parse arguments
-OUTPUT_DIR="$1"
-SKIP_METADATA="${2:-}"
-
-if [[ -z "$OUTPUT_DIR" ]]; then
-    echo "Error: OUTPUT_DIR argument required"
-    echo "Usage: bash download_aou_data.sh OUTPUT_DIR [SKIP_METADATA]"
-    exit 1
-fi
+# Get script directory and set shared data location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUTPUT_DIR="${SCRIPT_DIR}/data"
+SKIP_METADATA="${1:-}"
 
 # Configuration
 CPU_CORES="${SLURM_CPUS_PER_TASK:-4}"
@@ -68,6 +65,9 @@ echo ""
 echo "=========================================="
 echo "  All of Us Data Download (V8)"
 echo "=========================================="
+echo ""
+echo "Downloading to shared location: ${OUTPUT_DIR}"
+echo "This data will be reused by all AoU experiments."
 echo ""
 echo "Configuration:"
 echo "  Output directory: ${OUTPUT_DIR}"

@@ -21,6 +21,10 @@ CPU_CORES="${SLURM_CPUS_PER_TASK:-4}"
 GOOGLE_PROJECT="${GOOGLE_PROJECT:-}"
 CDR_VERSION="${WORKSPACE_CDR:-}"
 
+# Shared AoU data directories
+SHARED_AOU_DIR="${SCRIPT_DIR}/../shared/data/AllofUs_V8"
+SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
+
 echo "=========================================="
 echo "  AoU 60K White Subset Data Preparation"
 echo "=========================================="
@@ -41,8 +45,36 @@ echo "=========================================="
 echo "Step 3-4: All of Us Data Download"
 echo "=========================================="
 echo ""
-echo "Using shared AoU download script..."
-bash "${SCRIPT_DIR}/../shared/download_aou_data.sh" "${DATA_DIR}"
+
+# Check if shared AoU data is complete
+AOU_DATA_COMPLETE=true
+
+# Check for main files
+for ext in bed bim fam; do
+    if [[ ! -f "${SHARED_AOU_DIR}/extractedChrAll.${ext}" ]]; then
+        AOU_DATA_COMPLETE=false
+        break
+    fi
+done
+
+# Check for all chromosome splits (1-22)
+if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
+    for chr in {1..22}; do
+        if [[ ! -f "${SHARED_AOU_DIR}/extractedChr${chr}.bed" ]]; then
+            AOU_DATA_COMPLETE=false
+            break
+        fi
+    done
+fi
+
+if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
+    echo "✓ Shared AoU data already downloaded at: ${SHARED_AOU_DIR}"
+    echo "  Skipping download (shared across all AoU experiments)"
+else
+    echo "Downloading AoU data to shared location..."
+    echo "  This will be cached for all AoU experiments"
+    bash "${SCRIPT_DIR}/../shared/download_aou_data.sh"
+fi
 echo ""
 
 # =============================================================================
@@ -55,15 +87,15 @@ echo "=========================================="
 echo "TODO: Filter AoU samples for white/European ancestry"
 echo ""
 echo "Steps needed:"
-echo "  1. Load DemographicData.tsv"
+echo "  1. Load ${SHARED_META_DIR}/DemographicData.tsv"
 echo "  2. Filter for white/European race (race == 'White' or similar)"
-echo "  3. Create sample ID list: white_samples.txt"
+echo "  3. Create sample ID list: ${DATA_DIR}/white_samples.txt"
 echo "  4. Use PLINK to extract white samples:"
 echo ""
-echo "     plink --bfile ${AOU_DIR}/extractedChrAll \\"
-echo "           --keep white_samples.txt \\"
+echo "     plink --bfile ${SHARED_AOU_DIR}/extractedChrAll \\"
+echo "           --keep ${DATA_DIR}/white_samples.txt \\"
 echo "           --make-bed \\"
-echo "           --out ${AOU_DIR}/white_all"
+echo "           --out ${DATA_DIR}/white_all"
 echo ""
 
 # =============================================================================
@@ -78,7 +110,7 @@ echo ""
 echo "Steps needed:"
 echo "  1. Use PLINK to randomly thin to 60K samples:"
 echo ""
-echo "     plink2 --bfile ${AOU_DIR}/white_all \\"
+echo "     plink2 --bfile ${DATA_DIR}/white_all \\"
 echo "            --thin-indiv-count 60000 \\"
 echo "            --seed 42 \\"
 echo "            --make-bed \\"
@@ -86,9 +118,9 @@ echo "            --out ${DATA_DIR}/fit_subset"
 echo ""
 echo "     OR manually select with shuf:"
 echo ""
-echo "     shuf -n 60000 ${AOU_DIR}/white_all.fam | awk '{print \$1\"\\t\"\$2}' > fit_samples.txt"
-echo "     plink --bfile ${AOU_DIR}/white_all \\"
-echo "           --keep fit_samples.txt \\"
+echo "     shuf -n 60000 ${DATA_DIR}/white_all.fam | awk '{print \$1\"\\t\"\$2}' > ${DATA_DIR}/fit_samples.txt"
+echo "     plink --bfile ${DATA_DIR}/white_all \\"
+echo "           --keep ${DATA_DIR}/fit_samples.txt \\"
 echo "           --make-bed \\"
 echo "           --out ${DATA_DIR}/fit_subset"
 echo ""
@@ -106,7 +138,7 @@ echo "Steps needed:"
 echo "  1. Extract sample IDs from fit subset"
 echo "  2. Remove those from white_all to get project subset:"
 echo ""
-echo "     plink --bfile ${AOU_DIR}/white_all \\"
+echo "     plink --bfile ${DATA_DIR}/white_all \\"
 echo "           --remove ${DATA_DIR}/fit_subset.fam \\"
 echo "           --make-bed \\"
 echo "           --out ${DATA_DIR}/project_subset"
@@ -147,12 +179,17 @@ echo "  - Step 6: Create fit subset (60K samples)"
 echo "  - Step 7: Create project subset (remaining)"
 echo "  - Step 8: Create labels and colormaps"
 echo ""
+echo "Shared AoU data location:"
+echo "  ${SHARED_AOU_DIR}/"
+echo "  ${SHARED_META_DIR}/DemographicData.tsv"
+echo "  (This is shared across all AoU experiments)"
+echo ""
 echo "Expected final outputs in ${DATA_DIR}:"
+echo "  - white_all.{bed,bim,fam}      (All white samples)"
 echo "  - fit_subset.{bed,bim,fam}     (60K white samples for training)"
 echo "  - project_subset.{bed,bim,fam} (Remaining white samples)"
 echo "  - fit_labels.csv"
 echo "  - project_labels.csv"
-echo "  - colormap.json"
 echo ""
 echo "To check progress:"
 echo "  Fit samples: \$(wc -l < ${DATA_DIR}/fit_subset.fam 2>/dev/null || echo 'N/A')"
