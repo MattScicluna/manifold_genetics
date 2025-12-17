@@ -15,6 +15,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="${SCRIPT_DIR}/data"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+TEMP_DIR="${DATA_DIR}/temp"
 
 # Configuration
 CPU_CORES="${SLURM_CPUS_PER_TASK:-4}"
@@ -24,6 +25,9 @@ CDR_VERSION="${WORKSPACE_CDR:-}"
 # Shared AoU data directories
 SHARED_AOU_DIR="${SCRIPT_DIR}/../shared/data/AllofUs_V8"
 SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
+
+# Use intersected AoU data from hgdp_1kgp_proj (much fewer SNPs!)
+INTERSECTED_AOU="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
 echo "=========================================="
 echo "  AoU 60K White Subset Data Preparation"
@@ -36,163 +40,347 @@ echo "  CDR version: ${CDR_VERSION:-'Not set'}"
 echo ""
 
 # Create directories
-mkdir -p "${DATA_DIR}"
+mkdir -p "${DATA_DIR}" "${TEMP_DIR}"
 
 # =============================================================================
-# STEP 3-4: All of Us Data Download (using shared script)
+# STEP 1: Check for Intersected AoU Data
 # =============================================================================
 echo "=========================================="
-echo "Step 3-4: All of Us Data Download"
+echo "Step 1: Check for Intersected AoU Data"
 echo "=========================================="
 echo ""
 
-# Check if shared AoU data is complete
-AOU_DATA_COMPLETE=true
-
-# Check for main files
-for ext in bed bim fam; do
-    if [[ ! -f "${SHARED_AOU_DIR}/extractedChrAll.${ext}" ]]; then
-        AOU_DATA_COMPLETE=false
-        break
-    fi
-done
-
-# Check for all chromosome splits (1-22)
-if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
-    for chr in {1..22}; do
-        if [[ ! -f "${SHARED_AOU_DIR}/extractedChr${chr}.bed" ]]; then
-            AOU_DATA_COMPLETE=false
-            break
-        fi
-    done
+# Check if intersected AoU data exists (from hgdp_1kgp_proj)
+if [[ ! -f "${INTERSECTED_AOU}.bed" ]]; then
+    echo "  ✗ Intersected AoU data not found!"
+    echo ""
+    echo "This pipeline uses the HGDP-intersected AoU dataset to reduce SNP count"
+    echo "and memory requirements (~500K SNPs instead of 1.7M SNPs)."
+    echo ""
+    echo "Please run the hgdp_1kgp_proj pipeline first:"
+    echo "  cd ${SCRIPT_DIR}/../hgdp_1kgp_proj"
+    echo "  bash prepare_data.sh"
+    echo ""
+    echo "This will create: ${INTERSECTED_AOU}.{bed,bim,fam}"
+    exit 1
 fi
 
-if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
-    echo "✓ Shared AoU data already downloaded at: ${SHARED_AOU_DIR}"
-    echo "  Skipping download (shared across all AoU experiments)"
+# Get stats from intersected data
+AOU_SAMPLES=$(wc -l < "${INTERSECTED_AOU}.fam")
+COMMON_SNPS=$(wc -l < "${INTERSECTED_AOU}.bim")
+
+echo "  ✓ Found intersected AoU data:"
+echo "    Samples: $AOU_SAMPLES"
+echo "    SNPs: $COMMON_SNPS (intersected with HGDP+1KGP)"
+echo ""
+
+# =============================================================================
+# STEP 2: Filter for White/European Ancestry
+# =============================================================================
+echo "=========================================="
+echo "Step 2: Filter for White/European Ancestry"
+echo "=========================================="
+
+# Check if AoU metadata exists
+AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
+
+if [[ ! -f "$AOU_METADATA" ]]; then
+    echo "  ✗ AoU metadata not found at: $AOU_METADATA"
+    echo ""
+    echo "Please ensure demographic data is available."
+    exit 1
+fi
+
+# Filter for white/European samples using Python
+if [[ ! -f "${DATA_DIR}/white_samples.txt" ]]; then
+    echo "  Filtering for white/European ancestry samples..."
+
+    python3 << EOF
+import pandas as pd
+
+# Read metadata
+print("  Reading AoU demographic data...")
+metadata = pd.read_csv("${AOU_METADATA}", sep='\t', low_memory=False)
+print(f"    Total metadata records: {len(metadata)}")
+
+# Read intersected AoU .fam to get available samples
+fam = pd.read_csv("${INTERSECTED_AOU}.fam", sep=r'\s+', header=None,
+                  names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+available_samples = set(fam['IID'].astype(str))
+print(f"    Available in intersected data: {len(available_samples)}")
+
+# Filter metadata for available samples
+metadata['sample_id'] = metadata['person_id'].astype(str)
+metadata = metadata[metadata['sample_id'].isin(available_samples)]
+
+# Filter for white/European ancestry
+# Adjust the column name and values based on your actual metadata
+if 'race_ethnicity' in metadata.columns:
+    # Try common patterns for white/European designation
+    white_mask = metadata['race_ethnicity'].str.contains('White', case=False, na=False) | \
+                 metadata['race_ethnicity'].str.contains('European', case=False, na=False)
+    white_samples = metadata[white_mask]
+elif 'race' in metadata.columns:
+    white_mask = metadata['race'].str.contains('White', case=False, na=False) | \
+                 metadata['race'].str.contains('European', case=False, na=False)
+    white_samples = metadata[white_mask]
+else:
+    print("  ✗ Could not find race/ethnicity column in metadata!")
+    print(f"  Available columns: {', '.join(metadata.columns[:10])}...")
+    exit(1)
+
+print(f"    White/European samples found: {len(white_samples)}")
+
+# Write sample list in PLINK format (FID IID)
+with open("${DATA_DIR}/white_samples.txt", 'w') as f:
+    for sample_id in white_samples['sample_id']:
+        f.write(f"{sample_id}\t{sample_id}\n")
+
+print(f"  ✓ Saved {len(white_samples)} white sample IDs to white_samples.txt")
+EOF
 else
-    echo "Downloading AoU data to shared location..."
-    echo "  This will be cached for all AoU experiments"
-    bash "${SCRIPT_DIR}/../shared/download_aou_data.sh"
+    echo "  White samples list already exists"
 fi
+
+WHITE_SAMPLE_COUNT=$(wc -l < "${DATA_DIR}/white_samples.txt")
+echo "  White/European samples: $WHITE_SAMPLE_COUNT"
+echo ""
+
+# Find plink2
+echo "Looking for plink2..."
+PLINK2=""
+
+if [[ -f "${PROJECT_ROOT}/bin/plink2" ]]; then
+    PLINK2="${PROJECT_ROOT}/bin/plink2"
+    echo "  ✓ Using plink2 from bin/plink2"
+elif command -v plink2 &> /dev/null; then
+    PLINK2="plink2"
+    echo "  ✓ Using plink2 from PATH"
+else
+    echo "  ✗ plink2 not found!"
+    exit 1
+fi
+
+# Extract white samples from intersected AoU data
+if [[ ! -f "${DATA_DIR}/white_all.bed" ]]; then
+    echo "  Extracting white samples from intersected AoU data..."
+    ${PLINK2} --bfile ${INTERSECTED_AOU} \
+        --keep ${DATA_DIR}/white_samples.txt \
+        --memory 100000 \
+        --make-bed \
+        --out ${DATA_DIR}/white_all
+else
+    echo "  White samples dataset already exists"
+fi
+
+WHITE_ALL_SAMPLES=$(wc -l < "${DATA_DIR}/white_all.fam")
+echo "  ✓ White subset created: $WHITE_ALL_SAMPLES samples"
 echo ""
 
 # =============================================================================
-# STEP 5: Filter for White/European Ancestry
+# STEP 3: Create Fit Subset (60K samples)
 # =============================================================================
 echo "=========================================="
-echo "Step 5: Filter for White/European Ancestry"
+echo "Step 3: Create Fit Subset (60K samples)"
 echo "=========================================="
 
-echo "TODO: Filter AoU samples for white/European ancestry"
-echo ""
-echo "Steps needed:"
-echo "  1. Load ${SHARED_META_DIR}/DemographicData.tsv"
-echo "  2. Filter for white/European race (race == 'White' or similar)"
-echo "  3. Create sample ID list: ${DATA_DIR}/white_samples.txt"
-echo "  4. Use PLINK to extract white samples:"
-echo ""
-echo "     plink --bfile ${SHARED_AOU_DIR}/extractedChrAll \\"
-echo "           --keep ${DATA_DIR}/white_samples.txt \\"
-echo "           --make-bed \\"
-echo "           --out ${DATA_DIR}/white_all"
-echo ""
+# Determine target fit size (60K or less if not enough samples)
+TARGET_FIT_SIZE=60000
+if [[ $WHITE_ALL_SAMPLES -lt $TARGET_FIT_SIZE ]]; then
+    echo "  ⚠ Only $WHITE_ALL_SAMPLES white samples available (less than 60K)"
+    echo "    Using all samples for fit, none for project"
+    TARGET_FIT_SIZE=$WHITE_ALL_SAMPLES
+fi
 
-# =============================================================================
-# STEP 6: Create Fit Subset (60K samples)
-# =============================================================================
-echo "=========================================="
-echo "Step 6: Create Fit Subset (60K samples)"
-echo "=========================================="
+# Create fit subset by randomly selecting samples
+if [[ ! -f "${DATA_DIR}/fit_subset.bed" ]]; then
+    echo "  Randomly selecting $TARGET_FIT_SIZE samples for fit subset (seed=42)..."
 
-echo "TODO: Randomly select 60K white samples for training"
-echo ""
-echo "Steps needed:"
-echo "  1. Use PLINK to randomly thin to 60K samples:"
-echo ""
-echo "     plink2 --bfile ${DATA_DIR}/white_all \\"
-echo "            --thin-indiv-count 60000 \\"
-echo "            --seed 42 \\"
-echo "            --make-bed \\"
-echo "            --out ${DATA_DIR}/fit_subset"
-echo ""
-echo "     OR manually select with shuf:"
-echo ""
-echo "     shuf -n 60000 ${DATA_DIR}/white_all.fam | awk '{print \$1\"\\t\"\$2}' > ${DATA_DIR}/fit_samples.txt"
-echo "     plink --bfile ${DATA_DIR}/white_all \\"
-echo "           --keep ${DATA_DIR}/fit_samples.txt \\"
-echo "           --make-bed \\"
-echo "           --out ${DATA_DIR}/fit_subset"
+    if [[ $WHITE_ALL_SAMPLES -le $TARGET_FIT_SIZE ]]; then
+        # Use all samples
+        cp "${DATA_DIR}/white_all.bed" "${DATA_DIR}/fit_subset.bed"
+        cp "${DATA_DIR}/white_all.bim" "${DATA_DIR}/fit_subset.bim"
+        cp "${DATA_DIR}/white_all.fam" "${DATA_DIR}/fit_subset.fam"
+    else
+        # Randomly thin to 60K
+        ${PLINK2} --bfile ${DATA_DIR}/white_all \
+            --thin-indiv-count $TARGET_FIT_SIZE \
+            --seed 42 \
+            --memory 100000 \
+            --make-bed \
+            --out ${DATA_DIR}/fit_subset
+    fi
+else
+    echo "  Fit subset already exists"
+fi
+
+FIT_SAMPLES=$(wc -l < "${DATA_DIR}/fit_subset.fam")
+echo "  ✓ Fit subset created: $FIT_SAMPLES samples"
 echo ""
 
 # =============================================================================
-# STEP 7: Create Project Subset (remaining samples)
+# STEP 4: Create Project Subset (remaining samples)
 # =============================================================================
 echo "=========================================="
-echo "Step 7: Create Project Subset (remaining)"
+echo "Step 4: Create Project Subset (remaining)"
 echo "=========================================="
 
-echo "TODO: Create project subset with remaining white samples"
-echo ""
-echo "Steps needed:"
-echo "  1. Extract sample IDs from fit subset"
-echo "  2. Remove those from white_all to get project subset:"
-echo ""
-echo "     plink --bfile ${DATA_DIR}/white_all \\"
-echo "           --remove ${DATA_DIR}/fit_subset.fam \\"
-echo "           --make-bed \\"
-echo "           --out ${DATA_DIR}/project_subset"
-echo ""
+# Check if we have enough samples for a project subset
+REMAINING_SAMPLES=$((WHITE_ALL_SAMPLES - FIT_SAMPLES))
+
+if [[ $REMAINING_SAMPLES -le 0 ]]; then
+    echo "  ⚠ No remaining samples for project subset"
+    echo "    All white samples were used for fit subset"
+    echo ""
+else
+    # Create project subset with remaining samples
+    if [[ ! -f "${DATA_DIR}/project_subset.bed" ]]; then
+        echo "  Creating project subset with remaining $REMAINING_SAMPLES samples..."
+
+        # Create list of fit sample IDs to remove
+        awk '{print $1"\t"$2}' "${DATA_DIR}/fit_subset.fam" > "${TEMP_DIR}/fit_sample_ids.txt"
+
+        # Extract remaining samples
+        ${PLINK2} --bfile ${DATA_DIR}/white_all \
+            --remove ${TEMP_DIR}/fit_sample_ids.txt \
+            --memory 100000 \
+            --make-bed \
+            --out ${DATA_DIR}/project_subset
+    else
+        echo "  Project subset already exists"
+    fi
+
+    PROJECT_SAMPLES=$(wc -l < "${DATA_DIR}/project_subset.fam")
+    echo "  ✓ Project subset created: $PROJECT_SAMPLES samples"
+    echo ""
+fi
 
 # =============================================================================
-# STEP 8: Create Labels and Colormaps
+# STEP 5: Create Labels
 # =============================================================================
 echo "=========================================="
-echo "Step 8: Labels and Colormaps"
+echo "Step 5: Create Labels"
 echo "=========================================="
 
-echo "TODO: Create labels and colormaps"
-echo ""
-echo "Files to create:"
-echo "  1. fit_labels.csv - Labels for fit samples (from DemographicData.tsv)"
-echo "  2. project_labels.csv - Labels for project samples (from DemographicData.tsv)"
-echo "  3. colormap.json - Color scheme for populations (can reuse UKBB colormap)"
-echo ""
-echo "Label format (CSV):"
-echo "  sample_id,race,ethnicity,..."
+# Create fit labels
+if [[ ! -f "${DATA_DIR}/fit_labels.csv" ]]; then
+    echo "  Creating fit subset labels..."
+
+    python3 << EOF
+import pandas as pd
+
+# Read metadata
+metadata = pd.read_csv("${AOU_METADATA}", sep='\t', low_memory=False)
+metadata['sample_id'] = metadata['person_id'].astype(str)
+
+# Read fit .fam file
+fam = pd.read_csv("${DATA_DIR}/fit_subset.fam", sep=r'\s+', header=None,
+                  names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+fit_samples = set(fam['IID'].astype(str))
+
+# Filter metadata for fit samples
+fit_labels = metadata[metadata['sample_id'].isin(fit_samples)].copy()
+
+# Select relevant columns
+columns_to_keep = ['sample_id']
+if 'race_ethnicity' in fit_labels.columns:
+    columns_to_keep.append('race_ethnicity')
+if 'sex_at_birth' in fit_labels.columns:
+    columns_to_keep.append('sex_at_birth')
+if 'age' in fit_labels.columns:
+    columns_to_keep.append('age')
+
+fit_labels = fit_labels[columns_to_keep]
+
+# Save labels
+fit_labels.to_csv("${DATA_DIR}/fit_labels.csv", index=False)
+print(f"  ✓ Saved fit labels: {len(fit_labels)} samples")
+EOF
+else
+    echo "  Fit labels already exist"
+fi
+
+# Create project labels (if project subset exists)
+if [[ -f "${DATA_DIR}/project_subset.bed" ]]; then
+    if [[ ! -f "${DATA_DIR}/project_labels.csv" ]]; then
+        echo "  Creating project subset labels..."
+
+        python3 << EOF
+import pandas as pd
+
+# Read metadata
+metadata = pd.read_csv("${AOU_METADATA}", sep='\t', low_memory=False)
+metadata['sample_id'] = metadata['person_id'].astype(str)
+
+# Read project .fam file
+fam = pd.read_csv("${DATA_DIR}/project_subset.fam", sep=r'\s+', header=None,
+                  names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+project_samples = set(fam['IID'].astype(str))
+
+# Filter metadata for project samples
+project_labels = metadata[metadata['sample_id'].isin(project_samples)].copy()
+
+# Select relevant columns
+columns_to_keep = ['sample_id']
+if 'race_ethnicity' in project_labels.columns:
+    columns_to_keep.append('race_ethnicity')
+if 'sex_at_birth' in project_labels.columns:
+    columns_to_keep.append('sex_at_birth')
+if 'age' in project_labels.columns:
+    columns_to_keep.append('age')
+
+project_labels = project_labels[columns_to_keep]
+
+# Save labels
+project_labels.to_csv("${DATA_DIR}/project_labels.csv", index=False)
+print(f"  ✓ Saved project labels: {len(project_labels)} samples")
+EOF
+    else
+        echo "  Project labels already exist"
+    fi
+fi
+
+echo "  ✓ Label files created"
 echo ""
 
 # =============================================================================
 # Summary
 # =============================================================================
 echo "=========================================="
-echo "Data Preparation Summary"
+echo "Data Preparation Complete!"
 echo "=========================================="
 echo ""
-echo "Completed:"
-echo "  ✓ Step 3: AoU genotype data downloaded and split"
-echo "  ✓ Step 4: Metadata extraction (if CDR_VERSION set)"
+echo "✓ All steps completed successfully:"
+echo "  ✓ Step 1: Used HGDP-intersected AoU data ($COMMON_SNPS SNPs)"
+echo "  ✓ Step 2: Filtered for white/European ancestry ($WHITE_ALL_SAMPLES samples)"
+echo "  ✓ Step 3: Created fit subset ($FIT_SAMPLES samples)"
+if [[ -f "${DATA_DIR}/project_subset.bed" ]]; then
+    PROJECT_SAMPLES=$(wc -l < "${DATA_DIR}/project_subset.fam")
+    echo "  ✓ Step 4: Created project subset ($PROJECT_SAMPLES samples)"
+else
+    echo "  ⚠ Step 4: No project subset (all samples used for fit)"
+fi
+echo "  ✓ Step 5: Created label files"
 echo ""
-echo "TODO:"
-echo "  - Step 5: Filter for white/European ancestry"
-echo "  - Step 6: Create fit subset (60K samples)"
-echo "  - Step 7: Create project subset (remaining)"
-echo "  - Step 8: Create labels and colormaps"
+echo "Generated files in ${DATA_DIR}:"
+echo "  📊 Processed PLINK data:"
+echo "    - white_all.{bed,bim,fam}      (All white samples, $WHITE_ALL_SAMPLES samples, $COMMON_SNPS SNPs)"
+echo "    - fit_subset.{bed,bim,fam}     (Fit subset, $FIT_SAMPLES samples)"
+if [[ -f "${DATA_DIR}/project_subset.bed" ]]; then
+    echo "    - project_subset.{bed,bim,fam} (Project subset, $PROJECT_SAMPLES samples)"
+fi
 echo ""
-echo "Shared AoU data location:"
-echo "  ${SHARED_AOU_DIR}/"
-echo "  ${SHARED_META_DIR}/DemographicData.tsv"
-echo "  (This is shared across all AoU experiments)"
+echo "  🏷️  Sample labels:"
+echo "    - fit_labels.csv"
+if [[ -f "${DATA_DIR}/project_labels.csv" ]]; then
+    echo "    - project_labels.csv"
+fi
 echo ""
-echo "Expected final outputs in ${DATA_DIR}:"
-echo "  - white_all.{bed,bim,fam}      (All white samples)"
-echo "  - fit_subset.{bed,bim,fam}     (60K white samples for training)"
-echo "  - project_subset.{bed,bim,fam} (Remaining white samples)"
-echo "  - fit_labels.csv"
-echo "  - project_labels.csv"
+echo "Key advantages of this pipeline:"
+echo "  • Uses HGDP-intersected SNPs ($COMMON_SNPS instead of 1.7M) → Lower memory usage"
+echo "  • Memory-limited plink2 operations (--memory 100000) → Won't OOM crash"
+echo "  • Checkpointed steps → Can resume if interrupted"
 echo ""
-echo "To check progress:"
-echo "  Fit samples: \$(wc -l < ${DATA_DIR}/fit_subset.fam 2>/dev/null || echo 'N/A')"
-echo "  Project samples: \$(wc -l < ${DATA_DIR}/project_subset.fam 2>/dev/null || echo 'N/A')"
-echo "  SNPs: \$(wc -l < ${DATA_DIR}/fit_subset.bim 2>/dev/null || echo 'N/A')"
+echo "Next step: Run the pipeline analysis"
+echo "  bash run_pipeline.sh"
 echo ""

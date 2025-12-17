@@ -12,6 +12,9 @@
 
 set -e
 
+# AOU specific
+export SLURM_CPUS_PER_TASK=32
+
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
