@@ -152,8 +152,21 @@ class NeuralAdmixture:
         csv_prefix.parent.mkdir(parents=True, exist_ok=True)
         q_output_dir = self._model_dir
 
+        # Check if CSV files already exist
+        base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
+        csv_files = {
+            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
+        }
+
+        if all(f.exists() for f in csv_files.values()) and not self.force:
+            logger.info("=" * 60)
+            logger.info("NEURAL ADMIXTURE INFERENCE")
+            logger.info("=" * 60)
+            logger.info(f"Output CSV files found in {csv_prefix.parent}, skipping inference...")
+            return csv_files
+
         q_files = self._infer(plink_prefix, q_output_dir, out_name)
-        
+
         # Convert Q files to standardized CSV format
         csv_files = self._convert_q_files_to_csv(
             q_files, plink_prefix, csv_prefix
@@ -165,7 +178,7 @@ class NeuralAdmixture:
                 Path(q_path).unlink(missing_ok=True)
             except Exception as e:
                 logger.debug(f"Could not remove raw Q file {q_path}: {e}")
-        
+
         return csv_files  # Return CSV files instead of raw Q files
 
     def fit_transform(
@@ -182,9 +195,31 @@ class NeuralAdmixture:
         output_dir.mkdir(parents=True, exist_ok=True)
         csv_prefix.parent.mkdir(parents=True, exist_ok=True)
 
+        # Check if CSV files already exist
+        base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
+        csv_files = {
+            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
+        }
+
+        # Check if both models and CSV files exist
+        model_files = [
+            output_dir / f"fit_k{k}.pt" for k in range(self.k_min, self.k_max + 1)
+        ]
+        if (all(f.exists() for f in csv_files.values()) and
+            all(f.exists() for f in model_files) and
+            not self.force):
+            logger.info("=" * 60)
+            logger.info("NEURAL ADMIXTURE FIT_TRANSFORM")
+            logger.info("=" * 60)
+            logger.info(f"Model and output CSV files found, skipping fit_transform...")
+            self._model_dir = output_dir
+            self._model_name = "fit"
+            self._is_fitted = True
+            return csv_files
+
         self._train(plink_prefix, output_dir, model_name="fit")
         q_files = self._infer_on_training_data(output_dir)
-        
+
         # Convert Q files to standardized CSV format
         csv_files = self._convert_q_files_to_csv(
             q_files, plink_prefix, csv_prefix
