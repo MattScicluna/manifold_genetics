@@ -24,13 +24,13 @@
     "Do not know": "#E9D8A6"
   },
   "Population": {
-    "Africa": "#238B45",
-    "Europe": "#F46D43",
-    "Central_South_Asia": "#807DBA",
-    "East_Asia": "#3182BD",
-    "Middle_East": "#6B6B6B",
-    "America": "#CA0020",
-    "Oceania": "#FFC300",
+    "AFR": "#238B45",
+    "EUR": "#F46D43",
+    "CSA": "#807DBA",
+    "EAS": "#3182BD",
+    "MID": "#6B6B6B",
+    "AMR": "#CA0020",
+    "OCE": "#FFC300",
     "Do not know": "#E9D8A6"
   }
 }

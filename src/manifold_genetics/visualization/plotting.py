@@ -212,6 +212,27 @@ def plot_pca_pairs(
     # Merge PCA with labels on sample_id to ensure correct alignment
     merged_df = pca_df.merge(labels_df, on='sample_id', how='inner')
 
+    # Validate label column exists in the data
+    if label_column not in merged_df.columns:
+        available_cols = [col for col in merged_df.columns if col not in ['sample_id'] + [f"dim_{i+1}" for i in range(50)]]
+        error_msg = (
+            f"\n{'='*70}\n"
+            f"ERROR: Label column '{label_column}' not found in labels data\n"
+            f"{'='*70}\n"
+            f"The colormap contains a key '{label_column}', but this column does not\n"
+            f"exist in the labels CSV file.\n\n"
+            f"Available label columns in the data:\n"
+            f"  {', '.join(available_cols)}\n\n"
+            f"Columns in colormap:\n"
+            f"  {', '.join(colormap_dict.keys())}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Update the labels CSV to include a '{label_column}' column\n"
+            f"  2. Remove '{label_column}' from the colormap JSON\n"
+            f"  3. Use --admixture-group-column with a column that exists in the labels\n"
+            f"{'='*70}\n"
+        )
+        raise ValueError(error_msg)
+
     # Get PC columns
     pc_cols = [f"dim_{i+1}" for i in range(n_pcs)]
     available_pcs = [col for col in pc_cols if col in merged_df.columns]
