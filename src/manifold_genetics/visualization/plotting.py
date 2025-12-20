@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
+from scipy.cluster.hierarchy import linkage, leaves_list
 
 from ..utils.io import read_colormap, read_embedding_csv, read_labels_csv
 
@@ -449,6 +450,7 @@ def plot_admixture_bar_grid(
     sort_groups: bool = True,
     group_order: Optional[Sequence[str]] = None,
     colormap: Optional[Union[Dict, str, Path]] = None,
+    within_group_order: Optional[str] = 'chron',
 ) -> Path:
     """
     Plot stacked admixture barplots for multiple K values (one row per K).
@@ -461,7 +463,13 @@ def plot_admixture_bar_grid(
         output_path: Where to save the figure
         colors: Optional list of colors to reuse across Ks
         subsample_per_group: If set, subsample each group to this many rows
-        sort_groups: If True, sort by group name; otherwise keep input order
+        sort_groups: If True, sort groups alphabetically; if False, preserve input order
+        group_order: Optional explicit ordering of groups (takes precedence over sort_groups)
+        colormap: Optional colormap to derive group ordering from (if group_column matches a key)
+        within_group_order: Method for ordering samples within each group:
+            - 'chron': Sort by dominant component (highest mean) for clear gradients
+            - 'tree': Hierarchical clustering using Ward's method
+            - None: Keep original order within groups
     """
     if isinstance(labels, (str, Path)):
         labels_df = read_labels_csv(labels)
@@ -510,7 +518,33 @@ def plot_admixture_bar_grid(
         elif sort_groups:
             df = df.sort_values(group_column)
 
+        # Apply within-group ordering for smooth gradient effect
         comp_cols = _get_component_columns(df, k)
+        if within_group_order == 'chron':
+            # Sort by dominant component within each group for clearer gradients
+            sorted_groups = []
+            for group_val, group_df in df.groupby(group_column, sort=False):
+                # Find dominant component (highest mean) for this group
+                component_means = group_df[comp_cols].mean()
+                dominant_comp = component_means.idxmax()
+                # Sort by dominant component (descending) for smooth gradient
+                sorted_group = group_df.sort_values(dominant_comp, ascending=False)
+                sorted_groups.append(sorted_group)
+            df = pd.concat(sorted_groups, axis=0)
+        elif within_group_order == 'tree':
+            # Hierarchical clustering within each group
+            sorted_groups = []
+            for group_val, group_df in df.groupby(group_column, sort=False):
+                if len(group_df) > 1:
+                    data = group_df[comp_cols].to_numpy()
+                    linkage_matrix = linkage(data, method='ward')
+                    order = leaves_list(linkage_matrix)
+                    sorted_group = group_df.iloc[order]
+                else:
+                    sorted_group = group_df
+                sorted_groups.append(sorted_group)
+            df = pd.concat(sorted_groups, axis=0)
+        # else: keep original order within groups
         if colors and len(colors) >= len(comp_cols):
             df[comp_cols].plot(kind="bar", stacked=True, ax=ax, width=1.0, edgecolor="none", color=colors[: len(comp_cols)])
         else:
@@ -521,6 +555,7 @@ def plot_admixture_bar_grid(
         ax.set_xticklabels([])
         ax.get_legend().remove()
         ax.set_ylabel(f"K={k}")
+        ax.set_ylim([0, 1])  # Fix y-axis to [0, 1] for proportions
 
         # Draw separators between groups
         boundaries = []

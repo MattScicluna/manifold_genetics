@@ -172,6 +172,9 @@ def cmd_plot_admixture(args):
                 group_order = list(cmap[key].keys())
                 break
 
+    # Convert "none" to None for within_group_order
+    within_group_order = None if args.within_group_order == "none" else args.within_group_order
+
     plot_admixture_bar_grid(
         q_prefix=q_prefix,
         labels=labels,
@@ -181,6 +184,7 @@ def cmd_plot_admixture(args):
         subsample_per_group=args.subsample_per_group,
         group_order=group_order,
         colormap=args.colormap,
+        within_group_order=within_group_order,
     )
     print(f"Admixture bar plot written to: {output_path}")
     return 0
@@ -487,6 +491,7 @@ def cmd_pipeline(args):
         skip_admixture_visualization=args.skip_admixture_visualization,
         skip_metrics=args.skip_metrics,
         admix_group_column=args.admixture_group_column,
+        admix_within_group_order=None if args.admixture_within_group_order == "none" else args.admixture_within_group_order,
         admix_threads=args.threads,
         admix_gpus=args.num_gpus,
         admix_batch_size=getattr(args, 'neuraladmixture_batch_size', None),
@@ -590,6 +595,7 @@ def main():
     plot_admix_parser.add_argument("--k-max", type=int, help="Maximum K (if Ks not provided)")
     plot_admix_parser.add_argument("--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)")
     plot_admix_parser.add_argument("--subsample-per-group", type=int, help="Subsample each group to N samples (optional)")
+    plot_admix_parser.add_argument("--within-group-order", choices=["chron", "tree", "none"], default="chron", help="Method for ordering samples within groups: 'chron' (sort by components), 'tree' (hierarchical clustering), 'none' (original order)")
     plot_admix_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture.png)")
     plot_admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_admix_parser.set_defaults(func=cmd_plot_admixture)
@@ -783,6 +789,12 @@ def main():
     pipeline_parser.add_argument(
         "--admixture-group-column",
         help="Grouping column for admixture barplots (defaults to first colormap key; e.g., Genetic_region_merged)",
+    )
+    pipeline_parser.add_argument(
+        "--admixture-within-group-order",
+        choices=["chron", "tree", "none"],
+        default="chron",
+        help="Method for ordering samples within groups in admixture barplots: 'chron' (sort by components), 'tree' (hierarchical clustering), 'none' (original order)",
     )
     pipeline_parser.add_argument("--skip-metrics", action="store_true", help="Skip metrics")
     pipeline_parser.add_argument("--verbose", action="store_true", help="Verbose output")

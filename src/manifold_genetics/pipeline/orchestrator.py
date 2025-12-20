@@ -133,6 +133,7 @@ class Pipeline:
         skip_pca_visualization: bool = False,
         skip_admixture_visualization: bool = False,
         admix_group_column: Optional[str] = None,
+        admix_within_group_order: Optional[str] = 'chron',
         skip_metrics: bool = False,
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
@@ -155,6 +156,8 @@ class Pipeline:
             skip_embedding: Skip embedding step
             skip_visualization: Skip embedding visualization step
             skip_pca_visualization: Skip PCA visualization step
+            admix_group_column: Column for grouping in admixture barplots (None = use first colormap key)
+            admix_within_group_order: Method for ordering samples within groups ('chron', 'tree', or None)
             skip_metrics: Skip metrics computation
             admix_threads: Threads to use for neural admixture (None = auto-detect)
             admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
@@ -331,6 +334,7 @@ class Pipeline:
                     output_path=bar_plot_path,
                     colormap=cmap_dict,
                     subsample_per_group=300,
+                    within_group_order=admix_within_group_order,
                 )
 
                 results.setdefault("admixture_figures", {})["bars"] = bar_plot_path

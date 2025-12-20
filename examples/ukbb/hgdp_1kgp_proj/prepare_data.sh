@@ -60,7 +60,7 @@ mkdir -p "$TEMP_DIR"
 # ============================================================================
 # Step 1: Read mappings file
 # ============================================================================
-print_status "Reading data paths from mappings_private.json..."
+print_status "Reading data paths from mappings.json..."
 
 if [[ ! -f "$MAPPINGS_FILE" ]]; then
     print_error "Mappings file not found: $MAPPINGS_FILE"
@@ -94,10 +94,8 @@ source "${TEMP_DIR}/paths.sh"
 print_success "Loaded paths:"
 echo "  UKBB PLINK: $UKBB_PLINK"
 echo "  HGDP PLINK: $HGDP_PLINK"
-echo "  HGDP Metadata: $HGDP_METADATA"
-if [[ -n "$UKBB_METADATA" ]]; then
-    echo "  UKBB Metadata: $UKBB_METADATA"
-fi
+echo "  Fit labels: $FIT_LABELS"
+echo "  Project labels: $PROJECT_LABELS"
 
 # ============================================================================
 # Step 2: Call generic cross-projection prepare script
@@ -118,9 +116,9 @@ bash "${PROJECT_ROOT}/examples/generic/hgdp_1kgp_proj/prepare_data.sh" \
     --threads "$THREADS"
 
 # ============================================================================
-# Step 3: Create label files from metadata
+# Step 3: Filter labels to match intersected samples
 # ============================================================================
-print_status "Creating label files from metadata..."
+print_status "Filtering labels to intersected samples..."
 
 python3 << PYTHON_SCRIPT
 import pandas as pd
@@ -139,45 +137,55 @@ project_samples = set(project_fam['IID'].astype(str))
 print(f"    Fit samples: {len(fit_samples)}")
 print(f"    Project samples: {len(project_samples)}")
 
-# Filter HGDP labels
-print("  Creating fit_labels.csv from HGDP metadata...")
-hgdp_labels = pd.read_csv('${HGDP_METADATA}')
-if 'sample_id' not in hgdp_labels.columns:
-    print("  Error: 'sample_id' column not found in HGDP metadata")
+# Filter fit labels (HGDP)
+print("  Creating fit_labels.csv from source...")
+fit_labels_source = pd.read_csv('${FIT_LABELS}')
+
+# Handle flexible sample ID column names (e.g., 'project_meta.sample_id' or 'sample_id')
+sample_id_col = None
+for col in ['sample_id', 'project_meta.sample_id']:
+    if col in fit_labels_source.columns:
+        sample_id_col = col
+        break
+
+if sample_id_col is None:
+    print(f"  Error: No sample ID column found in fit labels source")
+    print(f"  Available columns: {', '.join(fit_labels_source.columns)}")
     sys.exit(1)
 
-hgdp_labels['sample_id'] = hgdp_labels['sample_id'].astype(str)
-fit_labels = hgdp_labels[hgdp_labels['sample_id'].isin(fit_samples)].copy()
+# Rename to 'sample_id' if needed
+if sample_id_col != 'sample_id':
+    fit_labels_source = fit_labels_source.rename(columns={sample_id_col: 'sample_id'})
+
+fit_labels_source['sample_id'] = fit_labels_source['sample_id'].astype(str)
+fit_labels = fit_labels_source[fit_labels_source['sample_id'].isin(fit_samples)].copy()
 fit_labels.to_csv('${DATA_DIR}/fit_labels.csv', index=False)
 print(f"  ✓ Created fit_labels.csv: {len(fit_labels)} samples, {len(fit_labels.columns)} columns")
-print(f"    Columns: {', '.join(fit_labels.columns[:5])}...")
 
-# Create UKBB labels
-print("  Creating project_labels.csv...")
+# Filter project labels (UKBB)
+print("  Creating project_labels.csv from source...")
+project_labels_source = pd.read_csv('${PROJECT_LABELS}')
 
-# Check if ukbb_labels.csv exists (pre-created labels)
-import os
-if os.path.exists('${DATA_DIR}/ukbb_labels.csv'):
-    print("    Using existing ukbb_labels.csv...")
-    ukbb_labels = pd.read_csv('${DATA_DIR}/ukbb_labels.csv')
-    if 'sample_id' not in ukbb_labels.columns:
-        print("  Error: 'sample_id' column not found in ukbb_labels.csv")
-        sys.exit(1)
-    ukbb_labels['sample_id'] = ukbb_labels['sample_id'].astype(str)
-    project_labels = ukbb_labels[ukbb_labels['sample_id'].isin(project_samples)].copy()
-    project_labels.to_csv('${DATA_DIR}/project_labels.csv', index=False)
-    print(f"  ✓ Created project_labels.csv: {len(project_labels)} samples, {len(project_labels.columns)} columns")
-    print(f"    Columns: {', '.join(project_labels.columns[:5])}...")
-else:
-    print("  ⚠ ukbb_labels.csv not found, creating basic project_labels.csv with sample_id only")
-    project_labels = pd.DataFrame({'sample_id': sorted(project_samples)})
-    project_labels.to_csv('${DATA_DIR}/project_labels.csv', index=False)
-    print(f"  ✓ Created project_labels.csv: {len(project_labels)} samples (sample_id only)")
-    print("")
-    print("  To add UKBB metadata columns:")
-    print(f"    1. Create ${DATA_DIR}/ukbb_labels.csv with columns:")
-    print("       sample_id,self_described_ancestry,Population,...")
-    print("    2. Re-run this script")
+# Handle flexible sample ID column names
+sample_id_col = None
+for col in ['sample_id', 'project_meta.sample_id']:
+    if col in project_labels_source.columns:
+        sample_id_col = col
+        break
+
+if sample_id_col is None:
+    print(f"  Error: No sample ID column found in project labels source")
+    print(f"  Available columns: {', '.join(project_labels_source.columns)}")
+    sys.exit(1)
+
+# Rename to 'sample_id' if needed
+if sample_id_col != 'sample_id':
+    project_labels_source = project_labels_source.rename(columns={sample_id_col: 'sample_id'})
+
+project_labels_source['sample_id'] = project_labels_source['sample_id'].astype(str)
+project_labels = project_labels_source[project_labels_source['sample_id'].isin(project_samples)].copy()
+project_labels.to_csv('${DATA_DIR}/project_labels.csv', index=False)
+print(f"  ✓ Created project_labels.csv: {len(project_labels)} samples, {len(project_labels.columns)} columns")
 PYTHON_SCRIPT
 
 # Cleanup

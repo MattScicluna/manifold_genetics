@@ -2,22 +2,14 @@
 #
 # UKBB 10K WB + 5K Irish Subset Data Preparation
 #
-# This is a wrapper that calls the generic subset script.
-# It reads UKBB PLINK path from mappings.json.
+# This wrapper script:
+# 1. Reads data paths from mappings_private.json
+# 2. Calls the generic subset script to create PLINK subsets
+# 3. Creates fit_labels.csv and project_labels.csv by filtering full labels
 #
 # INTERNAL NOTE: This experiment uses pre-selected samples:
-# - fit_samples.txt: 10K British + 5K Irish + others (random selection, seed=42)
-# - project_samples: All UKBB samples
+# - fit_samples.txt: 10K British + 5K Irish (random selection, seed=42)
 # See _internal/subset_creation_logic.md for selection details
-#
-# PREREQUISITES:
-# You must first create the sample lists and labels. For internal use, run:
-#   bash prepare_data_create_labels.sh
-#
-# For external users: manually create these files:
-#   - data/fit_samples.txt (FID IID format, one sample per line)
-#   - data/fit_labels.csv (sample_id, self_described_ancestry, Population)
-#   - data/project_labels.csv (sample_id, self_described_ancestry, Population)
 #
 # Usage:
 #   bash examples/ukbb/10k_WB_5K_Irish/prepare_data.sh
@@ -62,57 +54,25 @@ echo ""
 
 # Paths
 DATA_DIR="${SCRIPT_DIR}/data"
-MAPPINGS_FILE="${DATA_DIR}/mappings.json"
+MAPPINGS_FILE="${DATA_DIR}/mappings_private.json"
+TEMP_DIR="${DATA_DIR}/temp"
 
-# Step 1: Check for sample lists and labels
-print_status "Checking for required sample lists and labels..."
+# Create directories
+mkdir -p "$DATA_DIR"
+mkdir -p "$TEMP_DIR"
 
-REQUIRED_LISTS=(
-    "${DATA_DIR}/fit_samples.txt"
-    "${DATA_DIR}/fit_labels.csv"
-    "${DATA_DIR}/project_labels.csv"
-)
-
-MISSING_LISTS=()
-for file in "${REQUIRED_LISTS[@]}"; do
-    if [[ ! -f "$file" ]]; then
-        MISSING_LISTS+=("$file")
-    fi
-done
-
-if [[ ${#MISSING_LISTS[@]} -gt 0 ]]; then
-    print_error "Missing required sample lists:"
-    for file in "${MISSING_LISTS[@]}"; do
-        echo "  - $file"
-    done
-    echo ""
-    echo "Please create these files first:"
-    echo "  For internal use: bash prepare_data_create_labels.sh"
-    echo "  For external use: Create sample lists manually"
-    echo ""
-    echo "Required files:"
-    echo "  - fit_samples.txt: FID IID format (tab-separated, no header)"
-    echo "  - fit_labels.csv: sample_id,self_described_ancestry,Population"
-    echo "  - project_labels.csv: sample_id,self_described_ancestry,Population"
-    echo ""
-    exit 1
-fi
-
-print_success "All required sample lists found"
-
-# Step 2: Read mappings file
-print_status "Reading data paths from mappings.json..."
+# ============================================================================
+# Step 1: Read mappings file
+# ============================================================================
+print_status "Reading data paths from mappings_private.json..."
 
 if [[ ! -f "$MAPPINGS_FILE" ]]; then
     print_error "Mappings file not found: $MAPPINGS_FILE"
-    echo "Please create mappings.json with UKBB PLINK path"
+    echo "Please create mappings_private.json with data paths"
     exit 1
 fi
 
-# Extract paths using Python
-TEMP_DIR="${DATA_DIR}/temp"
-mkdir -p "$TEMP_DIR"
-
+# Extract paths using Python (resolve relative paths from PROJECT_ROOT)
 python3 << EOF > "${TEMP_DIR}/paths.sh"
 import json
 from pathlib import Path
@@ -122,20 +82,59 @@ with open('$MAPPINGS_FILE') as f:
 
 project_root = Path('$PROJECT_ROOT')
 
+# Resolve paths (relative ones get resolved from project root)
 for key, value in mappings.items():
-    if key == 'ukbb_plink':  # Only need plink path
-        if value.startswith('/'):
-            print(f"UKBB_PLINK='{value}'")
-        else:
-            resolved = project_root / value
-            print(f"UKBB_PLINK='{resolved}'")
+    if value.startswith('/'):
+        # Absolute path
+        print(f"{key.upper()}='{value}'")
+    else:
+        # Relative path - resolve from project root
+        resolved = project_root / value
+        print(f"{key.upper()}='{resolved}'")
 EOF
 
 source "${TEMP_DIR}/paths.sh"
 
-print_success "Loaded UKBB PLINK path: $UKBB_PLINK"
+print_success "Loaded paths:"
+echo "  UKBB PLINK: $UKBB_PLINK"
+echo "  Labels (source): $LABELS"
+echo "  Fit samples: $FIT_SAMPLES"
 
+# ============================================================================
+# Step 2: Verify required files exist
+# ============================================================================
+print_status "Verifying required files..."
+
+REQUIRED_FILES=(
+    "$FIT_SAMPLES"
+    "$LABELS"
+)
+
+MISSING_FILES=()
+for file in "${REQUIRED_FILES[@]}"; do
+    if [[ ! -f "$file" ]]; then
+        MISSING_FILES+=("$file")
+    fi
+done
+
+if [[ ${#MISSING_FILES[@]} -gt 0 ]]; then
+    print_error "Missing required files:"
+    for file in "${MISSING_FILES[@]}"; do
+        echo "  - $file"
+    done
+    echo ""
+    echo "Please ensure:"
+    echo "  - fit_samples.txt exists (FID IID format)"
+    echo "  - ukbb_labels.csv exists (full UKBB labels with sample_id column)"
+    echo ""
+    exit 1
+fi
+
+print_success "All required files found"
+
+# ============================================================================
 # Step 3: Call generic subset prepare script
+# ============================================================================
 print_status "Calling generic subset prepare script..."
 echo ""
 
@@ -145,17 +144,57 @@ THREADS="${SLURM_CPUS_PER_TASK:-4}"
 # Note: project_samples not provided means use all samples from PLINK
 bash "${PROJECT_ROOT}/examples/generic/subset/prepare_data.sh" \
     --plink "$UKBB_PLINK" \
-    --fit-samples "${DATA_DIR}/fit_samples.txt" \
-    --metadata "${DATA_DIR}/ukbb_metadata.csv" \
+    --fit-samples "$FIT_SAMPLES" \
     --output-dir "$DATA_DIR" \
-    --fit-labels-out "${DATA_DIR}/fit_labels_generated.csv" \
-    --project-labels-out "${DATA_DIR}/project_labels_generated.csv" \
     --memory 100000 \
     --threads "$THREADS"
 
-# Note: We already have manually created fit_labels.csv and project_labels.csv,
-# so we don't overwrite them. The generic script creates *_generated.csv files
-# which can be compared for verification.
+# ============================================================================
+# Step 4: Create fit_labels.csv and project_labels.csv from full labels
+# ============================================================================
+print_status "Creating label files by filtering full labels..."
+
+python3 << PYTHON_SCRIPT
+import pandas as pd
+import sys
+
+# Read .fam files to get sample IDs
+print("  Reading sample IDs from PLINK subsets...")
+fit_fam = pd.read_csv('${DATA_DIR}/fit_subset.fam', sep=r'\s+', header=None,
+                      names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+project_fam = pd.read_csv('${DATA_DIR}/project_subset.fam', sep=r'\s+', header=None,
+                          names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+
+fit_samples = set(fit_fam['IID'].astype(str))
+project_samples = set(project_fam['IID'].astype(str))
+
+print(f"    Fit samples: {len(fit_samples)}")
+print(f"    Project samples: {len(project_samples)}")
+
+# Read full labels file
+print("  Reading full UKBB labels...")
+labels = pd.read_csv('${LABELS}')
+
+if 'sample_id' not in labels.columns:
+    print("  Error: 'sample_id' column not found in labels file")
+    sys.exit(1)
+
+labels['sample_id'] = labels['sample_id'].astype(str)
+
+# Filter to fit and project samples
+print("  Filtering labels to fit samples...")
+fit_labels = labels[labels['sample_id'].isin(fit_samples)].copy()
+fit_labels.to_csv('${DATA_DIR}/fit_labels.csv', index=False)
+
+print("  Filtering labels to project samples...")
+project_labels = labels[labels['sample_id'].isin(project_samples)].copy()
+project_labels.to_csv('${DATA_DIR}/project_labels.csv', index=False)
+
+print(f"  ✓ Created fit_labels.csv: {len(fit_labels)} samples, {len(fit_labels.columns)} columns")
+print(f"  ✓ Created project_labels.csv: {len(project_labels)} samples, {len(project_labels.columns)} columns")
+PYTHON_SCRIPT
+
+print_success "Label files created"
 
 # Cleanup
 rm -f "${TEMP_DIR}/paths.sh"
@@ -163,6 +202,12 @@ rm -f "${TEMP_DIR}/paths.sh"
 echo ""
 print_success "UKBB 10K WB + 5K Irish data preparation complete!"
 echo ""
-echo "Note: Using existing fit_labels.csv and project_labels.csv"
-echo "      Generated labels saved as *_labels_generated.csv for comparison"
+echo "Generated files:"
+echo "  📊 PLINK subsets:"
+echo "    - ${DATA_DIR}/fit_subset.{bed,bim,fam}"
+echo "    - ${DATA_DIR}/project_subset.{bed,bim,fam}"
+echo ""
+echo "  🏷️ Label files:"
+echo "    - ${DATA_DIR}/fit_labels.csv"
+echo "    - ${DATA_DIR}/project_labels.csv"
 echo ""
