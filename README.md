@@ -14,7 +14,7 @@ A lightweight, batteries-included Python package for genetic analysis with dimen
 
 ## Quick Start
 
-### Step 1: Installation (Login Node)
+### Step 1: Installation
 
 **IMPORTANT**: Run setup.sh before running any of this code.
 
@@ -46,7 +46,7 @@ bash examples/hgdp_1kgp/run_pipeline.sh
 ```
 
 Results saved to `examples/hgdp_1kgp/outputs`:
-- `pca/fit_pca_50.csv` - PCA coordinates for fit subset (3,452 samples)
+- `pca/fit_pca_50.csv` - PCA coordinates for fit subset (3,400 samples)
 - `pca/transform_pca_50.csv` - PCA coordinates for project subset (4,094 samples)
 - `admixture/*.Q` - Admixture files for K=2 to 10
 - `embeddings/phate_2d.csv` - PHATE 2D embedding
@@ -55,12 +55,10 @@ Results saved to `examples/hgdp_1kgp/outputs`:
 ### About the Example Data
 
 The HGDP+1KGP example includes:
-- **Fit subset:** 3,452 unrelated samples (for model training)
+- **Fit subset:** 3,400 unrelated samples (for model training)
 - **Project subset:** 4,094 QC-passing samples (for model application)
 - **172,152 SNPs** (LD-pruned, MAF ≥0.01)
 - **7 genetic regions:** Africa, Americas, Central/South Asia, East Asia, Europe, Middle East, Oceania
-
-For detailed data processing information, see `docs/details_for_paper.md`.
 
 ## Command-Line Interface
 
@@ -90,7 +88,7 @@ manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
 
 ### Equivalent Individual Commands (same outputs as pipeline)
 
-Run from repo root; paths below match the pipeline output layout. Metrics are produced by the pipeline; individual commands do not compute metrics (use the pipeline to get `outputs/metrics/*.json`).
+Run from repo root; paths below match the pipeline output layout.
 
 ```bash
 # 1) PCA: fit on fit_subset, project on project_subset
@@ -112,7 +110,7 @@ manifold-genetics admixture \
     --k-min 2 --k-max 5 --threads 8
 # Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and transform.{K}.csv
 
-# 3) Embedding (PHATE): fit and transform on project (transform) PCA coordinates
+# 3) Embedding (PHATE): fit and transform on projected (transform) PCA coordinates
 manifold-genetics embed \
     --method phate \
     --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
@@ -151,7 +149,6 @@ manifold-genetics plot-admixture-embedding \
     --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
     --k-min 2 --k-max 5 \
     --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png
-
 
 # 5) Metrics (optional, standalone)
 manifold-genetics metrics-geographic \
@@ -245,12 +242,11 @@ source .venv/bin/activate
 pip install -e . --force-reinstall --no-deps
 ```
 
-## Documentation
+## For Other Datasets
 
-- `docs/INSTALL.md` - Detailed installation instructions
-- `docs/IMPLEMENTATION_SUMMARY.md` - Technical overview and architecture
-- `docs/details_for_paper.md` - Complete data processing pipeline for reproducibility
-- `examples/test_pipeline.py` - Working examples
+Look at examples/generic/README.md for a generic pipeline you can adapt to your own data.
+All you need are plink files and metadata. We provide the scripts to run on our local copy of UKBB to demonstrate this.
+Finally, a complete working example is available for AoU, if you have access to their servers.
 
 ## License
 

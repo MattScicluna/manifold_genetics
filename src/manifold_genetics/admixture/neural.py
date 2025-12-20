@@ -283,7 +283,18 @@ class NeuralAdmixture:
     def _infer(
         self, plink_prefix: Path, q_dir: Path, out_name: str
     ) -> Dict[int, Path]:
-        """Infer ancestry proportions."""
+        """
+        Infer ancestry proportions.
+        
+        Note: Inference is performed on CPU only due to a bug in neural-admixture
+        where the entire dataset is loaded into GPU memory during inference
+        (unlike training which uses proper batching). This causes OOM errors
+        for large datasets even with small batch sizes.
+        
+        WARNING: Large datasets (>10k samples) may require >100GB RAM for inference
+        due to neural-admixture loading the entire dataset into memory. Consider
+        requesting high-memory nodes for inference jobs.
+        """
         logger.info("=" * 60)
         logger.info("NEURAL ADMIXTURE INFERENCE")
         logger.info("=" * 60)
@@ -303,6 +314,20 @@ class NeuralAdmixture:
              logger.info("Checkpoints found, skipping...")
              return q_files
 
+        # Estimate memory requirements and warn user
+        from ..utils.io import get_sample_ids_from_plink
+        try:
+            sample_ids = get_sample_ids_from_plink(plink_prefix)
+            n_samples = len(sample_ids)
+            if n_samples > 10000:
+                logger.warning(f"Large dataset detected ({n_samples:,} samples)")
+                logger.warning("Neural-admixture loads entire dataset into memory during inference")
+                logger.warning("This may require >100GB RAM. Consider high-memory compute nodes.")
+        except Exception:
+            pass  # Continue if we can't get sample count
+
+        logger.info("Using CPU-only inference to avoid OOM from neural-admixture bug...")
+
         for k in range(self.k_min, self.k_max + 1):
             k_model_name = f"{self._model_name}_k{k}"
             logger.info(f"Inferring K={k}...")
@@ -315,7 +340,7 @@ class NeuralAdmixture:
                 "--data_path", str(plink_bed),
                 "--out_name", out_name,
                 "--threads", str(self.threads),
-                "--num_gpus", str(self.num_gpus),
+                "--num_gpus", "0",  # Force CPU-only to avoid OOM bug
             ]
 
             if self.batch_size is not None:
@@ -324,8 +349,13 @@ class NeuralAdmixture:
             try:
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as e:
-                logger.error(f"Inference failed for K={k}")
-                logger.error(e.stderr)
+                if e.returncode == -9:  # SIGKILL
+                    logger.error(f"Inference killed for K={k} (likely OOM)")
+                    logger.error("Try requesting more memory (>100GB for large datasets)")
+                    logger.error("Example: #SBATCH --mem=200GB")
+                else:
+                    logger.error(f"Inference failed for K={k}")
+                    logger.error(e.stderr)
                 raise
 
         return q_files
