@@ -2,9 +2,9 @@
 #
 # Prepare AoU-HGDP cross-projection data
 # This script integrates the aou_pipeline steps to:
-# 1. Download/prepare HGDP+1KGP reference data (step2)
-# 2. Download/prepare AoU genotype data (step3)
-# 3. Query AoU metadata (step4)
+# 1. Download/prepare HGDP+1KGP reference data
+# 2. Download/prepare AoU genotype data
+# 3. Query AoU metadata
 # 4. Find common SNPs and create fit/project subsets
 # 5. Create labels and colormaps
 #
@@ -43,10 +43,15 @@ echo ""
 mkdir -p "${DATA_DIR}" "${REF_DIR}"
 
 # =============================================================================
-# STEP 2: Reference Data Processing (HGDP+1KGP)
+# STEP 1-5: Reference Data Processing (HGDP+1KGP)
+#   1) Download
+#   2) Extract
+#   3) Fix BIM chromosome prefixes
+#   4) Split by chromosome
+#   5) LD prune
 # =============================================================================
 echo "=========================================="
-echo "Step 2: HGDP+1KGP Reference Data"
+echo "Step 1-5: HGDP+1KGP Reference Data"
 echo "=========================================="
 
 TAR_PATH="${DATA_DIR}/1KGPHGDP.tar.gz"
@@ -95,10 +100,10 @@ echo "  ✓ HGDP+1KGP reference data ready"
 echo ""
 
 # =============================================================================
-# STEP 3-4: All of Us Data Download (using shared script)
+# STEP 6: All of Us Data Download (shared)
 # =============================================================================
 echo "=========================================="
-echo "Step 3-4: All of Us Data Download"
+echo "Step 6: All of Us Data Download"
 echo "=========================================="
 echo ""
 
@@ -134,10 +139,14 @@ fi
 echo ""
 
 # =============================================================================
-# STEP 5: Find Common SNPs and Create Subsets
+# STEP 7-10: Standardize IDs, prune, intersect, and create subsets
+#   7) Standardize SNP IDs (pos:ref:alt)
+#   8) Apply reference LD prune list to HGDP and AoU
+#   9) Find SNP intersection & check alleles
+#  10) Create intersected PLINKs and final subsets
 # =============================================================================
 echo "=========================================="
-echo "Step 5: Common SNPs & Subset Creation"
+echo "Step 7: Standardize SNP IDs (pos:ref:alt)"
 echo "=========================================="
 
 # Create temp directory
@@ -202,11 +211,58 @@ fi
 
 echo "  ✓ SNP IDs standardized (originals untouched)"
 
+# LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
+echo ""
+echo "=========================================="
+echo "Step 8: LD prune reference and apply to AoU"
+echo "=========================================="
+
+# LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
+echo "LD pruning reference SNPs and applying to AoU..."
+HGDP_PRUNE_PREFIX="${TEMP_DIR}/hgdp_prune"
+HGDP_PRUNED_PREFIX="${TEMP_DIR}/hgdp_pruned"
+AOU_PRUNED_PREFIX="${TEMP_DIR}/aou_pruned"
+
+if [[ ! -f "${HGDP_PRUNE_PREFIX}.prune.in" ]]; then
+    echo "  Computing prune list on HGDP reference (150kb, step 1, r2=0.05)..."
+    ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
+        --indep-pairwise 150 kb 1 0.05 \
+        --memory 100000 \
+        --out ${HGDP_PRUNE_PREFIX}
+else
+    echo "  Prune list already exists"
+fi
+
+if [[ ! -f "${HGDP_PRUNED_PREFIX}.bed" ]]; then
+    echo "  Applying prune list to HGDP reference..."
+    ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
+        --extract ${HGDP_PRUNE_PREFIX}.prune.in \
+        --make-bed \
+        --out ${HGDP_PRUNED_PREFIX}
+else
+    echo "  HGDP pruned dataset already exists"
+fi
+
+if [[ ! -f "${AOU_PRUNED_PREFIX}.bed" ]]; then
+    echo "  Applying prune list to AoU dataset..."
+    ${PLINK2} --bfile ${TEMP_DIR}/aou_standardized \
+        --extract ${HGDP_PRUNE_PREFIX}.prune.in \
+        --memory 100000 \
+        --make-bed \
+        --out ${AOU_PRUNED_PREFIX}
+else
+    echo "  AoU pruned dataset already exists"
+fi
+
+# Update downstream inputs to use pruned datasets
+HGDP_PLINK_PREFIX="${HGDP_PRUNED_PREFIX}"
+AOU_PLINK_PREFIX="${AOU_PRUNED_PREFIX}"
+
 # Find SNP intersection
 echo "Finding SNP intersection..."
 
-awk '{print $2}' "${TEMP_DIR}/hgdp_standardized.bim" | sort > "${TEMP_DIR}/hgdp_snps.txt"
-awk '{print $2}' "${TEMP_DIR}/aou_standardized.bim" | sort > "${TEMP_DIR}/aou_snps.txt"
+awk '{print $2}' "${HGDP_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/hgdp_snps.txt"
+awk '{print $2}' "${AOU_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/aou_snps.txt"
 
 HGDP_SNP_COUNT=$(wc -l < "${TEMP_DIR}/hgdp_snps.txt")
 AOU_SNP_COUNT=$(wc -l < "${TEMP_DIR}/aou_snps.txt")
@@ -239,9 +295,9 @@ sys.path.insert(0, str(Path("${PROJECT_ROOT}/src")))
 
 from manifold_genetics.utils.io import check_allele_compatibility
 
-# Read inputs (standardized BIM files)
-hgdp_bim = Path("${TEMP_DIR}/hgdp_standardized.bim")
-aou_bim = Path("${TEMP_DIR}/aou_standardized.bim")
+# Read inputs (pruned BIM files)
+hgdp_bim = Path("${HGDP_PLINK_PREFIX}.bim")
+aou_bim = Path("${AOU_PLINK_PREFIX}.bim")
 common_snps_file = Path("${TEMP_DIR}/common_snps.txt")
 output_dir = Path("${TEMP_DIR}")
 
@@ -290,10 +346,10 @@ echo "  ✓ Final SNP count: $FINAL_SNP_COUNT"
 # Create intersected PLINK files
 echo "Creating intersected PLINK files..."
 
-# Create HGDP intersected dataset (from standardized files)
+# Create HGDP intersected dataset (from pruned files)
 if [[ ! -f "${TEMP_DIR}/hgdp_intersected.bed" ]]; then
     echo "  Creating HGDP intersected dataset..."
-    HGDP_CMD="${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized --extract ${TEMP_DIR}/final_common_snps.txt"
+    HGDP_CMD="${PLINK2} --bfile ${HGDP_PLINK_PREFIX} --extract ${TEMP_DIR}/final_common_snps.txt"
     if [[ $FLIP_COUNT -gt 0 ]]; then
         HGDP_CMD="$HGDP_CMD --flip ${TEMP_DIR}/flip_list.txt"
     fi
@@ -303,10 +359,10 @@ else
     echo "  HGDP intersected dataset already exists"
 fi
 
-# Create AoU intersected dataset (from standardized files)
+# Create AoU intersected dataset (from pruned files)
 if [[ ! -f "${TEMP_DIR}/aou_intersected.bed" ]]; then
     echo "  Creating AoU intersected dataset..."
-    ${PLINK2} --bfile ${TEMP_DIR}/aou_standardized \
+    ${PLINK2} --bfile ${AOU_PLINK_PREFIX} \
         --extract ${TEMP_DIR}/final_common_snps.txt \
         --memory 100000 \
         --make-bed \
