@@ -487,12 +487,10 @@ aou_labels = aou_metadata[aou_metadata['sample_id'].isin(available_samples)].cop
 
 # Select relevant columns (adjust based on what's in your metadata)
 columns_to_keep = ['sample_id']
-if 'race_ethnicity' in aou_labels.columns:
-    columns_to_keep.append('race_ethnicity')
-if 'sex_at_birth' in aou_labels.columns:
-    columns_to_keep.append('sex_at_birth')
-if 'age' in aou_labels.columns:
-    columns_to_keep.append('age')
+if 'race' in aou_labels.columns:
+    columns_to_keep.append('race')
+if 'ethnicity' in aou_labels.columns:
+    columns_to_keep.append('ethnicity')
 
 aou_labels = aou_labels[columns_to_keep]
 
