@@ -19,14 +19,26 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 # UKBB-Specific Configuration
 # ============================================================================
 
-# Set paths for this dataset
-export DATA_DIR="${SCRIPT_DIR}/data"
-export OUTPUT_DIR="${SCRIPT_DIR}/outputs"
-export FIT_PLINK="${DATA_DIR}/fit_subset"
-export PROJECT_PLINK="${DATA_DIR}/project_subset"
-export FIT_LABELS="${DATA_DIR}/fit_labels.csv"
-export PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
-export COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
+# IMPORTANT: Update these paths to point to your actual data location
+# These are placeholder paths - replace with your real data paths before running
+
+# For development: Uncomment and set your actual paths here
+# export DATA_DIR="/path/to/your/ukbb/data"
+# export FIT_PLINK="/path/to/ukbb_5k_irish_fit"
+# export PROJECT_PLINK="/path/to/ukbb_10k_wb_project"
+# export FIT_LABELS="/path/to/fit_labels.csv"
+# export PROJECT_LABELS="/path/to/project_labels.csv"
+# export COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
+# export OUTPUT_DIR="/path/to/output"
+
+# Default paths (relative to script directory) - will work if data is in ./data/
+export DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
+export OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
+export FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
+export PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
+export FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
+export PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
+export COLORMAP="${COLORMAP:-${PROJECT_ROOT}/examples/colormaps/ukbb.json}"
 
 # Set pipeline parameters
 export N_PCS=20
