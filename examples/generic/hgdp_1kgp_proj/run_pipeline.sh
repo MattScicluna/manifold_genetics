@@ -12,39 +12,51 @@
 # - HGDP+1KGP (reference) → AoU (target)
 # - Any diverse reference → specific population target
 #
-# Usage:
+# Usage Option 1 (Direct):
 #   1. Copy this script to your dataset directory
-#   2. Update the paths below to point to your data
+#   2. Update the default paths below to point to your data
 #   3. Adjust parameters as needed
 #   4. Run: bash run_pipeline.sh
+#
+# Usage Option 2 (Called from another script):
+#   Set environment variables and call this script:
+#     export FIT_PLINK=/path/to/fit
+#     export PROJECT_PLINK=/path/to/project
+#     export FIT_LABELS=/path/to/fit_labels.csv
+#     export PROJECT_LABELS=/path/to/project_labels.csv
+#     export FIT_COLORMAP=/path/to/fit_colormap.json
+#     export PROJECT_COLORMAP=/path/to/project_colormap.json
+#     export OUTPUT_DIR=/path/to/output
+#     bash examples/generic/hgdp_1kgp_proj/run_pipeline.sh
 #
 
 set -e
 
 # ============================================================================
-# CONFIGURATION - Update these paths for your dataset
+# CONFIGURATION - Accepts environment variables or uses defaults
 # ============================================================================
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# Dataset paths (UPDATE THESE)
-DATA_DIR="${SCRIPT_DIR}/data"
-OUTPUT_DIR="${SCRIPT_DIR}/outputs"
-FIT_PLINK="${DATA_DIR}/fit_subset"          # Reference cohort (e.g., HGDP)
-PROJECT_PLINK="${DATA_DIR}/project_subset"  # Target cohort (e.g., UKBB)
-FIT_LABELS="${DATA_DIR}/fit_labels.csv"     # Labels for reference cohort
-PROJECT_LABELS="${DATA_DIR}/project_labels.csv"  # Labels for target cohort
-FIT_COLORMAP="${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json"  # Reference colormap
-PROJECT_COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"    # Target colormap
+# Dataset paths - Use environment variables if set, otherwise use defaults
+DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
+OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
+FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"          # Reference cohort (e.g., HGDP)
+PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"  # Target cohort (e.g., UKBB)
+FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"     # Labels for reference cohort
+PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"  # Labels for target cohort
+FIT_COLORMAP="${FIT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json}"  # Reference colormap
+PROJECT_COLORMAP="${PROJECT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/ukbb.json}"    # Target colormap
 
-# Pipeline parameters (ADJUST AS NEEDED)
-N_PCS=20                           # Number of PCA components
-K_MIN=2                            # Minimum K for admixture
-K_MAX=10                           # Maximum K for admixture
-EMBEDDING="phate"                  # Embedding method (phate, umap, tsne, diffusion_map)
-ADMIXTURE_GROUP_COLUMN=""          # Column for admixture grouping (optional)
+# Pipeline parameters - Use environment variables if set, otherwise use defaults
+N_PCS="${N_PCS:-20}"                           # Number of PCA components
+K_MIN="${K_MIN:-2}"                            # Minimum K for admixture
+K_MAX="${K_MAX:-10}"                           # Maximum K for admixture
+EMBEDDING="${EMBEDDING:-phate}"                # Embedding method (phate, umap, tsne, diffusion_map)
+ADMIXTURE_GROUP_COLUMN="${ADMIXTURE_GROUP_COLUMN:-}"  # Column for admixture grouping (optional)
+USE_LANDMARKING="${USE_LANDMARKING:-false}"    # Set to "true" for large target datasets (AoU)
 
 # ============================================================================
 # Verify files exist
@@ -99,50 +111,51 @@ echo ""
 # Run pipeline with projection mode
 # ============================================================================
 
-# Option 1: Use projection mode with default parameters
-# (knn=100, t=3, embedding-input=project)
-# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
+echo ""
+echo "Running cross-projection pipeline..."
+echo "  Mode: projection (fit on reference, transform on target)"
+if [[ "$USE_LANDMARKING" == "true" ]]; then
+    echo "  Performance: Large dataset mode (landmarking enabled)"
+else
+    echo "  Performance: Standard mode (no landmarking)"
+fi
+echo ""
 
-bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
-    --mode projection \
-    --fit-plink "$FIT_PLINK" \
-    --project-plink "$PROJECT_PLINK" \
-    --fit-labels "$FIT_LABELS" \
-    --project-labels "$PROJECT_LABELS" \
-    --fit-colormap "$FIT_COLORMAP" \
-    --project-colormap "$PROJECT_COLORMAP" \
-    --output "$OUTPUT_DIR" \
-    --n-pcs "$N_PCS" \
-    --k-min "$K_MIN" \
-    --k-max "$K_MAX" \
-    --embedding "$EMBEDDING" \
-    ${ADMIXTURE_GROUP_COLUMN:+--admixture-group-column "$ADMIXTURE_GROUP_COLUMN"} \
-    --threads "$CLUSTER_CPUS" \
-    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
-    "$@"
+# Build command with mode and base parameters
+CMD=(
+    bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh"
+    --mode projection
+    --fit-plink "$FIT_PLINK"
+    --project-plink "$PROJECT_PLINK"
+    --fit-labels "$FIT_LABELS"
+    --project-labels "$PROJECT_LABELS"
+    --fit-colormap "$FIT_COLORMAP"
+    --project-colormap "$PROJECT_COLORMAP"
+    --output "$OUTPUT_DIR"
+    --n-pcs "$N_PCS"
+    --k-min "$K_MIN"
+    --k-max "$K_MAX"
+    --embedding "$EMBEDDING"
+    --threads "$CLUSTER_CPUS"
+)
 
-# Option 2: For large target cohorts, use landmarking despite cross-projection
-# (e.g., HGDP → large AoU dataset)
-# Uncomment to use:
-#
-# bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
-#     --fit-plink "$FIT_PLINK" \
-#     --project-plink "$PROJECT_PLINK" \
-#     --fit-labels "$FIT_LABELS" \
-#     --project-labels "$PROJECT_LABELS" \
-#     --fit-colormap "$FIT_COLORMAP" \
-#     --project-colormap "$PROJECT_COLORMAP" \
-#     --output "$OUTPUT_DIR" \
-#     --n-pcs "$N_PCS" \
-#     --k-min "$K_MIN" \
-#     --k-max "$K_MAX" \
-#     --embedding "$EMBEDDING" \
-#     --knn 500 \
-#     --t 50 \
-#     --n-landmark 10000 \
-#     --random-landmarking \
-#     --embedding-input project \
-#     --threads "$CLUSTER_CPUS"
+# Add optional parameters
+[[ -n "$ADMIXTURE_GROUP_COLUMN" ]] && CMD+=(--admixture-group-column "$ADMIXTURE_GROUP_COLUMN")
+[[ -n "$CLUSTER_GPUS" ]] && CMD+=(--num-gpus "$CLUSTER_GPUS")
+
+# Add landmarking for large datasets (e.g., AoU)
+if [[ "$USE_LANDMARKING" == "true" ]]; then
+    CMD+=(
+        --knn 500
+        --t 50
+        --n-landmark 10000
+        --random-landmarking
+        --neuraladmixture-batch-size 400
+    )
+fi
+
+# Execute with any additional arguments passed through
+"${CMD[@]}" "$@"
 
 echo ""
 echo "Pipeline complete! Results in: ${OUTPUT_DIR}"

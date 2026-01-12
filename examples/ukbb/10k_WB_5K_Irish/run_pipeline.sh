@@ -2,8 +2,8 @@
 #
 # UKBB 10K WB + 5K Irish Subset Pipeline
 #
-# This is a wrapper that calls the generic subset pipeline.
-# It defines UKBB-specific paths and pipeline parameters.
+# This is a minimal wrapper that sets UKBB-specific paths and calls
+# the generic subsample template.
 #
 # Usage:
 #   bash examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh
@@ -11,77 +11,34 @@
 
 set -e
 
-# Get script directory and project root
+# Get directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ANSI colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# ============================================================================
+# UKBB-Specific Configuration
+# ============================================================================
 
-# Helper functions
-print_status() {
-    echo -e "${BLUE}==>${NC} $1"
-}
+# Set paths for this dataset
+export DATA_DIR="${SCRIPT_DIR}/data"
+export OUTPUT_DIR="${SCRIPT_DIR}/outputs"
+export FIT_PLINK="${DATA_DIR}/fit_subset"
+export PROJECT_PLINK="${DATA_DIR}/project_subset"
+export FIT_LABELS="${DATA_DIR}/fit_labels.csv"
+export PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
+export COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
 
-print_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
+# Set pipeline parameters
+export N_PCS=20
+export K_MIN=2
+export K_MAX=10
+export EMBEDDING="phate"
+export ADMIXTURE_GROUP_COLUMN="self_described_ancestry"
 
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
+# ============================================================================
+# Call Generic Subsample Template
+# ============================================================================
 
-# Print header
-echo ""
-echo "========================================="
-echo "  UKBB 10K WB + 5K Irish Pipeline"
-echo "========================================="
-echo ""
-
-# Define UKBB-specific paths
-DATA_DIR="${SCRIPT_DIR}/data"
-OUTPUT_DIR="${SCRIPT_DIR}/outputs"
-FIT_PLINK="${DATA_DIR}/fit_subset"
-PROJECT_PLINK="${DATA_DIR}/project_subset"
-FIT_LABELS="${DATA_DIR}/fit_labels.csv"
-PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
-COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
-
-# Detect cluster environment
-source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
-
-print_status "Running on cluster: $CLUSTER_NAME"
-print_status "CPUs: $CLUSTER_CPUS, GPUs: $CLUSTER_GPUS"
-echo ""
-
-# Call shared pipeline with subsample mode
-# Note: Uses --mode subsample (fit on 5K Irish, transform on 5K Irish by default)
-# Gets landmarking by default - use --embedding-input both to project on full 10K
-print_status "Running UKBB pipeline with subsample mode..."
-echo ""
-
-# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
-bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
-    --mode subsample \
-    --fit-plink "$FIT_PLINK" \
-    --project-plink "$PROJECT_PLINK" \
-    --fit-labels "$FIT_LABELS" \
-    --project-labels "$PROJECT_LABELS" \
-    --colormap "$COLORMAP" \
-    --output "$OUTPUT_DIR" \
-    --n-pcs 20 \
-    --k-min 2 --k-max 10 \
-    --embedding phate \
-    --admixture-group-column self_described_ancestry \
-    --neuraladmixture-batch-size 400 \
-    --threads "$CLUSTER_CPUS" \
-    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
-    --skip-metrics \
-    "$@"
-
-echo ""
-print_success "UKBB 10K WB + 5K Irish pipeline complete!"
-echo ""
+# Note: Subsample mode uses random landmarking by default
+# Note: "$@" passes through any additional arguments (e.g., --skip-metrics)
+bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" "$@"
