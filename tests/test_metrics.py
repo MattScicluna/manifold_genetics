@@ -26,8 +26,8 @@ class TestGeographicPreservation:
 
         geo_df = pd.DataFrame({
             "sample_id": [f"SAMPLE_{i:03d}" for i in range(n_samples)],
-            "Latitude": lats,
-            "Longitude": lons,
+            "latitude": lats,  # Changed to lowercase to match function default
+            "longitude": lons,  # Changed to lowercase to match function default
         })
 
         geo_file = temp_dir / "geo_coords.csv"
@@ -65,8 +65,8 @@ class TestGeographicPreservation:
         sample_ids = small_embedding_data["sample_id"].tolist()
         geo_df = pd.DataFrame({
             "sample_id": sample_ids,
-            "Latitude": 40 + np.random.randn(n_samples) * 5,
-            "Longitude": -100 + np.random.randn(n_samples) * 10,
+            "latitude": 40 + np.random.randn(n_samples) * 5,  # Changed to lowercase
+            "longitude": -100 + np.random.randn(n_samples) * 10,  # Changed to lowercase
         })
         # Set sample_id as index (like read_labels_csv does)
         geo_df = geo_df.set_index("sample_id")
@@ -173,8 +173,8 @@ class TestMetricsIntegration:
         # POSITIVE CONTROL: Use embedding coords as geographic coords
         geo_df = pd.DataFrame({
             "sample_id": sample_ids,
-            "Latitude": embedding[:, 0],  # dim_1 = Latitude
-            "Longitude": embedding[:, 1],  # dim_2 = Longitude
+            "latitude": embedding[:, 0],  # dim_1 = latitude (changed to lowercase)
+            "longitude": embedding[:, 1],  # dim_2 = longitude (changed to lowercase)
         })
         geo_file = temp_dir / "geo.csv"
         geo_df.to_csv(geo_file, index=False)
@@ -202,8 +202,8 @@ class TestMetricsIntegration:
         np.random.seed(123)  # Different seed
         geo_df = pd.DataFrame({
             "sample_id": sample_ids,
-            "Latitude": np.random.randn(n_samples) * 50,
-            "Longitude": np.random.randn(n_samples) * 50,
+            "latitude": np.random.randn(n_samples) * 50,  # Changed to lowercase
+            "longitude": np.random.randn(n_samples) * 50,  # Changed to lowercase
         })
         geo_file = temp_dir / "geo.csv"
         geo_df.to_csv(geo_file, index=False)
@@ -237,8 +237,8 @@ class TestMetricsIntegration:
 
         geo_df = pd.DataFrame({
             "sample_id": sample_ids,
-            "Latitude": lats,
-            "Longitude": lons,
+            "latitude": lats,  # Changed to lowercase
+            "longitude": lons,  # Changed to lowercase
         })
         geo_file = temp_dir / "geo.csv"
         geo_df.to_csv(geo_file, index=False)
