@@ -145,17 +145,25 @@ def run_pipeline(
         ... )
 
     Note:
-        Must provide either (labels + colormap) OR (fit_labels + project_labels +
-        fit_colormap + project_colormap) for cross-cohort analysis.
+        You must provide either:
+
+        * A shared set of `labels` and `colormap`, which will be used for both the
+          fit and project cohorts, **or**
+        * Separate values for all of `fit_labels`, `project_labels`, `fit_colormap`,
+          and `project_colormap` for cross-cohort analysis.
     """
     # Validate labels/colormap arguments
     if not labels and not (fit_labels and project_labels):
         raise ValueError(
-            "Must provide either 'labels' OR both 'fit_labels' and 'project_labels'"
+            "Must provide either 'labels' (used for both fit and project) OR both "
+            "'fit_labels' and 'project_labels'. Providing only one of 'fit_labels' or "
+            "'project_labels' without 'labels' is not allowed."
         )
     if not colormap and not (fit_colormap and project_colormap):
         raise ValueError(
-            "Must provide either 'colormap' OR both 'fit_colormap' and 'project_colormap'"
+            "Must provide either 'colormap' (used for both fit and project) OR both "
+            "'fit_colormap' and 'project_colormap'. Providing only one of "
+            "'fit_colormap' or 'project_colormap' without 'colormap' is not allowed."
         )
 
     # Create Pipeline instance
