@@ -50,34 +50,33 @@ FIT_LABELS="${DATA_DIR}/fit_labels.csv"
 PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
 COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
 
-# Get compute resources
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
-NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
+# Detect cluster environment
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-# Call generic subset pipeline
-print_status "Calling generic subset pipeline..."
+print_status "Running on cluster: $CLUSTER_NAME"
+print_status "CPUs: $CLUSTER_CPUS, GPUs: $CLUSTER_GPUS"
+echo ""
+
+# Call shared pipeline with subsample mode
+print_status "Running UKBB pipeline with subsample mode..."
 echo ""
 
 # Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
-bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" \
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode subsample \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
     --fit-labels "$FIT_LABELS" \
     --project-labels "$PROJECT_LABELS" \
     --colormap "$COLORMAP" \
-    --output-dir "$OUTPUT_DIR" \
+    --output "$OUTPUT_DIR" \
     --n-pcs 20 \
     --k-min 2 --k-max 10 \
     --embedding phate \
-    --knn 500 \
-    --t 50 \
-    --n-landmark 10000 \
-    --random-landmarking \
-    --embedding-input fit \
     --admixture-group-column self_described_ancestry \
-    --threads "$THREADS" \
     --neuraladmixture-batch-size 400 \
-    ${NUM_GPUS:+--num-gpus "$NUM_GPUS"} \
+    --threads "$CLUSTER_CPUS" \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
     --skip-metrics \
     "$@"
 

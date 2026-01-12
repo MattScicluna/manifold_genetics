@@ -51,33 +51,35 @@ UKBB_LABELS="${DATA_DIR}/project_labels.csv"
 HGDP_COLORMAP="${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json"
 UKBB_COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
 
-# Get compute resources
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
-NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
+# Detect cluster environment
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-# Call generic cross-projection pipeline
-print_status "Calling generic cross-projection pipeline..."
+print_status "Running on cluster: $CLUSTER_NAME"
+print_status "CPUs: $CLUSTER_CPUS, GPUs: $CLUSTER_GPUS"
+echo ""
+
+# Call shared pipeline with projection mode
+print_status "Running UKBB-HGDP cross-projection pipeline..."
 echo ""
 
 # Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
-bash "${PROJECT_ROOT}/examples/generic/hgdp_1kgp_proj/run_pipeline.sh" \
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode projection \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
     --fit-labels "$HGDP_LABELS" \
     --project-labels "$UKBB_LABELS" \
     --fit-colormap "$HGDP_COLORMAP" \
     --project-colormap "$UKBB_COLORMAP" \
-    --output-dir "$OUTPUT_DIR" \
+    --output "$OUTPUT_DIR" \
     --n-pcs 20 \
     --k-min 2 --k-max 10 \
     --embedding phate \
-    --knn 100 \
-    --t 3 \
     --admixture-group-column self_described_ancestry \
-    --threads "$THREADS" \
     --neuraladmixture-batch-size 400 \
     --embed-batch-size 60000 \
-    ${NUM_GPUS:+--num-gpus "$NUM_GPUS"} \
+    --threads "$CLUSTER_CPUS" \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
     --skip-metrics \
     "$@"
 
