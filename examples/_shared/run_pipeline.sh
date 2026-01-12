@@ -12,8 +12,10 @@
 #   run_pipeline.sh --mode [projection|subsample] [OPTIONS]
 #
 # Mode-specific defaults:
-#   projection: --embedding-input project --knn 100 --t 3
+#   projection: --embedding-input both --knn 100 --t 3
+#               (fit embedding on HGDP+1KGP, transform on UKBB/AoU)
 #   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000 --random-landmarking
+#               (fit+transform on subsample only; use --embedding-input both to project on full cohort)
 #
 # All mode defaults can be overridden with explicit arguments.
 #
@@ -46,7 +48,8 @@ print_error() {
 
 # Mode-specific defaults
 set_projection_mode_defaults() {
-    EMBEDDING_INPUT="${EMBEDDING_INPUT:-project}"
+    # Cross-projection: fit embedding on reference (HGDP+1KGP), transform on cohort (UKBB/AoU)
+    EMBEDDING_INPUT="${EMBEDDING_INPUT:-both}"
     KNN="${KNN:-100}"
     T="${T:-3}"
     N_LANDMARK="${N_LANDMARK:-}"
@@ -56,6 +59,8 @@ set_projection_mode_defaults() {
 }
 
 set_subsample_mode_defaults() {
+    # Within-cohort: default is fit on subsample only (cheaper)
+    # Override with --embedding-input both to project on full cohort (more expensive)
     EMBEDDING_INPUT="${EMBEDDING_INPUT:-fit}"
     KNN="${KNN:-500}"
     T="${T:-50}"
