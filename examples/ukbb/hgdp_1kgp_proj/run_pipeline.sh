@@ -59,6 +59,7 @@ NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 print_status "Calling generic cross-projection pipeline..."
 echo ""
 
+# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
 bash "${PROJECT_ROOT}/examples/generic/hgdp_1kgp_proj/run_pipeline.sh" \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
@@ -77,7 +78,8 @@ bash "${PROJECT_ROOT}/examples/generic/hgdp_1kgp_proj/run_pipeline.sh" \
     --neuraladmixture-batch-size 400 \
     --embed-batch-size 60000 \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"} \
-    --skip-metrics
+    --skip-metrics \
+    "$@"
 
 echo ""
 print_success "UKBB-HGDP pipeline complete!"

@@ -1,19 +1,20 @@
 #!/bin/bash
 #
-# Run AoU-HGDP cross-projection analysis pipeline
+# AoU-HGDP Cross-Projection Pipeline
 #
 # This script runs the complete cross-projection analysis:
 # - HGDP+1KGP → AoU projection (HGDP as reference)
+# - Uses subsample-like parameters due to AoU's large size
 # - PCA (20 components)
-# - Neural Admixture (K=2-5)
-# - PHATE Embedding
+# - Neural Admixture (K=2-10)
+# - PHATE Embedding with landmarking
 # - Separate visualizations for HGDP and AoU populations
+#
+# Usage:
+#   bash examples/aou/hgdp_1kgp_proj/run_pipeline.sh
 #
 
 set -e
-
-# AOU specific
-export SLURM_CPUS_PER_TASK=32
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,11 +49,11 @@ echo "This will run the complete cross-projection analysis:"
 echo "  - HGDP → AoU projection (HGDP as reference)"
 echo "  - PCA (20 components)"
 echo "  - Neural Admixture (K=2-10)"
-echo "  - PHATE Embedding"
+echo "  - PHATE Embedding with landmarking (large dataset)"
 echo "  - Separate visualizations for HGDP and AoU populations"
 echo ""
 
-# Paths
+# Define AoU-specific paths
 DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="${SCRIPT_DIR}/outputs"
 FIT_PLINK="${DATA_DIR}/fit_subset"
@@ -61,10 +62,8 @@ HGDP_LABELS="${DATA_DIR}/hgdp_labels.csv"
 AOU_LABELS="${DATA_DIR}/aou_labels.csv"
 HGDP_COLORMAP="${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json"
 AOU_COLORMAP="${PROJECT_ROOT}/examples/colormaps/aou.json"
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
-NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 
-# Check if processed data exists
+# Step 1: Check if data exists
 print_status "Checking for processed data..."
 
 REQUIRED_FILES=(
@@ -102,7 +101,7 @@ fi
 
 print_success "All required files found"
 
-# Check if virtual environment is activated
+# Step 2: Check virtual environment
 print_status "Checking virtual environment..."
 
 if [[ -z "$VIRTUAL_ENV" ]]; then
@@ -117,7 +116,7 @@ fi
 
 print_success "Virtual environment active: $VIRTUAL_ENV"
 
-# Get data statistics
+# Step 3: Get data statistics
 print_status "Getting data statistics..."
 
 FIT_SAMPLES=$(wc -l < "${FIT_PLINK}.fam")
@@ -128,39 +127,19 @@ echo "  Fit dataset (HGDP): $FIT_SAMPLES samples"
 echo "  Project dataset (AoU): $PROJECT_SAMPLES samples"
 echo "  Common SNPs: $SNP_COUNT SNPs"
 
-# Run the cross-projection pipeline
-print_status "Running cross-projection analysis pipeline..."
+# Step 4: Detect cluster environment
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-echo ""
-echo "Command:"
-echo "manifold-genetics pipeline \\"
-echo "    --fit-plink ${FIT_PLINK} \\"
-echo "    --project-plink ${PROJECT_PLINK} \\"
-echo "    --labels ${HGDP_LABELS} \\"
-echo "    --colormap ${HGDP_COLORMAP} \\"
-echo "    --fit-labels ${HGDP_LABELS} \\"
-echo "    --project-labels ${AOU_LABELS} \\"
-echo "    --fit-colormap ${HGDP_COLORMAP} \\"
-echo "    --project-colormap ${AOU_COLORMAP} \\"
-echo "    --output ${OUTPUT_DIR} \\"
-echo "    --n-pcs 20 \\"
-echo "    --k-min 2 --k-max 10 \\"
-echo "    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \\"
-echo "    --skip-metrics \\"
-echo "    --threads ${THREADS} \\"
-echo "    --neuraladmixture-batch-size 400"
-[ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
+# Step 5: Run shared pipeline with explicit parameters
+# Note: Using subsample-like parameters (knn=500, t=50, landmarking) despite
+# being a cross-projection, because AoU is a large dataset requiring landmarking
+print_status "Running cross-projection pipeline with landmarking..."
 echo ""
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Run pipeline
-manifold-genetics pipeline \
+# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
-    --labels "$HGDP_LABELS" \
-    --colormap "$HGDP_COLORMAP" \
     --fit-labels "$HGDP_LABELS" \
     --project-labels "$AOU_LABELS" \
     --fit-colormap "$HGDP_COLORMAP" \
@@ -168,12 +147,17 @@ manifold-genetics pipeline \
     --output "$OUTPUT_DIR" \
     --n-pcs 20 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
+    --embedding phate \
+    --knn 500 \
+    --t 50 \
+    --n-landmark 10000 \
+    --random-landmarking \
+    --embedding-input project \
     --admixture-group-column race_ethnicity \
-    --skip-metrics \
-    --threads "$THREADS" \
+    --threads "$CLUSTER_CPUS" \
     --neuraladmixture-batch-size 400 \
-    ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
+    "$@"
 
 # Summary
 echo ""
@@ -199,4 +183,5 @@ echo ""
 echo "Cross-projection workflow:"
 echo "  • HGDP+1KGP used as diverse reference for training"
 echo "  • AoU samples projected into HGDP-trained space"
+echo "  • Landmarking used due to large AoU dataset size"
 echo ""

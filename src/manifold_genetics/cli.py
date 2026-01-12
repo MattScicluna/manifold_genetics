@@ -22,7 +22,7 @@ from .visualization import (
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
 )
-from .pipeline import Pipeline
+from .pipeline import Pipeline, run_pipeline
 from .metrics import compute_geographic_preservation, compute_admixture_preservation
 from .utils.io import read_colormap
 
@@ -443,6 +443,7 @@ def cmd_pipeline(args):
         if args.random_landmarking and n_landmark is None:
             raise ValueError("random-landmarking requires --n-landmark to be set")
         embedding_params["n_landmark"] = n_landmark
+        embedding_params["random_landmarking"] = args.random_landmarking
         embedding_params["embed_batch_size"] = getattr(args, "embed_batch_size", None)
     elif args.embedding == "umap":
         embedding_params["n_neighbors"] = args.n_neighbors
@@ -451,38 +452,36 @@ def cmd_pipeline(args):
     elif args.embedding == "diffusion_map":
         embedding_params["knn"] = args.knn
 
-    # Validate labels/colormaps arguments
-    if not args.labels and not (args.fit_labels and args.project_labels):
-        raise ValueError("Must provide either --labels OR both --fit-labels and --project-labels")
-    if not args.colormap and not (args.fit_colormap and args.project_colormap):
-        raise ValueError("Must provide either --colormap OR both --fit-colormap and --project-colormap")
-
     # Handle separate labels/colormaps for cross-cohort analysis
-    fit_labels = args.fit_labels if hasattr(args, "fit_labels") and args.fit_labels else args.labels
-    project_labels = args.project_labels if hasattr(args, "project_labels") and args.project_labels else args.labels
-    fit_colormap = args.fit_colormap if hasattr(args, "fit_colormap") and args.fit_colormap else args.colormap
-    project_colormap = args.project_colormap if hasattr(args, "project_colormap") and args.project_colormap else args.colormap
+    fit_labels = args.fit_labels if hasattr(args, "fit_labels") and args.fit_labels else None
+    project_labels = args.project_labels if hasattr(args, "project_labels") and args.project_labels else None
+    fit_colormap = args.fit_colormap if hasattr(args, "fit_colormap") and args.fit_colormap else None
+    project_colormap = args.project_colormap if hasattr(args, "project_colormap") and args.project_colormap else None
 
-    pipeline = Pipeline(
-        fit_plink_prefix=args.fit_plink,
-        transform_plink_prefix=args.project_plink,
+    # Use the canonical run_pipeline function
+    results = run_pipeline(
+        fit_plink=args.fit_plink,
+        project_plink=args.project_plink,
+        output_dir=args.output,
         labels=args.labels,
         colormap=args.colormap,
-        output_dir=args.output,
-        geographic_coords=args.geographic if hasattr(args, "geographic") else None,
         fit_labels=fit_labels,
         project_labels=project_labels,
         fit_colormap=fit_colormap,
         project_colormap=project_colormap,
-    )
-
-    results = pipeline.run(
+        geographic_coords=args.geographic if hasattr(args, "geographic") else None,
         n_pcs=args.n_pcs,
+        flashpca_output_dir=args.flashpca_output_dir,
         k_min=args.k_min,
         k_max=args.k_max,
+        admix_threads=args.threads,
+        admix_gpus=args.num_gpus,
+        admix_batch_size=getattr(args, 'neuraladmixture_batch_size', None),
         embedding=args.embedding,
         embedding_params=embedding_params,
         embedding_input=args.embedding_input,
+        admix_group_column=args.admixture_group_column,
+        admix_within_group_order=None if args.admixture_within_group_order == "none" else args.admixture_within_group_order,
         skip_pca=args.skip_pca,
         skip_admixture=args.skip_admixture,
         skip_embedding=args.skip_embedding,
@@ -490,12 +489,6 @@ def cmd_pipeline(args):
         skip_pca_visualization=args.skip_pca_visualization,
         skip_admixture_visualization=args.skip_admixture_visualization,
         skip_metrics=args.skip_metrics,
-        admix_group_column=args.admixture_group_column,
-        admix_within_group_order=None if args.admixture_within_group_order == "none" else args.admixture_within_group_order,
-        admix_threads=args.threads,
-        admix_gpus=args.num_gpus,
-        admix_batch_size=getattr(args, 'neuraladmixture_batch_size', None),
-        flashpca_output_dir=args.flashpca_output_dir,
     )
 
     print(f"Pipeline complete!")

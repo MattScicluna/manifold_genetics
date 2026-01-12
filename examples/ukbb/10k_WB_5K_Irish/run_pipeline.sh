@@ -58,6 +58,7 @@ NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 print_status "Calling generic subset pipeline..."
 echo ""
 
+# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
 bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
@@ -77,7 +78,8 @@ bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" \
     --threads "$THREADS" \
     --neuraladmixture-batch-size 400 \
     ${NUM_GPUS:+--num-gpus "$NUM_GPUS"} \
-    --skip-metrics
+    --skip-metrics \
+    "$@"
 
 echo ""
 print_success "UKBB 10K WB + 5K Irish pipeline complete!"

@@ -242,6 +242,58 @@ source .venv/bin/activate
 pip install -e . --force-reinstall --no-deps
 ```
 
+## Testing
+
+The project includes a comprehensive test suite with different test tiers:
+
+### Run Default Tests (Fast)
+
+Excludes slow admixture compute and network-dependent tests:
+
+```bash
+source .venv/bin/activate
+pytest -m "not slow and not network"
+```
+
+Expected runtime: < 1 minute
+
+### Run Integration Tests
+
+Includes multi-module integration tests with precomputed admixture:
+
+```bash
+pytest -m integration
+```
+
+Expected runtime: ~5 minutes
+
+### Run All Tests
+
+Includes slow tests (real admixture compute) and network tests:
+
+```bash
+pytest
+```
+
+Expected runtime: Varies based on data availability
+
+### Test Markers
+
+- `integration`: Multi-module tests with filesystem operations
+- `slow`: Tests requiring expensive computation (real admixture training)
+- `network`: Tests requiring network access (data downloads)
+
+### Test Structure
+
+```
+tests/
+├── test_integration.py           # Fast integration tests with fixtures
+├── test_hgdp_reproducibility.py  # HGDP+1KGP end-to-end tests
+├── test_*.py                     # Other unit/component tests
+└── fixtures/
+    └── admixture/                # Precomputed admixture for fast tests
+```
+
 ## For Other Datasets
 
 Look at examples/generic/README.md for a generic pipeline you can adapt to your own data.

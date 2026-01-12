@@ -1,13 +1,9 @@
 #!/bin/bash
 #
-# Run AoU 60K White Subset Analysis Pipeline
+# AoU 60K White Subset Pipeline
 #
-# This script runs the complete analysis pipeline:
-# 1. PCA (20 components)
-# 2. Neural Admixture (K=2-10)
-# 3. PHATE Embedding
-# 4. Visualization
-# 5. Metrics (optional)
+# This script runs the complete analysis pipeline for AoU 60K White subset
+# using the shared pipeline runner with subsample mode.
 #
 # Usage:
 #   bash examples/aou/60k_white/run_pipeline.sh
@@ -45,7 +41,7 @@ echo "  AoU 60K White Subset Pipeline"
 echo "========================================="
 echo ""
 
-# Paths
+# Define AoU-specific paths
 DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="${SCRIPT_DIR}/outputs"
 FIT_PLINK="${DATA_DIR}/fit_subset"
@@ -53,10 +49,8 @@ PROJECT_PLINK="${DATA_DIR}/project_subset"
 FIT_LABELS="${DATA_DIR}/fit_labels.csv"
 PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
 COLORMAP="${PROJECT_ROOT}/examples/colormaps/aou.json"
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
-NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 
-# Step 1: Check if data exists
+# Step 1: Check if data exists, prepare if needed
 print_status "Checking for processed data..."
 
 if [[ ! -f "${FIT_PLINK}.bed" ]] || [[ ! -f "${PROJECT_PLINK}.bed" ]]; then
@@ -125,52 +119,31 @@ echo "  Fit dataset: $FIT_SAMPLES samples"
 echo "  Project dataset: $PROJECT_SAMPLES samples"
 echo "  SNPs: $SNP_COUNT"
 
-# Step 5: Run the pipeline
-print_status "Running analysis pipeline..."
+# Step 5: Detect cluster environment
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-echo ""
-echo "Configuration:"
-echo "  Fit PLINK: ${FIT_PLINK}"
-echo "  Project PLINK: ${PROJECT_PLINK}"
-echo "  Fit labels: ${FIT_LABELS}"
-echo "  Project labels: ${PROJECT_LABELS}"
-echo "  Output directory: ${OUTPUT_DIR}"
-echo "  PCs: 20"
-echo "  K range: 2-10"
-echo "  Embedding: PHATE (knn=500, t=50)"
-echo "  Threads: ${THREADS}"
-if [[ -n "$NUM_GPUS" ]]; then
-    echo "  GPUs: ${NUM_GPUS}"
-fi
+# Step 6: Run shared pipeline with subsample mode
+print_status "Running pipeline with subsample mode..."
 echo ""
 
-# Build GPU args if available
-GPU_ARGS=""
-if [[ -n "$NUM_GPUS" ]] && [[ "$NUM_GPUS" -gt 0 ]]; then
-    GPU_ARGS="--num-gpus ${NUM_GPUS}"
-fi
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Run pipeline
-manifold-genetics pipeline \
-    --fit-plink ${FIT_PLINK} \
-    --project-plink ${PROJECT_PLINK} \
-    --fit-labels ${FIT_LABELS} \
-    --project-labels ${PROJECT_LABELS} \
-    --colormap ${COLORMAP} \
-    --output ${OUTPUT_DIR} \
+# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode subsample \
+    --fit-plink "$FIT_PLINK" \
+    --project-plink "$PROJECT_PLINK" \
+    --fit-labels "$FIT_LABELS" \
+    --project-labels "$PROJECT_LABELS" \
+    --colormap "$COLORMAP" \
+    --output "$OUTPUT_DIR" \
     --n-pcs 20 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
-    --embedding-input fit \
+    --embedding phate \
     --admixture-group-column race_ethnicity \
-    --threads ${THREADS} \
-    --neuraladmixture-batch-size 400 \
-    ${GPU_ARGS} \
-    --skip-metrics
+    --threads "$CLUSTER_CPUS" \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
+    "$@"
 
+# Summary
 echo ""
 print_success "Pipeline complete!"
 echo ""
