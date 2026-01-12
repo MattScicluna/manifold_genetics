@@ -395,14 +395,25 @@ source .venv/bin/activate
 pytest -m "not slow and not network"
 ```
 
-**Expected:**
-- **45 tests passing**
-- **10 tests failing** (pre-existing issues, not blockers)
+**Expected output:**
+```
+collected 57 items / 2 deselected / 55 selected
+
+...
+
+====== 10 failed, 45 passed, 2 deselected, 2 warnings in ~90s ======
+```
+
+**Summary:**
+- **45 tests PASSING** ✅ (core functionality working)
+- **10 tests FAILING** ⚠️ (pre-existing issues, documented below, not blockers)
 - **Runtime: ~90 seconds**
 
-This excludes:
-- Slow tests (real neural-admixture training)
-- Network-dependent tests (data downloads)
+The 10 failing tests are **expected** and don't affect core functionality. They are tracked separately and existed before the current refactoring.
+
+This test tier excludes:
+- Slow tests (real neural-admixture training, marked `@pytest.mark.slow`)
+- Network-dependent tests (data downloads, marked `@pytest.mark.network`)
 
 ### Integration Tests Only
 
