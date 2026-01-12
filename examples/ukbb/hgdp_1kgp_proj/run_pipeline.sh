@@ -59,6 +59,8 @@ print_status "CPUs: $CLUSTER_CPUS, GPUs: $CLUSTER_GPUS"
 echo ""
 
 # Call shared pipeline with projection mode
+# Note: Uses --mode projection (fit on HGDP, transform on UKBB)
+# No performance overrides needed - UKBB size fits projection mode defaults
 print_status "Running UKBB-HGDP cross-projection pipeline..."
 echo ""
 

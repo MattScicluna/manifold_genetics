@@ -130,14 +130,15 @@ echo "  Common SNPs: $SNP_COUNT SNPs"
 # Step 4: Detect cluster environment
 source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-# Step 5: Run shared pipeline with explicit parameters
-# Note: Using subsample-like parameters (knn=500, t=50, landmarking) despite
-# being a cross-projection, because AoU is a large dataset requiring landmarking
+# Step 5: Run shared pipeline with projection mode
+# Note: Uses --mode projection (fit on HGDP, transform on AoU)
+# Overrides knn/t/landmarking for large dataset performance
 print_status "Running cross-projection pipeline with landmarking..."
 echo ""
 
 # Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
 bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode projection \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
     --fit-labels "$HGDP_LABELS" \
@@ -152,10 +153,9 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --t 50 \
     --n-landmark 10000 \
     --random-landmarking \
-    --embedding-input project \
     --admixture-group-column race_ethnicity \
-    --threads "$CLUSTER_CPUS" \
     --neuraladmixture-batch-size 400 \
+    --threads "$CLUSTER_CPUS" \
     ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
     "$@"
 

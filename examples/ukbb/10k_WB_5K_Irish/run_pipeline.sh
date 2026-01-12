@@ -58,6 +58,8 @@ print_status "CPUs: $CLUSTER_CPUS, GPUs: $CLUSTER_GPUS"
 echo ""
 
 # Call shared pipeline with subsample mode
+# Note: Uses --mode subsample (fit on 5K Irish, transform on 5K Irish by default)
+# Gets landmarking by default - use --embedding-input both to project on full 10K
 print_status "Running UKBB pipeline with subsample mode..."
 echo ""
 

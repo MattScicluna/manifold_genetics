@@ -123,6 +123,8 @@ echo "  SNPs: $SNP_COUNT"
 source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
 # Step 6: Run shared pipeline with subsample mode
+# Note: Uses --mode subsample (fit on subset, transform on subset by default)
+# Gets landmarking by default - use --embedding-input both to project on full 60K
 print_status "Running pipeline with subsample mode..."
 echo ""
 

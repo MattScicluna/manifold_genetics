@@ -11,11 +11,20 @@
 # Usage:
 #   run_pipeline.sh --mode [projection|subsample] [OPTIONS]
 #
+# DESIGN PRINCIPLE:
+#   - Mode controls SEMANTIC BEHAVIOR (what to fit/transform on)
+#   - Scripts override PERFORMANCE PARAMETERS (knn/t/landmarking) based on dataset size
+#
 # Mode-specific defaults:
-#   projection: --embedding-input both --knn 100 --t 3
-#               (fit embedding on HGDP+1KGP, transform on UKBB/AoU)
+#   projection: --embedding-input both --knn 100 --t 3 (no landmarking)
+#               Semantic: fit embedding on reference, transform on target
+#               Performance: optimized for small-medium datasets (UKBB)
+#               Override for large datasets (AoU): add --knn 500 --t 50 --random-landmarking
+#
 #   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000 --random-landmarking
-#               (fit+transform on subsample only; use --embedding-input both to project on full cohort)
+#               Semantic: fit+transform on subsample only (cheaper)
+#               Performance: optimized for large datasets with landmarking
+#               Override to project on full cohort: add --embedding-input both (more expensive)
 #
 # All mode defaults can be overridden with explicit arguments.
 #
