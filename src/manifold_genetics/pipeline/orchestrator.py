@@ -60,6 +60,7 @@ class Pipeline:
         project_labels: Optional[Union[str, Path]] = None,
         fit_colormap: Optional[Union[str, Path]] = None,
         project_colormap: Optional[Union[str, Path]] = None,
+        admixture_backend: Optional[object] = None,
     ):
         """
         Initialize pipeline.
@@ -75,6 +76,8 @@ class Pipeline:
             project_labels: Optional override labels CSV for project dataset
             fit_colormap: Optional override colormap JSON for fit dataset
             project_colormap: Optional override colormap JSON for project dataset
+            admixture_backend: Optional AdmixtureBackend instance for testing
+                              (if None, uses neural-admixture via CLI)
 
         Note:
             Must provide either (labels + colormap) OR (fit_labels + project_labels + fit_colormap + project_colormap)
@@ -117,6 +120,9 @@ class Pipeline:
             self.project_colormap = Path(project_colormap)
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Store admixture backend (for testing)
+        self.admixture_backend = admixture_backend
 
     def run(
         self,
@@ -276,33 +282,57 @@ class Pipeline:
             admix_checkpoints_dir = admix_dir / "checkpoints"
             admix_checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
-            logger.info("Running admixture via CLI")
-            admix_cmd = [
-                "manifold-genetics",
-                "admixture",
-                "--fit-plink",
-                str(self.fit_plink_prefix),
-                "--project-plink",
-                str(self.transform_plink_prefix),
-                "--neuraladmixture-output-dir",
-                str(admix_checkpoints_dir),
-                "--fit-output",
-                str(admix_dir / "fit"),
-                "--project-output",
-                str(admix_dir / "transform"),
-                "--k-min",
-                str(k_min),
-                "--k-max",
-                str(k_max),
-            ]
-            if admix_threads:
-                admix_cmd.extend(["--threads", str(admix_threads)])
-            if admix_gpus is not None:
-                admix_cmd.extend(["--num-gpus", str(admix_gpus)])
-            if admix_batch_size is not None:
-                admix_cmd.extend(["--neuraladmixture-batch-size", str(admix_batch_size)])
+            # Use provided backend or fall back to CLI
+            if self.admixture_backend is not None:
+                logger.info("Running admixture with provided backend (testing mode)")
 
-            subprocess.run(admix_cmd, check=True)
+                # Fit on fit dataset
+                self.admixture_backend.fit(
+                    str(self.fit_plink_prefix),
+                    str(admix_checkpoints_dir),
+                    model_name="fit"
+                )
+
+                # Transform on both fit and project datasets
+                fit_q_files_from_backend = self.admixture_backend.fit_transform(
+                    str(self.fit_plink_prefix),
+                    str(admix_dir / "fit")
+                )
+
+                transform_q_files_from_backend = self.admixture_backend.transform(
+                    str(self.transform_plink_prefix),
+                    str(admix_dir / "transform")
+                )
+
+                logger.info(f"✓ Admixture complete using {type(self.admixture_backend).__name__}")
+            else:
+                logger.info("Running admixture via CLI")
+                admix_cmd = [
+                    "manifold-genetics",
+                    "admixture",
+                    "--fit-plink",
+                    str(self.fit_plink_prefix),
+                    "--project-plink",
+                    str(self.transform_plink_prefix),
+                    "--neuraladmixture-output-dir",
+                    str(admix_checkpoints_dir),
+                    "--fit-output",
+                    str(admix_dir / "fit"),
+                    "--project-output",
+                    str(admix_dir / "transform"),
+                    "--k-min",
+                    str(k_min),
+                    "--k-max",
+                    str(k_max),
+                ]
+                if admix_threads:
+                    admix_cmd.extend(["--threads", str(admix_threads)])
+                if admix_gpus is not None:
+                    admix_cmd.extend(["--num-gpus", str(admix_gpus)])
+                if admix_batch_size is not None:
+                    admix_cmd.extend(["--neuraladmixture-batch-size", str(admix_batch_size)])
+
+                subprocess.run(admix_cmd, check=True)
 
             fit_q_files = {k: admix_dir / f"fit.{k}.csv" for k in range(k_min, k_max + 1)}
             transform_q_files = {k: admix_dir / f"transform.{k}.csv" for k in range(k_min, k_max + 1)}

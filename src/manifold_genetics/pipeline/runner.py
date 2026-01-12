@@ -38,6 +38,7 @@ def run_pipeline(
     admix_gpus: Optional[int] = None,
     admix_batch_size: Optional[int] = None,
     neuraladmixture_output_dir: Optional[Union[str, Path]] = None,
+    admixture_backend: Optional[object] = None,
     # Embedding parameters
     embedding: str = "phate",
     embedding_params: Optional[Dict] = None,
@@ -79,6 +80,8 @@ def run_pipeline(
         admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
         admix_batch_size: Batch size for neural admixture training
         neuraladmixture_output_dir: Directory for neural admixture checkpoints
+        admixture_backend: Optional AdmixtureBackend instance for testing
+                          (if None, uses neural-admixture via CLI)
         embedding: Embedding method - 'phate', 'umap', 'tsne', or 'diffusion_map' (default: 'phate')
         embedding_params: Optional dictionary of embedding-specific parameters
         embedding_input: Which dataset to embed - 'fit', 'project', or 'both' (default: 'both')
@@ -178,6 +181,7 @@ def run_pipeline(
         project_labels=project_labels,
         fit_colormap=fit_colormap,
         project_colormap=project_colormap,
+        admixture_backend=admixture_backend,
     )
 
     # Run pipeline with all parameters
