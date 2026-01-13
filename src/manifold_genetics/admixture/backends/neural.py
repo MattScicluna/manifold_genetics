@@ -299,8 +299,12 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
                 logger.warning(f"Large dataset detected ({n_samples:,} samples)")
                 logger.warning("Neural-admixture loads entire dataset into memory during inference")
                 logger.warning("This may require >100GB RAM. Consider high-memory compute nodes.")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "Unable to estimate memory requirements from PLINK files; "
+                "proceeding without memory warning. Error: %s",
+                e,
+            )
 
         logger.info("Using CPU-only inference to avoid OOM from neural-admixture bug...")
 
