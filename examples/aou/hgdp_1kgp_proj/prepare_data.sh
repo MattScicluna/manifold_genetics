@@ -139,6 +139,41 @@ fi
 echo ""
 
 # =============================================================================
+# STEP 6.5: Use Filtered AoU Data
+#   The shared download script creates a filtered dataset (indels removed, QC applied)
+#   This reduces the dataset from ~1.7M SNPs to ~500K SNPs (>10x reduction)
+# =============================================================================
+echo "=========================================="
+echo "Step 6.5: Use Filtered AoU Data"
+echo "=========================================="
+echo ""
+
+# Create temp directory
+TEMP_DIR="${DATA_DIR}/temp"
+mkdir -p "$TEMP_DIR"
+
+# Check if filtered data exists from shared download
+AOU_FILTERED_SHARED="${SHARED_AOU_DIR}/extractedChrAll_filtered"
+
+if [[ -f "${AOU_FILTERED_SHARED}.bed" ]]; then
+    echo "  ✓ Using filtered AoU data from shared location"
+    AOU_INPUT="${AOU_FILTERED_SHARED}"
+    FILTERED_SNPS=$(wc -l < "${AOU_INPUT}.bim")
+    echo "    Filtered SNPs: $FILTERED_SNPS"
+    echo "    Location: ${AOU_FILTERED_SHARED}"
+else
+    echo "  ⚠ Filtered AoU data not found at: ${AOU_FILTERED_SHARED}"
+    echo "    Using unfiltered data from: ${SHARED_AOU_DIR}/extractedChrAll"
+    echo ""
+    echo "  Note: To use filtered data, run the shared download script:"
+    echo "    bash ${SCRIPT_DIR}/../shared/download_aou_data.sh"
+    echo ""
+    AOU_INPUT="${SHARED_AOU_DIR}/extractedChrAll"
+fi
+
+echo ""
+
+# =============================================================================
 # STEP 7-10: Standardize IDs, prune, intersect, and create subsets
 #   7) Standardize SNP IDs (pos:ref:alt)
 #   8) Apply reference LD prune list to HGDP and AoU
@@ -148,10 +183,6 @@ echo ""
 echo "=========================================="
 echo "Step 7: Standardize SNP IDs (pos:ref:alt)"
 echo "=========================================="
-
-# Create temp directory
-TEMP_DIR="${DATA_DIR}/temp"
-mkdir -p "$TEMP_DIR"
 
 # Find plink2
 echo "Looking for plink2..."
@@ -197,9 +228,10 @@ else
 fi
 
 # Standardize AoU (chr1:... → pos:ref:alt)
+# Uses filtered AoU data from Step 6.5
 if [[ ! -f "${TEMP_DIR}/aou_standardized.bed" ]]; then
-    echo "  Standardizing AoU dataset..."
-    ${PLINK2} --bfile ${SHARED_AOU_DIR}/extractedChrAll \
+    echo "  Standardizing AoU dataset (using filtered data)..."
+    ${PLINK2} --bfile ${AOU_INPUT} \
         --set-all-var-ids '@:#:$r:$a' \
         --new-id-max-allele-len 100 missing \
         --memory 100000 \
@@ -530,11 +562,13 @@ echo "Data Preparation Complete!"
 echo "=========================================="
 echo ""
 echo "✓ All steps completed successfully:"
-echo "  ✓ Step 2: HGDP+1KGP reference data downloaded and split"
-echo "  ✓ Step 3: AoU genotype data downloaded and split"
-echo "  ✓ Step 4: Metadata extraction (if CDR_VERSION set)"
-echo "  ✓ Step 5: Common SNPs found and fit/project subsets created"
-echo "  ✓ Step 6: Labels created for both datasets"
+echo "  ✓ Step 1-5: HGDP+1KGP reference data downloaded and split"
+echo "  ✓ Step 6: AoU genotype data downloaded and split"
+echo "  ✓ Step 6.5: AoU data filtered (indels removed, QC filters applied)"
+echo "  ✓ Step 7: SNP IDs standardized to pos:ref:alt format"
+echo "  ✓ Step 8: LD pruning applied"
+echo "  ✓ Step 9-10: Common SNPs found and fit/project subsets created"
+echo "  ✓ Step 11: Labels created for both datasets"
 echo ""
 echo "Generated files in ${DATA_DIR}:"
 echo "  📊 Processed PLINK data:"
@@ -546,12 +580,20 @@ echo "    - hgdp_labels.csv    (HGDP sample metadata)"
 echo "    - aou_labels.csv     (AoU sample metadata)"
 echo ""
 echo "  📋 Processing logs (in data/temp/):"
+echo "    - aou_filtered.{bed,bim,fam} (filtered AoU data, indels removed, QC applied)"
 echo "    - *_standardized.{bed,bim,fam} (SNP IDs standardized to pos:ref:alt)"
+echo "    - *_pruned.{bed,bim,fam} (LD-pruned data)"
 echo "    - common_snps.txt, flip_list.txt, exclude_list.txt"
 echo ""
 echo "Shared AoU data location:"
 echo "  ${SHARED_AOU_DIR}/"
 echo "  (This is shared across all AoU experiments)"
+echo ""
+echo "Key improvements:"
+echo "  • Early filtering reduces AoU SNPs by >10x (saves memory and time)"
+echo "  • Indels removed (keeps only biallelic SNPs A/T/G/C)"
+echo "  • Missing genotype filtering (<5% missingness)"
+echo "  • MAF filtering (>0.1% minor allele frequency)"
 echo ""
 echo "Next step: Run the cross-projection pipeline"
 echo "  bash run_pipeline.sh"
