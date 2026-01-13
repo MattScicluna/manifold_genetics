@@ -3,13 +3,14 @@
 # Shared Pipeline Runner
 #
 # This script provides a unified interface for running the manifold-genetics pipeline
-# across all datasets. It supports two pipeline modes:
+# across all datasets. It supports three pipeline modes:
 #
 #   1. projection: Cross-cohort projection (fit on one cohort, project on another)
 #   2. subsample: Within-cohort subsampling (fit on subsample, project on full dataset)
+#   3. transform: Fit and transform on target dataset only (no cross-projection)
 #
 # Usage:
-#   run_pipeline.sh --mode [projection|subsample] [OPTIONS]
+#   run_pipeline.sh --mode [projection|subsample|transform] [OPTIONS]
 #
 # DESIGN PRINCIPLE:
 #   - Mode controls SEMANTIC BEHAVIOR (what to fit/transform on)
@@ -18,13 +19,15 @@
 # Mode-specific defaults:
 #   projection: --embedding-input both --knn 100 --t 3 (no landmarking)
 #               Semantic: fit embedding on reference, transform on target
-#               Performance: optimized for small-medium datasets (UKBB)
-#               Override for large datasets (AoU): add --knn 500 --t 50 --random-landmarking
+#               Use Case: Projecting a large biobank (UKBB, AoU) onto a smaller reference dataset (HGDP+1KGP)
 #
 #   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000 --random-landmarking
-#               Semantic: fit+transform on subsample only (cheaper)
-#               Performance: optimized for large datasets with landmarking
-#               Override to project on full cohort: add --embedding-input both (more expensive)
+#               Semantic: fit+transform on subsampled fit set only (cheaper)
+#               Use Case: visualize large biobanks (UKBB, AoU) without any reference set.
+#
+#   transform:  --embedding-input project --knn 100 --t 3 (no landmarking)
+#               Semantic: fit+transform embedding on target dataset only
+#               Use case: Use when transform set contains fit set, so no need to re-project (HGDP+1KGP)
 #
 # All mode defaults can be overridden with explicit arguments.
 #
@@ -76,6 +79,18 @@ set_subsample_mode_defaults() {
     N_LANDMARK="${N_LANDMARK:-10000}"
     RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-true}"
     NEURALADMIXTURE_BATCH_SIZE="${NEURALADMIXTURE_BATCH_SIZE:-400}"
+    EMBED_BATCH_SIZE="${EMBED_BATCH_SIZE:-}"
+}
+
+set_transform_mode_defaults() {
+    # Fit and transform on target dataset only: when transform set contains fit set
+    # No cross-projection needed - just fit+transform on the same target dataset
+    EMBEDDING_INPUT="${EMBEDDING_INPUT:-project}"
+    KNN="${KNN:-100}"
+    T="${T:-3}"
+    N_LANDMARK="${N_LANDMARK:-}"
+    RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-false}"
+    NEURALADMIXTURE_BATCH_SIZE="${NEURALADMIXTURE_BATCH_SIZE:-}"
     EMBED_BATCH_SIZE="${EMBED_BATCH_SIZE:-}"
 }
 
@@ -240,7 +255,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             print_error "Unknown option: $1"
-            echo "Usage: $0 --mode [projection|subsample] --fit-plink PATH --project-plink PATH [OPTIONS]"
+            echo "Usage: $0 --mode [projection|subsample|transform] --fit-plink PATH --project-plink PATH [OPTIONS]"
             exit 1
             ;;
     esac
@@ -251,11 +266,13 @@ if [[ "$MODE" == "projection" ]]; then
     set_projection_mode_defaults
 elif [[ "$MODE" == "subsample" ]]; then
     set_subsample_mode_defaults
+elif [[ "$MODE" == "transform" ]]; then
+    set_transform_mode_defaults
 elif [[ -z "$MODE" ]]; then
     print_warning "No --mode specified. Using explicit parameters or falling back to projection mode defaults."
     set_projection_mode_defaults
 else
-    print_error "Invalid mode: $MODE (must be 'projection' or 'subsample')"
+    print_error "Invalid mode: $MODE (must be 'projection', 'subsample', or 'transform')"
     exit 1
 fi
 
@@ -275,7 +292,7 @@ if [[ -z "$FIT_PLINK" ]] || [[ -z "$PROJECT_PLINK" ]] || [[ -z "$OUTPUT" ]]; the
     print_error "Missing required arguments"
     echo ""
     echo "Usage: $0 \\"
-    echo "    --mode [projection|subsample] \\"
+    echo "    --mode [projection|subsample|transform] \\"
     echo "    --fit-plink PATH \\"
     echo "    --project-plink PATH \\"
     echo "    --output PATH \\"
