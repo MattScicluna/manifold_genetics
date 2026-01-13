@@ -62,20 +62,36 @@ def test_python_api_pca_fit_and_project(monkeypatch, tmp_path):
     assert list(df_proj.columns)[:2] == ["sample_id", "dim_1"]
     assert list(df_both.columns)[:2] == ["sample_id", "dim_1"]
     assert any(call[0] == "fit" and call[1] == Path("fit_prefix") for call in calls)
-    assert any(call[0] == "project" and call[1] == Path("project_prefix") for call in calls)
+    # Check that project was called with project_prefix (comparing just the stem/name)
+    assert any(call[0] == "project" and Path(call[1]).name == "project_prefix" for call in calls)
 
 
 def test_python_api_admixture_fit_and_project(monkeypatch, tmp_path):
     calls = []
 
     # Bypass filesystem checks and heavy binaries
+    # Patch in multiple places since backend calls it too
+    def fake_validate(prefix):
+        return Path(prefix)
+
     monkeypatch.setattr(
-        "manifold_genetics.admixture.neural.validate_plink_files",
-        lambda prefix: Path(prefix),
+        "manifold_genetics.utils.io.validate_plink_files",
+        fake_validate,
     )
     monkeypatch.setattr(
+        "manifold_genetics.admixture.backends.neural.validate_plink_files",
+        fake_validate,
+    )
+    def fake_get_sample_ids(prefix):
+        return ["s1", "s2"]
+
+    monkeypatch.setattr(
         "manifold_genetics.utils.io.get_sample_ids_from_plink",
-        lambda prefix: ["s1", "s2"],
+        fake_get_sample_ids,
+    )
+    monkeypatch.setattr(
+        "manifold_genetics.admixture.backends.neural.get_sample_ids_from_plink",
+        fake_get_sample_ids,
     )
 
     def fake_train(self, plink_prefix, output_dir, model_name):
@@ -106,9 +122,11 @@ def test_python_api_admixture_fit_and_project(monkeypatch, tmp_path):
             q_files[k] = q
         return q_files
 
-    monkeypatch.setattr(NeuralAdmixture, "_train", fake_train, raising=False)
-    monkeypatch.setattr(NeuralAdmixture, "_infer", fake_infer, raising=False)
-    monkeypatch.setattr(NeuralAdmixture, "_infer_on_training_data", fake_infer_train, raising=False)
+    # Patch backend methods (NeuralAdmixture now uses backend)
+    from manifold_genetics.admixture.backends import NeuralAdmixtureBackend
+    monkeypatch.setattr(NeuralAdmixtureBackend, "_train", fake_train, raising=False)
+    monkeypatch.setattr(NeuralAdmixtureBackend, "_infer", fake_infer, raising=False)
+    monkeypatch.setattr(NeuralAdmixtureBackend, "_infer_on_training_data", fake_infer_train, raising=False)
 
     admix = NeuralAdmixture(k_min=2, k_max=3, force=True, threads=1, num_gpus=0)
 

@@ -1,13 +1,9 @@
 #!/bin/bash
 #
-# Run AoU 60K White Subset Analysis Pipeline
+# AoU 60K White Subset Pipeline
 #
-# This script runs the complete analysis pipeline:
-# 1. PCA (20 components)
-# 2. Neural Admixture (K=2-10)
-# 3. PHATE Embedding
-# 4. Visualization
-# 5. Metrics (optional)
+# This is a minimal wrapper that sets AoU-specific paths and calls
+# the generic subsample template.
 #
 # Usage:
 #   bash examples/aou/60k_white/run_pipeline.sh
@@ -15,168 +11,46 @@
 
 set -e
 
-# Get script directory and project root
+# Get directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ANSI colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# ============================================================================
+# AoU-Specific Configuration
+# ============================================================================
 
-# Helper functions
-print_status() {
-    echo -e "${BLUE}==>${NC} $1"
-}
+# IMPORTANT: Update these paths to point to your actual data location
+# These are placeholder paths - replace with your real data paths before running
 
-print_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
+# For development: Uncomment and set your actual paths here
+# export DATA_DIR="/path/to/your/aou/data"
+# export FIT_PLINK="/path/to/aou_60k_white_fit"
+# export PROJECT_PLINK="/path/to/aou_60k_white_project"
+# export FIT_LABELS="/path/to/fit_labels.csv"
+# export PROJECT_LABELS="/path/to/project_labels.csv"
+# export COLORMAP="${PROJECT_ROOT}/examples/colormaps/aou.json"
+# export OUTPUT_DIR="/path/to/output"
 
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
+# Default paths (relative to script directory) - will work if data is in ./data/
+export DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
+export OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
+export FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
+export PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
+export FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
+export PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
+export COLORMAP="${COLORMAP:-${PROJECT_ROOT}/examples/colormaps/aou.json}"
 
-# Print header
-echo ""
-echo "========================================="
-echo "  AoU 60K White Subset Pipeline"
-echo "========================================="
-echo ""
+# Set pipeline parameters
+export N_PCS=20
+export K_MIN=2
+export K_MAX=10
+export EMBEDDING="phate"
+export ADMIXTURE_GROUP_COLUMN="race_ethnicity"
 
-# Paths
-DATA_DIR="${SCRIPT_DIR}/data"
-OUTPUT_DIR="${SCRIPT_DIR}/outputs"
-FIT_PLINK="${DATA_DIR}/fit_subset"
-PROJECT_PLINK="${DATA_DIR}/project_subset"
-FIT_LABELS="${DATA_DIR}/fit_labels.csv"
-PROJECT_LABELS="${DATA_DIR}/project_labels.csv"
-COLORMAP="${PROJECT_ROOT}/examples/colormaps/aou.json"
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
-NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
+# ============================================================================
+# Call Generic Subsample Template
+# ============================================================================
 
-# Step 1: Check if data exists
-print_status "Checking for processed data..."
-
-if [[ ! -f "${FIT_PLINK}.bed" ]] || [[ ! -f "${PROJECT_PLINK}.bed" ]]; then
-    print_warning "Processed data not found, running prepare_data.sh..."
-    bash "${SCRIPT_DIR}/prepare_data.sh"
-else
-    print_success "Processed data found"
-fi
-
-# Step 2: Verify required files exist
-print_status "Verifying required files..."
-
-REQUIRED_FILES=(
-    "${FIT_PLINK}.bed"
-    "${FIT_PLINK}.bim"
-    "${FIT_PLINK}.fam"
-    "${PROJECT_PLINK}.bed"
-    "${PROJECT_PLINK}.bim"
-    "${PROJECT_PLINK}.fam"
-    "${FIT_LABELS}"
-    "${PROJECT_LABELS}"
-)
-
-MISSING_FILES=()
-for file in "${REQUIRED_FILES[@]}"; do
-    if [[ ! -f "$file" ]]; then
-        MISSING_FILES+=("$file")
-    fi
-done
-
-if [[ ${#MISSING_FILES[@]} -gt 0 ]]; then
-    echo "Missing required files:"
-    for file in "${MISSING_FILES[@]}"; do
-        echo "  - $file"
-    done
-    echo ""
-    echo "Please run prepare_data.sh first"
-    exit 1
-fi
-
-print_success "All required files found"
-
-# Step 3: Check virtual environment
-print_status "Checking virtual environment..."
-
-if [[ -z "$VIRTUAL_ENV" ]]; then
-    print_warning "Virtual environment not activated"
-    echo ""
-    echo "Please activate the virtual environment first:"
-    echo "  cd ${PROJECT_ROOT}"
-    echo "  source .venv/bin/activate"
-    echo ""
-    exit 1
-fi
-
-print_success "Virtual environment active: $VIRTUAL_ENV"
-
-# Step 4: Get data statistics
-print_status "Getting data statistics..."
-
-FIT_SAMPLES=$(wc -l < "${FIT_PLINK}.fam")
-PROJECT_SAMPLES=$(wc -l < "${PROJECT_PLINK}.fam")
-SNP_COUNT=$(wc -l < "${FIT_PLINK}.bim")
-
-echo "  Fit dataset: $FIT_SAMPLES samples"
-echo "  Project dataset: $PROJECT_SAMPLES samples"
-echo "  SNPs: $SNP_COUNT"
-
-# Step 5: Run the pipeline
-print_status "Running analysis pipeline..."
-
-echo ""
-echo "Configuration:"
-echo "  Fit PLINK: ${FIT_PLINK}"
-echo "  Project PLINK: ${PROJECT_PLINK}"
-echo "  Fit labels: ${FIT_LABELS}"
-echo "  Project labels: ${PROJECT_LABELS}"
-echo "  Output directory: ${OUTPUT_DIR}"
-echo "  PCs: 20"
-echo "  K range: 2-10"
-echo "  Embedding: PHATE (knn=500, t=50)"
-echo "  Threads: ${THREADS}"
-if [[ -n "$NUM_GPUS" ]]; then
-    echo "  GPUs: ${NUM_GPUS}"
-fi
-echo ""
-
-# Build GPU args if available
-GPU_ARGS=""
-if [[ -n "$NUM_GPUS" ]] && [[ "$NUM_GPUS" -gt 0 ]]; then
-    GPU_ARGS="--num-gpus ${NUM_GPUS}"
-fi
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Run pipeline
-manifold-genetics pipeline \
-    --fit-plink ${FIT_PLINK} \
-    --project-plink ${PROJECT_PLINK} \
-    --fit-labels ${FIT_LABELS} \
-    --project-labels ${PROJECT_LABELS} \
-    --colormap ${COLORMAP} \
-    --output ${OUTPUT_DIR} \
-    --n-pcs 20 \
-    --k-min 2 --k-max 10 \
-    --embedding phate --knn 500 --t 50 --n-landmark 10000 --random-landmarking \
-    --embedding-input fit \
-    --admixture-group-column race_ethnicity \
-    --threads ${THREADS} \
-    --neuraladmixture-batch-size 400 \
-    ${GPU_ARGS} \
-    --skip-metrics
-
-echo ""
-print_success "Pipeline complete!"
-echo ""
-echo "Results saved to: ${OUTPUT_DIR}"
-echo "  - PCA: outputs/pca/"
-echo "  - Admixture: outputs/admixture/"
-echo "  - Embeddings: outputs/embeddings/"
-echo "  - Figures: outputs/figures/"
-echo ""
+# Note: Subsample mode uses random landmarking by default
+# Note: "$@" passes through any additional arguments (e.g., --skip-metrics)
+bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" "$@"

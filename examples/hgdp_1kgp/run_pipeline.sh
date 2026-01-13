@@ -5,7 +5,7 @@
 # This script:
 # 1. Downloads data if needed
 # 2. Processes data if needed
-# 3. Runs the full analysis pipeline with PCA and embedding visualization
+# 3. Runs the full analysis pipeline using the shared runner
 #
 # Usage:
 #   bash examples/hgdp_1kgp/run_pipeline.sh
@@ -58,8 +58,6 @@ PROJECT_PLINK="${DATA_DIR}/project_subset"
 LABELS_CSV="${DATA_DIR}/hgdp_project_labels.csv"
 COLORMAP_JSON="${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json"
 GEOGRAPHIC_CSV="${DATA_DIR}/hgdp_project_geographic.csv"
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
-NUM_GPUS="${SLURM_GPUS_ON_NODE:-}"
 
 # Step 1: Check if raw data exists
 print_status "Checking for raw data..."
@@ -74,89 +72,20 @@ fi
 # Step 2: Check if processed data exists
 print_status "Checking for processed data..."
 
-if [[ ! -f "${TRANSFORM_PLINK}.bed" ]] || [[ ! -f "${LABELS_CSV}" ]]; then
+if [[ ! -f "${PROJECT_PLINK}.bed" ]] || [[ ! -f "${LABELS_CSV}" ]]; then
     print_warning "Processed data not found, creating subsets..."
     bash "${SCRIPT_DIR}/prepare_data.sh"
 else
     print_success "Processed data found"
 fi
 
-# Step 3: Verify all required files exist
-print_status "Verifying required files..."
+# Step 3: Detect cluster environment
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-REQUIRED_FILES=(
-    "${FIT_PLINK}.bed"
-    "${FIT_PLINK}.bim"
-    "${FIT_PLINK}.fam"
-    "${PROJECT_PLINK}.bed"
-    "${PROJECT_PLINK}.bim"
-    "${PROJECT_PLINK}.fam"
-    "${LABELS_CSV}"
-    "${COLORMAP_JSON}"
-)
-
-MISSING_FILES=()
-for file in "${REQUIRED_FILES[@]}"; do
-    if [[ ! -f "$file" ]]; then
-        MISSING_FILES+=("$file")
-    fi
-done
-
-if [[ ${#MISSING_FILES[@]} -gt 0 ]]; then
-    echo "Missing required files:"
-    for file in "${MISSING_FILES[@]}"; do
-        echo "  - $file"
-    done
-    echo ""
-    echo "Please run the data download and preparation scripts:"
-    echo "  bash examples/hgdp_1kgp/download_data.sh"
-    echo "  bash examples/hgdp_1kgp/prepare_data.sh"
-    exit 1
-fi
-
-print_success "All required files found"
-
-# Step 4: Check if virtual environment is activated
-print_status "Checking virtual environment..."
-
-if [[ -z "$VIRTUAL_ENV" ]]; then
-    print_warning "Virtual environment not activated"
-    echo ""
-    echo "Please activate the virtual environment first:"
-    echo "  cd ${PROJECT_ROOT}"
-    echo "  source .venv/bin/activate"
-    echo ""
-    exit 1
-fi
-
-print_success "Virtual environment active: $VIRTUAL_ENV"
-
-# Step 5: Run the pipeline
-print_status "Running complete analysis pipeline..."
-
-echo ""
-echo "Command:"
-echo "manifold-genetics pipeline \\"
-echo "    --fit-plink ${FIT_PLINK} \\"
-echo "    --project-plink ${PROJECT_PLINK} \\"
-echo "    --labels ${LABELS_CSV} \\"
-echo "    --colormap ${COLORMAP_JSON} \\"
-echo "    --geographic ${GEOGRAPHIC_CSV} \\"
-echo "    --output ${OUTPUT_DIR} \\"
-echo "    --n-pcs 50 \\"
-echo "    --k-min 2 --k-max 10 \\"
-echo "    --embedding phate --knn 100 --t 3 \\"
-echo "    --embedding-input project \\"
-echo "    --admixture-group-column Genetic_region_merged \\"
-echo "    --threads ${THREADS}"
-[ -n "$NUM_GPUS" ] && echo "    --num-gpus ${NUM_GPUS}"
-echo ""
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Run pipeline
-manifold-genetics pipeline \
+# Step 4: Run shared pipeline
+# Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode projection \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
     --labels "$LABELS_CSV" \
@@ -165,19 +94,13 @@ manifold-genetics pipeline \
     --output "$OUTPUT_DIR" \
     --n-pcs 50 \
     --k-min 2 --k-max 10 \
-    --embedding phate --knn 100 --t 3 \
-    --embedding-input project \
+    --embedding phate \
     --admixture-group-column Genetic_region_merged \
-    --threads "$THREADS" \
-    ${NUM_GPUS:+--num-gpus "$NUM_GPUS"}
+    --threads "$CLUSTER_CPUS" \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
+    "$@"
 
-# Step 6: Summary
-echo ""
-echo "========================================="
-print_success "Pipeline analysis complete!"
-echo "========================================="
-echo ""
-echo "Output directory: ${OUTPUT_DIR}"
+# Summary
 echo ""
 echo "Generated files:"
 echo "  📊 PCA (fit/transform workflow):"

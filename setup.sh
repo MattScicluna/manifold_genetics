@@ -80,7 +80,7 @@ mkdir -p bin
 # Download plink2
 if [ ! -f "bin/plink2" ]; then
     echo "Downloading plink2..."
-    PLINK_URL="https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20251205.zip"
+    PLINK_URL="https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20260110.zip"
 
     # Try wget first (better for binary downloads), then curl
     if command -v wget &> /dev/null; then
@@ -165,7 +165,7 @@ echo "   cd $(pwd)"
 echo "   source .venv/bin/activate"
 echo ""
 echo "3. Run tests:"
-echo "   pytest"
+echo "   pytest -m 'not slow and not network'"
 echo ""
 echo "4. Download and process example data:"
 echo "   bash examples/hgdp_1kgp/download_data.sh"

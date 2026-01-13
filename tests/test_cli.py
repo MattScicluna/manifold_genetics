@@ -46,6 +46,7 @@ def test_cli_pca_fit_project(monkeypatch, tmp_path):
         n_pcs=2,
         force=False,
         model_dir=None,
+        flashpca_output_dir=None,  # Added missing attribute
         verbose=False,
     )
 
@@ -62,8 +63,8 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
     calls = []
 
     class FakeAdmix:
-        def __init__(self, k_min, k_max, force, threads, num_gpus):
-            calls.append(("init", k_min, k_max, force, threads, num_gpus))
+        def __init__(self, k_min, k_max, force, threads, num_gpus, batch_size=None):
+            calls.append(("init", k_min, k_max, force, threads, num_gpus, batch_size))
 
         def fit(self, prefix, output_dir=None, model_name=None):
             calls.append(("fit", prefix, output_dir, model_name))
@@ -100,6 +101,8 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
         force=False,
         threads=None,
         num_gpus=None,
+        neuraladmixture_output_dir=None,  # Added missing attribute
+        neuraladmixture_batch_size=None,  # Added missing attribute
         verbose=False,
     )
 
@@ -160,6 +163,8 @@ def test_cli_embed_fit_project(monkeypatch, tmp_path):
         n_neighbors=15,
         min_dist=0.1,
         perplexity=30.0,
+        n_landmark=None,  # Added missing attribute
+        random_landmarking=False,  # Added missing attribute
         verbose=False,
     )
 
