@@ -84,8 +84,9 @@ source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
 # Step 4: Run shared pipeline
 # Note: "$@" passes through any additional arguments (e.g., --skip-admixture for testing)
+# Using "transform" mode: fit+transform PHATE on the 4094 transform set (which includes the fit set)
 bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
-    --mode projection \
+    --mode transform \
     --fit-plink "$FIT_PLINK" \
     --project-plink "$PROJECT_PLINK" \
     --labels "$LABELS_CSV" \
