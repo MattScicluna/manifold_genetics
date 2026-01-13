@@ -35,7 +35,7 @@ source .venv/bin/activate
 
 ### Step 2: Verify Installation (Optional but Recommended)
 
-Run the test suite to confirm everything is working:
+Run the test suite tso confirm everything is working:
 
 ```bash
 source .venv/bin/activate
@@ -234,52 +234,41 @@ HGDP00002,0.234,-0.567,...
 
 ## Running on Your Own Data
 
-You can run the pipeline on your own PLINK files with minimal setup. All you need are:
+### Quick Start (3 Steps)
 
-1. **PLINK files** (`.bed/.bim/.fam`) - binary genotype data
-2. **Labels CSV** - sample metadata with a `sample_id` column
-3. **Colormap JSON** - colors for visualization
-4. (Optional) **Geographic coordinates CSV** - for geographic preservation metrics
+1. **Prepare your files:**
+   - PLINK files (`.bed/.bim/.fam`) - binary genotype data
+   - Labels CSV - sample metadata with `sample_id` column
+   - Colormap JSON - hex colors for each label value
 
-### Minimal Example
+2. **Activate environment:**
+   ```bash
+   source .venv/bin/activate
+   ```
 
-```bash
-source .venv/bin/activate
+3. **Run the pipeline:**
+   ```bash
+   manifold-genetics pipeline \
+       --fit-plink data/your_data \
+       --project-plink data/your_data \
+       --labels data/labels.csv \
+       --colormap data/colormap.json \
+       --output results/
+   ```
 
-manifold-genetics pipeline \
-    --fit-plink data/your_fit_subset \
-    --project-plink data/your_project_subset \
-    --labels data/your_labels.csv \
-    --colormap data/your_colormap.json \
-    --output results/ \
-    --n-pcs 50 \
-    --k-min 2 --k-max 10 \
-    --embedding phate --knn 100
-```
+**That's it!** Results (PCA, admixture, embeddings, figures, metrics) saved to `results/`.
 
-### Required File Formats
+### File Format Requirements
 
-#### 1. PLINK Files
-Your PLINK files should be in binary format. Specify just the prefix (no extensions):
-```bash
---fit-plink data/my_data        # Looks for my_data.bed, my_data.bim, my_data.fam
-```
-
-#### 2. Labels CSV
-Must contain a `sample_id` column matching your PLINK `.fam` file, plus any categorical labels:
-
+**Labels CSV** - Must have `sample_id` column matching PLINK `.fam` file:
 ```csv
-sample_id,Population,Region,Sex
-SAMPLE001,Han,EastAsia,Male
-SAMPLE002,Yoruba,Africa,Female
-SAMPLE003,French,Europe,Male
+sample_id,Population,Region
+SAMPLE001,Han,EastAsia
+SAMPLE002,Yoruba,Africa
+SAMPLE003,French,Europe
 ```
 
-**Important:** Sample IDs must match exactly between PLINK `.fam` file and labels CSV.
-
-#### 3. Colormap JSON
-Maps each label value to a hex color. Create one key per label column:
-
+**Colormap JSON** - Maps label values to hex colors:
 ```json
 {
   "Population": {
@@ -295,58 +284,64 @@ Maps each label value to a hex color. Create one key per label column:
 }
 ```
 
-#### 4. Geographic Coordinates CSV (Optional)
-For computing geographic preservation metrics:
+**PLINK files** - Specify prefix only (tool finds `.bed/.bim/.fam`):
+```bash
+--fit-plink data/my_data  # Looks for my_data.bed, my_data.bim, my_data.fam
+```
 
+**Geographic coordinates** (optional, for metrics):
 ```csv
 sample_id,latitude,longitude
 SAMPLE001,39.9042,116.4074
 SAMPLE002,6.5244,3.3792
-SAMPLE003,48.8566,2.3522
 ```
 
-### Complete Custom Data Example
+### Common Options
 
+**Adjust parameters:**
 ```bash
-source .venv/bin/activate
-
 manifold-genetics pipeline \
-    --fit-plink /path/to/your/fit_data \
-    --project-plink /path/to/your/project_data \
-    --labels /path/to/your/labels.csv \
-    --colormap /path/to/your/colormap.json \
-    --geographic-coords /path/to/your/coords.csv \
-    --output /path/to/output_directory/ \
-    --n-pcs 50 \
-    --k-min 2 --k-max 10 \
-    --embedding phate --knn 100 --t 3 \
-    --threads 8
+    --fit-plink data/your_data \
+    --project-plink data/your_data \
+    --labels data/labels.csv \
+    --colormap data/colormap.json \
+    --output results/ \
+    --n-pcs 50 \                    # Number of PCA components (default: 50)
+    --k-min 2 --k-max 10 \          # Admixture K range (default: 2-10)
+    --embedding phate \              # Method: phate, umap, tsne, diffusion_map
+    --knn 100 --t 3 \               # Embedding parameters
+    --threads 8 \                   # CPU threads
+    --num-gpus 1                    # Use GPU for admixture
 ```
 
-### Tips for Your Data
+**For large datasets (>10K samples):**
+```bash
+# Use landmarking for computational efficiency
+manifold-genetics pipeline ... \
+    --n-landmark 10000 \
+    --random-landmarking \
+    --neuraladmixture-batch-size 400
+```
 
-**Data preparation:**
-- Use LD-pruned SNPs (e.g., `plink2 --indep-pairwise 50 5 0.2`)
-- Filter by MAF (e.g., `--maf 0.01`)
-- Remove related individuals for the fit subset
-- QC filter before analysis
-
-**For large cohorts (>10,000 samples):**
-- Consider subsampling for the fit subset (~3,000 unrelated samples is often sufficient)
-- Project all samples onto the fit subset
-- Use landmarking for embeddings: `--n-landmark 1000`
-
-**Computational resources:**
-- PCA: Very fast (~minutes for 10K samples)
-- Admixture: Slowest step (~hours, use `--num-gpus 1` if available)
-- Embeddings: Moderate (~minutes to hours depending on method and sample size)
-
-**Skip steps you don't need:**
+**Skip steps:**
 ```bash
 manifold-genetics pipeline ... \
-    --skip-admixture \          # Skip ancestry analysis
-    --skip-metrics              # Skip preservation metrics
+    --skip-admixture \      # Skip ancestry analysis
+    --skip-metrics          # Skip preservation metrics
 ```
+
+### Data Preparation Tips
+
+**Before running the pipeline:**
+- LD-prune your SNPs: `plink2 --indep-pairwise 50 5 0.2`
+- Filter by MAF: `--maf 0.01`
+- Remove related individuals from fit subset
+- Apply standard QC filters
+
+**For large cohorts:**
+- Use ~3,000 unrelated samples for fit subset
+- Project remaining samples onto fit models
+- Expected runtimes: PCA (minutes), Admixture (hours), Embeddings (minutes-hours)
 
 ## Embedding Methods
 
@@ -384,110 +379,29 @@ pip install -e . --force-reinstall --no-deps
 
 ## Testing
 
-The project includes a comprehensive test suite organized into three tiers:
-
-### Quick Verification (Recommended)
-
-Run fast tests to verify your installation is working correctly:
+Verify your installation with the test suite:
 
 ```bash
 source .venv/bin/activate
 pytest -m "not slow and not network"
 ```
 
-**Expected output:**
-```
-collected 57 items / 2 deselected / 55 selected
+**Expected:** ~45 tests passing in ~90 seconds (excludes slow admixture tests and network-dependent tests).
 
-...
-
-====== 10 failed, 45 passed, 2 deselected, 2 warnings in ~90s ======
-```
-
-**Summary:**
-- **45 tests PASSING** ✅ (core functionality working)
-- **10 tests FAILING** ⚠️ (pre-existing issues, documented below, not blockers)
-- **Runtime: ~90 seconds**
-
-The 10 failing tests are **expected** and don't affect core functionality. They are tracked separately and existed before the current refactoring.
-
-This test tier excludes:
-- Slow tests (real neural-admixture training, marked `@pytest.mark.slow`)
-- Network-dependent tests (data downloads, marked `@pytest.mark.network`)
-
-### Integration Tests Only
-
-Test end-to-end pipeline workflows with precomputed admixture:
-
+Run all tests:
 ```bash
-source .venv/bin/activate
-pytest -m integration -v
-```
-
-**Expected:**
-- **6 integration tests passing**
-- **Runtime: ~75 seconds**
-
-These tests validate:
-- Full pipeline execution (PCA → Admixture → Embedding)
-- Backend injection system
-- Output file structure and formats
-
-### Run All Tests (Development)
-
-Include slow tests and network tests:
-
-```bash
-source .venv/bin/activate
 pytest -v
 ```
-
-**Expected runtime:** Varies (adds slow admixture compute tests if marked to run)
-
-### Test Organization
-
-```
-tests/
-├── unit/                          # Fast, isolated component tests
-│   ├── test_admixture_backends.py # Backend interface tests (9 tests)
-│   ├── test_embeddings.py         # Embedding methods (13 tests)
-│   ├── test_io.py                 # File I/O (7 tests)
-│   └── test_visualization.py      # Plotting (4 tests)
-├── integration/                    # Multi-component pipeline tests
-│   ├── test_generic_pipeline.py   # Full pipeline with backends (3 tests)
-│   ├── test_integration.py        # Fixture validation (3 tests)
-│   └── test_hgdp_reproducibility.py # HGDP+1KGP tests (2 tests)
-├── slow/                          # Expensive computation tests
-│   └── (optional real admixture tests)
-└── fixtures/
-    ├── admixture/                 # Precomputed Q matrices for K=2,3
-    └── golden/                    # Golden outputs for regression testing
-```
-
-### Test Markers
-
-- **`integration`**: Multi-module tests requiring filesystem operations
-- **`slow`**: Tests with expensive computation (real admixture, >5 min runtime)
-- **`network`**: Tests requiring internet access (data downloads)
-
-### Known Test Failures
-
-The 10 failing tests are **pre-existing issues** that don't affect core functionality:
-- 3 CLI tests: Missing argparse attributes in test mocks
-- 5 geographic metrics tests: Missing longitude/latitude in test fixtures
-- 2 API tests: Module attribute errors from refactoring
-
-These failures existed before the current refactoring and are tracked separately.
 
 ## Additional Examples
 
 Beyond the HGDP+1KGP example, this repository includes:
 
-- **`examples/generic/`** - Template scripts for adapting to your own data
+- **`examples/generic/`** - Template scripts for running on your own data (copy and customize)
 - **`examples/ukbb/`** - UK Biobank pipeline scripts (requires UKBB access)
 - **`examples/aou/`** - All of Us pipeline scripts (requires AoU access)
 
-See individual README files in each directory for usage instructions.
+These examples demonstrate the DRY architecture where biobank-specific wrappers call shared generic templates.
 
 ## License
 
