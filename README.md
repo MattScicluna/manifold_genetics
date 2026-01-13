@@ -26,7 +26,7 @@ bash setup.sh
 This will:
 - Create virtual environment in `.venv/`
 - Install all Python dependencies
-- **Download plink2 and flashPCA** to `bin/` (~22MB total)
+- **Download plink2 and flashPCA** to `bin/` (~28MB total)
 
 After setup, always activate the virtual environment:
 ```bash
@@ -42,7 +42,7 @@ source .venv/bin/activate
 pytest -m "not slow and not network"
 ```
 
-Expected: **45 tests passing** in ~90 seconds. See [Testing](#testing) section for details.
+Expected: **55 tests passing** in ~150 seconds. See [Testing](#testing) section for details.
 
 ### Step 3: Run HGDP+1KGP Example
 
@@ -54,7 +54,7 @@ The package includes a complete working example using HGDP+1000 Genomes Project 
 cd /path/to/manifold_genetics
 source .venv/bin/activate
 
-# Download data (~500MB, requires internet)
+# Download data (~200MB, requires internet)
 bash examples/hgdp_1kgp/download_data.sh
 
 # Prepare data for analysis
@@ -68,7 +68,7 @@ bash examples/hgdp_1kgp/prepare_data.sh
 bash examples/hgdp_1kgp/run_pipeline.sh
 ```
 
-**Runtime:** ~30 minutes on CPU (faster with GPU for admixture)
+**Runtime:** ~A couple of hours on CPU (faster with GPU for admixture)
 
 **Outputs** saved to `examples/hgdp_1kgp/outputs/`:
 - `pca/` - PCA coordinates (fit: 3,400 samples, project: 4,094 samples)
@@ -103,6 +103,7 @@ manifold-genetics pipeline \
     --embedding-input project \
     --threads 8
 # Optional: --num-gpus 1
+# Optional: --geographic examples/hgdp_1kgp/data/hgdp_project_geographic.csv
 ```
 
 Skip steps as needed:
@@ -191,15 +192,16 @@ manifold-genetics metrics-admixture \
 
 ## Data Formats
 
-### Input
+### Input Files
 
-**PLINK files**: Binary format (`.bed`, `.bim`, `.fam`). Specify the prefix:
+**PLINK files** (`.bed`, `.bim`, `.fam`) - Binary genotype data:
 ```bash
---fit-plink examples/hgdp_1kgp/data/fit_subset       # PCA/admixture reference set (training)
---project-plink examples/hgdp_1kgp/data/project_subset  # projection/application set
+--fit-plink data/fit_subset          # Training/reference set
+--project-plink data/project_subset  # Projection/application set
 ```
+Specify the prefix only (tool appends `.bed/.bim/.fam` automatically).
 
-**Labels CSV**: Must have `sample_id` column + label columns:
+**Labels CSV** - Sample metadata with `sample_id` column:
 ```csv
 sample_id,Population,Genetic_region
 HGDP00001,Yoruba,Africa
@@ -207,30 +209,53 @@ HGDP00002,Yoruba,Africa
 HGDP00003,Han,EastAsia
 ```
 
-**Colormap JSON**: Maps labels to hex colors:
+**Colormap JSON** - Maps label values to hex colors:
 ```json
 {
   "Population": {
     "Yoruba": "#FF0000",
-    "Han": "#00FF00",
-    "French": "#0000FF"
+    "Han": "#00FF00"
   },
   "Genetic_region": {
     "Africa": "#FF6B6B",
-    "EastAsia": "#4ECDC4",
-    "Europe": "#45B7D1"
+    "EastAsia": "#4ECDC4"
   }
 }
 ```
 
-### Output
+**Geographic coordinates CSV** (optional, for metrics) - Sample locations:
+```csv
+sample_id,latitude,longitude
+HGDP00001,6.5244,3.3792
+HGDP00002,39.9042,116.4074
+```
+Required columns: `sample_id`, `latitude`, `longitude`. Used with `--geographic` flag for geographic preservation metrics.
 
-All embeddings use "manylatents" format:
+### Output Files
+
+**PCA** (`fit_pca_N.csv`, `transform_pca_N.csv`) - Principal component coordinates:
 ```csv
 sample_id,dim_1,dim_2,...,dim_N
-HGDP00001,0.123,-0.456,...
-HGDP00002,0.234,-0.567,...
+HGDP00001,0.073308,0.212584,-0.012974,...
+HGDP00002,0.073231,0.210938,-0.012130,...
 ```
+Where N = `--n-pcs` (default 50). Each row is a sample, columns are PC coordinates.
+
+**Admixture** (`fit.K.csv`, `transform.K.csv`) - Ancestry proportions:
+```csv
+sample_id,component_1,component_2,...,component_K
+HGDP00001,0.9996,0.0004
+HGDP00002,0.9996,0.0004
+```
+Where K = number of ancestral populations (from `--k-min` to `--k-max`). Components sum to 1.0 per sample.
+
+**Embeddings** (e.g., `phate_2d.csv`) - Low-dimensional manifold coordinates:
+```csv
+sample_id,dim_1,dim_2
+HGDP00001,0.123,-0.456
+HGDP00002,0.234,-0.567
+```
+Typically 2D for visualization (controlled by `--n-components`).
 
 ## Running on Your Own Data
 
@@ -239,7 +264,7 @@ HGDP00002,0.234,-0.567,...
 1. **Prepare your files:**
    - PLINK files (`.bed/.bim/.fam`) - binary genotype data
    - Labels CSV - sample metadata with `sample_id` column
-   - Colormap JSON - hex colors for each label value
+   - Colormap JSON - hex colors for each column label from labels CSV file. NOTE: ordering of labels is plotting order for subsequent plots.
 
 2. **Activate environment:**
    ```bash
@@ -258,43 +283,7 @@ HGDP00002,0.234,-0.567,...
 
 **That's it!** Results (PCA, admixture, embeddings, figures, metrics) saved to `results/`.
 
-### File Format Requirements
-
-**Labels CSV** - Must have `sample_id` column matching PLINK `.fam` file:
-```csv
-sample_id,Population,Region
-SAMPLE001,Han,EastAsia
-SAMPLE002,Yoruba,Africa
-SAMPLE003,French,Europe
-```
-
-**Colormap JSON** - Maps label values to hex colors:
-```json
-{
-  "Population": {
-    "Han": "#E74C3C",
-    "Yoruba": "#3498DB",
-    "French": "#2ECC71"
-  },
-  "Region": {
-    "EastAsia": "#FF6B6B",
-    "Africa": "#4ECDC4",
-    "Europe": "#95E1D3"
-  }
-}
-```
-
-**PLINK files** - Specify prefix only (tool finds `.bed/.bim/.fam`):
-```bash
---fit-plink data/my_data  # Looks for my_data.bed, my_data.bim, my_data.fam
-```
-
-**Geographic coordinates** (optional, for metrics):
-```csv
-sample_id,latitude,longitude
-SAMPLE001,39.9042,116.4074
-SAMPLE002,6.5244,3.3792
-```
+See [Data Formats](#data-formats) section above for detailed file format specifications.
 
 ### Common Options
 
@@ -311,7 +300,8 @@ manifold-genetics pipeline \
     --embedding phate \              # Method: phate, umap, tsne, diffusion_map
     --knn 100 --t 3 \               # Embedding parameters
     --threads 8 \                   # CPU threads
-    --num-gpus 1                    # Use GPU for admixture
+    --num-gpus 1 \                  # Use GPU for admixture
+    --geographic data/coords.csv    # Optional: for geographic metrics
 ```
 
 **For large datasets (>10K samples):**
@@ -378,15 +368,6 @@ pip install -e . --force-reinstall --no-deps
 ```
 
 ## Testing
-
-Verify your installation with the test suite:
-
-```bash
-source .venv/bin/activate
-pytest -m "not slow and not network"
-```
-
-**Expected:** ~45 tests passing in ~90 seconds (excludes slow admixture tests and network-dependent tests).
 
 Run all tests:
 ```bash
