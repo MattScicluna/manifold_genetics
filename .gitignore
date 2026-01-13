@@ -136,3 +136,6 @@ Thumbs.db
 # Project-specific (keep local only)
 CLAUDE.md
 docs/
+examples/hgdp_1kgp/run_pipeline_batch.sh
+examples/hgdp_1kgp/package_data_for_dropbox.sh
+examples/_shared/submit_batch.sh
