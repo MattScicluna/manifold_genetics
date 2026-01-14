@@ -83,33 +83,48 @@ echo ""
 # =============================================================================
 # STEP 1: All of Us Genotype Download (V8)
 # =============================================================================
-print_status "Downloading All of Us Genotype Data (V8)..."
+print_status "Checking All of Us Genotype Data (V8)..."
 
-# 1. Verify bucket access
-if [[ -n "${GOOGLE_PROJECT}" ]]; then
-    gsutil -u "${GOOGLE_PROJECT}" ls -lh "${AOU_BUCKET_ROOT_V8}/arrays.*" || print_warning "Could not list bucket"
-else
-    print_warning "GOOGLE_PROJECT not set, gsutil commands may fail"
-fi
-
-# 2. Download PLINK files
+# Check if all files already exist
+ALL_FILES_EXIST=true
 for ext in bed bim fam; do
-    SRC="${AOU_BUCKET_ROOT_V8}/arrays.${ext}"
-    DEST="${AOU_DIR}/extractedChrAll.${ext}"
-
-    if [[ ! -f "${DEST}" ]]; then
-        echo "Downloading ${ext} file..."
-        if [[ -n "${GOOGLE_PROJECT}" ]]; then
-            gsutil -u "${GOOGLE_PROJECT}" cp -r "${SRC}" "${DEST}"
-        else
-            echo "  ERROR: GOOGLE_PROJECT not set. Please set it:"
-            echo "    export GOOGLE_PROJECT=your-project-id"
-            exit 1
-        fi
-    else
-        echo "  ${ext} file already exists"
+    if [[ ! -f "${AOU_DIR}/extractedChrAll.${ext}" ]]; then
+        ALL_FILES_EXIST=false
+        break
     fi
 done
+
+if [[ "$ALL_FILES_EXIST" == "true" ]]; then
+    echo "  ✓ All PLINK files already exist, skipping download"
+else
+    print_status "Downloading missing PLINK files..."
+
+    # Verify bucket access only if we need to download
+    if [[ -n "${GOOGLE_PROJECT}" ]]; then
+        gsutil -u "${GOOGLE_PROJECT}" ls -lh "${AOU_BUCKET_ROOT_V8}/arrays.*" || print_warning "Could not list bucket"
+    else
+        print_warning "GOOGLE_PROJECT not set, gsutil commands may fail"
+    fi
+
+    # Download PLINK files
+    for ext in bed bim fam; do
+        SRC="${AOU_BUCKET_ROOT_V8}/arrays.${ext}"
+        DEST="${AOU_DIR}/extractedChrAll.${ext}"
+
+        if [[ ! -f "${DEST}" ]]; then
+            echo "Downloading ${ext} file..."
+            if [[ -n "${GOOGLE_PROJECT}" ]]; then
+                gsutil -u "${GOOGLE_PROJECT}" cp -r "${SRC}" "${DEST}"
+            else
+                echo "  ERROR: GOOGLE_PROJECT not set. Please set it:"
+                echo "    export GOOGLE_PROJECT=your-project-id"
+                exit 1
+            fi
+        else
+            echo "  ${ext} file already exists"
+        fi
+    done
+fi
 
 # 3. Validate file sizes
 print_status "Validating downloaded files..."
