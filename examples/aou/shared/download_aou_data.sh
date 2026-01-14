@@ -163,6 +163,11 @@ echo ""
 # =============================================================================
 if [[ "${SKIP_METADATA}" == "skip" ]]; then
     print_status "Skipping metadata extraction (SKIP_METADATA flag set)"
+# Check if metadata files already exist
+elif [[ -f "${META_DIR}/DemographicData.tsv" ]] && [[ -f "${META_DIR}/SocioeconomicZipCodes.tsv" ]]; then
+    print_status "Metadata files already exist, skipping extraction"
+    echo "  ✓ ${META_DIR}/DemographicData.tsv"
+    echo "  ✓ ${META_DIR}/SocioeconomicZipCodes.tsv"
 else
     print_status "Extracting AoU Metadata..."
 
