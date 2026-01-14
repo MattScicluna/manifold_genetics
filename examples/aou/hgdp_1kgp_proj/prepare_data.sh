@@ -173,22 +173,47 @@ fi
 echo ""
 
 # =============================================================================
-# STEP 9: Check overlap after filtering
+# STEP 9: Filter HGDP with same thresholds
 # =============================================================================
 echo "=========================================="
-echo "Step 9: Check Overlap (after filtering)"
+echo "Step 9: Filter HGDP Data"
 echo "=========================================="
 
-awk '{print $1":"$4}' "${AOU_INPUT}.bim" | sort > "${TEMP_DIR}/aou_filtered_pos.txt"
-OVERLAP_AFTER=$(comm -12 "${TEMP_DIR}/aou_filtered_pos.txt" "${TEMP_DIR}/hgdp_pos.txt" | wc -l)
-echo "  Overlap after filtering: ${OVERLAP_AFTER}"
+HGDP_FILTERED="${TEMP_DIR}/hgdp_filtered"
+if [[ ! -f "${HGDP_FILTERED}.bed" ]]; then
+    echo "  Filtering HGDP (MAF > 0.01, missing < 0.01)..."
+    ${PLINK2} --bfile ${REF_DIR}/extractedChrAllUnpruned \
+        --maf 0.01 \
+        --geno 0.01 \
+        --output-chr chrM \
+        --memory 100000 \
+        --make-bed \
+        --out ${HGDP_FILTERED}
+    HGDP_FILTERED_SNPS=$(wc -l < "${HGDP_FILTERED}.bim")
+    echo "  HGDP SNPs after filtering: ${HGDP_FILTERED_SNPS}"
+else
+    echo "  Using existing filtered HGDP data"
+fi
 echo ""
 
 # =============================================================================
-# STEP 10: Standardize SNP IDs (pos:ref:alt)
+# STEP 10: Check overlap after filtering both datasets
 # =============================================================================
 echo "=========================================="
-echo "Step 10: Standardize SNP IDs (pos:ref:alt)"
+echo "Step 10: Check Overlap (after filtering)"
+echo "=========================================="
+
+awk '{print $1":"$4}' "${AOU_INPUT}.bim" | sort > "${TEMP_DIR}/aou_filtered_pos.txt"
+awk '{print $1":"$4}' "${HGDP_FILTERED}.bim" | sort > "${TEMP_DIR}/hgdp_filtered_pos.txt"
+OVERLAP_AFTER=$(comm -12 "${TEMP_DIR}/aou_filtered_pos.txt" "${TEMP_DIR}/hgdp_filtered_pos.txt" | wc -l)
+echo "  Overlap after filtering both: ${OVERLAP_AFTER}"
+echo ""
+
+# =============================================================================
+# STEP 11: Standardize SNP IDs (pos:ref:alt)
+# =============================================================================
+echo "=========================================="
+echo "Step 11: Standardize SNP IDs (pos:ref:alt)"
 echo "=========================================="
 
 # Find plink2
@@ -224,8 +249,8 @@ echo "Standardizing SNP IDs to pos:ref:alt format..."
 
 # Standardize HGDP (chr1:... → pos:ref:alt)
 if [[ ! -f "${TEMP_DIR}/hgdp_standardized.bed" ]]; then
-    echo "  Standardizing HGDP dataset..."
-    ${PLINK2} --bfile ${REF_DIR}/extractedChrAllUnpruned \
+    echo "  Standardizing HGDP dataset (using filtered data)..."
+    ${PLINK2} --bfile ${HGDP_FILTERED} \
         --set-all-var-ids '@:#:$r:$a' \
         --new-id-max-allele-len 100 missing \
         --make-bed \
@@ -235,7 +260,6 @@ else
 fi
 
 # Standardize AoU (chr1:... → pos:ref:alt)
-# Uses filtered AoU data from Step 6.5
 if [[ ! -f "${TEMP_DIR}/aou_standardized.bed" ]]; then
     echo "  Standardizing AoU dataset (using filtered data)..."
     ${PLINK2} --bfile ${AOU_INPUT} \
@@ -253,7 +277,7 @@ echo "  ✓ SNP IDs standardized (originals untouched)"
 # LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
 echo ""
 echo "=========================================="
-echo "Step 11: LD prune reference and apply to AoU"
+echo "Step 12: LD prune reference and apply to AoU"
 echo "=========================================="
 
 # LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
@@ -575,11 +599,12 @@ echo "  ✓ Step 1-5: HGDP+1KGP reference data downloaded and split"
 echo "  ✓ Step 6: AoU genotype data downloaded and split"
 echo "  ✓ Step 7: Overlap before filtering (${OVERLAP_BEFORE} positions)"
 echo "  ✓ Step 8: AoU data filtered"
-echo "  ✓ Step 9: Overlap after filtering (${OVERLAP_AFTER} positions)"
-echo "  ✓ Step 10: SNP IDs standardized"
-echo "  ✓ Step 11: LD pruning applied"
-echo "  ✓ Step 12-13: Common SNPs found and subsets created"
-echo "  ✓ Step 14: Labels created"
+echo "  ✓ Step 9: HGDP data filtered"
+echo "  ✓ Step 10: Overlap after filtering both (${OVERLAP_AFTER} positions)"
+echo "  ✓ Step 11: SNP IDs standardized"
+echo "  ✓ Step 12: LD pruning applied"
+echo "  ✓ Step 13-14: Common SNPs found and subsets created"
+echo "  ✓ Step 15: Labels created"
 echo ""
 echo "Generated files in ${DATA_DIR}:"
 echo "  📊 Processed PLINK data:"
