@@ -173,6 +173,37 @@ fi
 echo ""
 
 # =============================================================================
+# Find plink2 (needed for filtering and downstream steps)
+# =============================================================================
+echo "Looking for plink2..."
+PLINK2=""
+
+# Check bin/ directory first (preferred)
+if [[ -f "${PROJECT_ROOT}/bin/plink2" ]]; then
+    PLINK2="${PROJECT_ROOT}/bin/plink2"
+    echo "  ✓ Using plink2 from bin/plink2"
+# Check if plink2 is in PATH
+elif command -v plink2 &> /dev/null; then
+    PLINK2="plink2"
+    echo "  ✓ Using plink2 from PATH"
+else
+    echo "  ✗ plink2 not found!"
+    echo ""
+    echo "Please ensure plink2 is available via one of:"
+    echo "  1. Run setup.sh to download to bin/plink2 (recommended)"
+    echo "  2. Add plink2 to your PATH"
+    echo ""
+    exit 1
+fi
+
+# Verify plink2 works
+if ! ${PLINK2} --version &> /dev/null; then
+    echo "  ✗ plink2 found but not executable!"
+    exit 1
+fi
+echo ""
+
+# =============================================================================
 # STEP 9: Filter HGDP with same thresholds
 # =============================================================================
 echo "=========================================="
@@ -215,34 +246,6 @@ echo ""
 echo "=========================================="
 echo "Step 11: Standardize SNP IDs (pos:ref:alt)"
 echo "=========================================="
-
-# Find plink2
-echo "Looking for plink2..."
-PLINK2=""
-
-# Check bin/ directory first (preferred)
-if [[ -f "${PROJECT_ROOT}/bin/plink2" ]]; then
-    PLINK2="${PROJECT_ROOT}/bin/plink2"
-    echo "  ✓ Using plink2 from bin/plink2"
-# Check if plink2 is in PATH
-elif command -v plink2 &> /dev/null; then
-    PLINK2="plink2"
-    echo "  ✓ Using plink2 from PATH"
-else
-    echo "  ✗ plink2 not found!"
-    echo ""
-    echo "Please ensure plink2 is available via one of:"
-    echo "  1. Run setup.sh to download to bin/plink2 (recommended)"
-    echo "  2. Add plink2 to your PATH"
-    echo ""
-    exit 1
-fi
-
-# Verify plink2 works
-if ! ${PLINK2} --version &> /dev/null; then
-    echo "  ✗ plink2 found but not executable!"
-    exit 1
-fi
 
 # Standardize SNP IDs to pos:ref:alt format (handles chr naming differences)
 echo "Standardizing SNP IDs to pos:ref:alt format..."
