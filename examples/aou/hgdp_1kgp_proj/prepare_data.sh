@@ -31,9 +31,9 @@ CDR_VERSION="${WORKSPACE_CDR:-}"
 # Target: ~150-200K SNPs after all filtering
 MAF_THRESHOLD="${MAF_THRESHOLD:-0.001}"   # Minor allele frequency (remove rare variants)
 GENO_THRESHOLD="${GENO_THRESHOLD:-0.01}"  # Missing genotype rate (remove low-quality SNPs)
-LD_WINDOW="${LD_WINDOW:-50}"              # LD pruning window size (kb)
-LD_STEP="${LD_STEP:-10}"                  # LD pruning step size
-LD_R2="${LD_R2:-0.2}"                     # LD pruning r² threshold (higher = more SNPs retained)
+LD_WINDOW="${LD_WINDOW:-150}"             # LD pruning window size (kb)
+LD_STEP="${LD_STEP:-1}"                   # LD pruning step size
+LD_R2="${LD_R2:-0.05}"                    # LD pruning r² threshold (higher = more SNPs retained)
 
 # Directories
 REF_DIR="${DATA_DIR}/1KGPHGDP"
