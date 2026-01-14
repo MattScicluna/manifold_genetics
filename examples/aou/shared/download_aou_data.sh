@@ -1,12 +1,15 @@
 #!/bin/bash
 #
-# Shared script for downloading and processing All of Us genotype data
+# Shared script for downloading All of Us genotype data
 #
 # This script:
 # 1. Downloads AoU V8 PLINK files from GCS bucket
 # 2. Fixes FAM file format (adds Family ID)
 # 3. Splits by chromosome (1-22)
 # 4. Optionally extracts metadata from BigQuery
+#
+# NOTE: Filtering (MAF, geno, indel removal) is done in prepare_data.sh
+#       to allow each experiment to tune its own parameters.
 #
 # Usage:
 #   bash examples/aou/shared/download_aou_data.sh [SKIP_METADATA]
@@ -78,35 +81,50 @@ echo "  Skip metadata: ${SKIP_METADATA:-'No'}"
 echo ""
 
 # =============================================================================
-# STEP 1: All of Us Genotype Processing (V8)
+# STEP 1: All of Us Genotype Download (V8)
 # =============================================================================
-print_status "Downloading All of Us Genotype Data (V8)..."
+print_status "Checking All of Us Genotype Data (V8)..."
 
-# 1. Verify bucket access
-if [[ -n "${GOOGLE_PROJECT}" ]]; then
-    gsutil -u "${GOOGLE_PROJECT}" ls -lh "${AOU_BUCKET_ROOT_V8}/arrays.*" || print_warning "Could not list bucket"
-else
-    print_warning "GOOGLE_PROJECT not set, gsutil commands may fail"
-fi
-
-# 2. Download PLINK files
+# Check if all files already exist
+ALL_FILES_EXIST=true
 for ext in bed bim fam; do
-    SRC="${AOU_BUCKET_ROOT_V8}/arrays.${ext}"
-    DEST="${AOU_DIR}/extractedChrAll.${ext}"
-
-    if [[ ! -f "${DEST}" ]]; then
-        echo "Downloading ${ext} file..."
-        if [[ -n "${GOOGLE_PROJECT}" ]]; then
-            gsutil -u "${GOOGLE_PROJECT}" cp -r "${SRC}" "${DEST}"
-        else
-            echo "  ERROR: GOOGLE_PROJECT not set. Please set it:"
-            echo "    export GOOGLE_PROJECT=your-project-id"
-            exit 1
-        fi
-    else
-        echo "  ${ext} file already exists"
+    if [[ ! -f "${AOU_DIR}/extractedChrAll.${ext}" ]]; then
+        ALL_FILES_EXIST=false
+        break
     fi
 done
+
+if [[ "$ALL_FILES_EXIST" == "true" ]]; then
+    echo "  ✓ All PLINK files already exist, skipping download"
+else
+    print_status "Downloading missing PLINK files..."
+
+    # Verify bucket access only if we need to download
+    if [[ -n "${GOOGLE_PROJECT}" ]]; then
+        gsutil -u "${GOOGLE_PROJECT}" ls -lh "${AOU_BUCKET_ROOT_V8}/arrays.*" || print_warning "Could not list bucket"
+    else
+        print_warning "GOOGLE_PROJECT not set, gsutil commands may fail"
+    fi
+
+    # Download PLINK files
+    for ext in bed bim fam; do
+        SRC="${AOU_BUCKET_ROOT_V8}/arrays.${ext}"
+        DEST="${AOU_DIR}/extractedChrAll.${ext}"
+
+        if [[ ! -f "${DEST}" ]]; then
+            echo "Downloading ${ext} file..."
+            if [[ -n "${GOOGLE_PROJECT}" ]]; then
+                gsutil -u "${GOOGLE_PROJECT}" cp -r "${SRC}" "${DEST}"
+            else
+                echo "  ERROR: GOOGLE_PROJECT not set. Please set it:"
+                echo "    export GOOGLE_PROJECT=your-project-id"
+                exit 1
+            fi
+        else
+            echo "  ${ext} file already exists"
+        fi
+    done
+fi
 
 # 3. Validate file sizes
 print_status "Validating downloaded files..."
@@ -137,7 +155,7 @@ else
     echo "  AoU data already split by chromosome"
 fi
 
-print_success "AoU genotype data ready"
+print_success "AoU genotype data downloaded and split"
 echo ""
 
 # =============================================================================
@@ -145,6 +163,11 @@ echo ""
 # =============================================================================
 if [[ "${SKIP_METADATA}" == "skip" ]]; then
     print_status "Skipping metadata extraction (SKIP_METADATA flag set)"
+# Check if metadata files already exist
+elif [[ -f "${META_DIR}/DemographicData.tsv" ]] && [[ -f "${META_DIR}/SocioeconomicZipCodes.tsv" ]]; then
+    print_status "Metadata files already exist, skipping extraction"
+    echo "  ✓ ${META_DIR}/DemographicData.tsv"
+    echo "  ✓ ${META_DIR}/SocioeconomicZipCodes.tsv"
 else
     print_status "Extracting AoU Metadata..."
 
@@ -241,10 +264,13 @@ echo ""
 print_success "All of Us data download complete!"
 echo ""
 echo "Output files:"
-echo "  - ${AOU_DIR}/extractedChrAll.{bed,bim,fam}  (full dataset)"
+echo "  - ${AOU_DIR}/extractedChrAll.{bed,bim,fam}  (full dataset, ~1.7M SNPs)"
 echo "  - ${AOU_DIR}/extractedChr{1..22}.{bed,bim,fam}  (split by chromosome)"
 if [[ "${SKIP_METADATA}" != "skip" ]] && [[ -n "${CDR_VERSION}" ]]; then
     echo "  - ${META_DIR}/DemographicData.tsv  (demographics)"
     echo "  - ${META_DIR}/SocioeconomicZipCodes.tsv  (socioeconomics)"
 fi
+echo ""
+echo "Next step: Run prepare_data.sh in your experiment directory"
+echo "  This will filter both AoU and reference data with experiment-specific parameters."
 echo ""

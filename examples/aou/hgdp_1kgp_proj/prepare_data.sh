@@ -3,10 +3,11 @@
 # Prepare AoU-HGDP cross-projection data
 # This script integrates the aou_pipeline steps to:
 # 1. Download/prepare HGDP+1KGP reference data
-# 2. Download/prepare AoU genotype data
-# 3. Query AoU metadata
-# 4. Find common SNPs and create fit/project subsets
-# 5. Create labels and colormaps
+# 2. Download AoU genotype data (via shared script)
+# 3. Filter both datasets (MAF, geno, indel removal)
+# 4. LD prune and find common SNPs
+# 5. Create fit/project subsets
+# 6. Create labels and colormaps
 #
 
 set -e
@@ -24,6 +25,16 @@ REF_DATA_URL="gs://fc-secure-47ccf5a8-b9ba-460a-aa03-dea8d260953b/Data/1KGPHGDP.
 GOOGLE_PROJECT="${GOOGLE_PROJECT:-}"
 CDR_VERSION="${WORKSPACE_CDR:-}"
 
+# =============================================================================
+# Filtering parameters (adjust to control final SNP count)
+# =============================================================================
+# Target: ~150-200K SNPs after all filtering
+MAF_THRESHOLD="${MAF_THRESHOLD:-0.001}"   # Minor allele frequency (remove rare variants)
+GENO_THRESHOLD="${GENO_THRESHOLD:-0.01}"  # Missing genotype rate (remove low-quality SNPs)
+LD_WINDOW="${LD_WINDOW:-150}"             # LD pruning window size (kb)
+LD_STEP="${LD_STEP:-1}"                   # LD pruning step size
+LD_R2="${LD_R2:-0.05}"                    # LD pruning r² threshold (higher = more SNPs retained)
+
 # Directories
 REF_DIR="${DATA_DIR}/1KGPHGDP"
 SHARED_AOU_DIR="${SCRIPT_DIR}/../shared/data/AllofUs_V8"
@@ -38,6 +49,11 @@ echo "  CPU cores: ${CPU_CORES}"
 echo "  Google project: ${GOOGLE_PROJECT:-'Not set'}"
 echo "  CDR version: ${CDR_VERSION:-'Not set'}"
 echo ""
+echo "Filtering parameters:"
+echo "  MAF threshold: ${MAF_THRESHOLD}"
+echo "  Geno threshold: ${GENO_THRESHOLD}"
+echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
+echo ""
 
 # Create directories
 mkdir -p "${DATA_DIR}" "${REF_DIR}"
@@ -48,10 +64,9 @@ mkdir -p "${DATA_DIR}" "${REF_DIR}"
 #   2) Extract
 #   3) Fix BIM chromosome prefixes
 #   4) Split by chromosome
-#   5) LD prune
 # =============================================================================
 echo "=========================================="
-echo "Step 1-5: HGDP+1KGP Reference Data"
+echo "Step 1-4: HGDP+1KGP Reference Data"
 echo "=========================================="
 
 TAR_PATH="${DATA_DIR}/1KGPHGDP.tar.gz"
@@ -100,10 +115,10 @@ echo "  ✓ HGDP+1KGP reference data ready"
 echo ""
 
 # =============================================================================
-# STEP 6: All of Us Data Download (shared)
+# STEP 5: All of Us Data Download (shared)
 # =============================================================================
 echo "=========================================="
-echo "Step 6: All of Us Data Download"
+echo "Step 5: All of Us Data Download"
 echo "=========================================="
 echo ""
 
@@ -118,16 +133,6 @@ for ext in bed bim fam; do
     fi
 done
 
-# Check for all chromosome splits (1-22)
-if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
-    for chr in {1..22}; do
-        if [[ ! -f "${SHARED_AOU_DIR}/extractedChr${chr}.bed" ]]; then
-            AOU_DATA_COMPLETE=false
-            break
-        fi
-    done
-fi
-
 if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
     echo "✓ Shared AoU data already downloaded at: ${SHARED_AOU_DIR}"
     echo "  Skipping download (shared across all AoU experiments)"
@@ -139,21 +144,25 @@ fi
 echo ""
 
 # =============================================================================
-# STEP 7-10: Standardize IDs, prune, intersect, and create subsets
-#   7) Standardize SNP IDs (pos:ref:alt)
-#   8) Apply reference LD prune list to HGDP and AoU
-#   9) Find SNP intersection & check alleles
-#  10) Create intersected PLINKs and final subsets
+# STEP 6: Check overlap before filtering
 # =============================================================================
 echo "=========================================="
-echo "Step 7: Standardize SNP IDs (pos:ref:alt)"
+echo "Step 6: Check Overlap (before filtering)"
 echo "=========================================="
 
-# Create temp directory
 TEMP_DIR="${DATA_DIR}/temp"
 mkdir -p "$TEMP_DIR"
 
-# Find plink2
+AOU_UNFILTERED="${SHARED_AOU_DIR}/extractedChrAll"
+awk '{print $1":"$4}' "${AOU_UNFILTERED}.bim" | sort > "${TEMP_DIR}/aou_unfiltered_pos.txt"
+awk '{print $1":"$4}' "${REF_DIR}/extractedChrAllUnpruned.bim" | sort > "${TEMP_DIR}/hgdp_pos.txt"
+OVERLAP_BEFORE=$(comm -12 "${TEMP_DIR}/aou_unfiltered_pos.txt" "${TEMP_DIR}/hgdp_pos.txt" | wc -l)
+echo "  Overlap before filtering: ${OVERLAP_BEFORE}"
+echo ""
+
+# =============================================================================
+# Find plink2 (needed for filtering and downstream steps)
+# =============================================================================
 echo "Looking for plink2..."
 PLINK2=""
 
@@ -180,14 +189,101 @@ if ! ${PLINK2} --version &> /dev/null; then
     echo "  ✗ plink2 found but not executable!"
     exit 1
 fi
+echo ""
+
+# =============================================================================
+# STEP 7: Filter AoU Data (indel removal + QC)
+# =============================================================================
+echo "=========================================="
+echo "Step 7: Filter AoU Data"
+echo "=========================================="
+
+AOU_FILTERED="${TEMP_DIR}/aou_filtered"
+if [[ ! -f "${AOU_FILTERED}.bed" ]]; then
+    echo "  Filtering AoU (MAF > ${MAF_THRESHOLD}, missing < ${GENO_THRESHOLD}, no indels)..."
+
+    # Get initial SNP count
+    INITIAL_AOU_SNPS=$(wc -l < "${AOU_UNFILTERED}.bim")
+    echo "  Initial AoU SNPs: $INITIAL_AOU_SNPS"
+
+    # Step 1: Remove indels (keep only single-nucleotide biallelic SNPs)
+    echo "  Removing indels (keeping only A/T/G/C SNPs)..."
+    awk 'length($5) == 1 && length($6) == 1 && $5 ~ /^[ATGC]$/ && $6 ~ /^[ATGC]$/ {print $2}' "${AOU_UNFILTERED}.bim" > "${TEMP_DIR}/aou_snps_no_indels.txt"
+    NO_INDEL_SNPS=$(wc -l < "${TEMP_DIR}/aou_snps_no_indels.txt")
+    echo "    SNPs after indel removal: $NO_INDEL_SNPS"
+
+    # Step 2: Apply quality filters with plink2
+    ${PLINK2} --bfile ${AOU_UNFILTERED} \
+        --extract ${TEMP_DIR}/aou_snps_no_indels.txt \
+        --geno ${GENO_THRESHOLD} \
+        --maf ${MAF_THRESHOLD} \
+        --output-chr chrM \
+        --memory 100000 \
+        --make-bed \
+        --out ${AOU_FILTERED}
+
+    AOU_FILTERED_SNPS=$(wc -l < "${AOU_FILTERED}.bim")
+    echo "  AoU SNPs after filtering: ${AOU_FILTERED_SNPS}"
+else
+    echo "  Using existing filtered AoU data"
+    AOU_FILTERED_SNPS=$(wc -l < "${AOU_FILTERED}.bim")
+    echo "  Filtered AoU SNPs: ${AOU_FILTERED_SNPS}"
+fi
+echo ""
+
+# =============================================================================
+# STEP 8: Filter HGDP Data
+# =============================================================================
+echo "=========================================="
+echo "Step 8: Filter HGDP Data"
+echo "=========================================="
+
+HGDP_FILTERED="${TEMP_DIR}/hgdp_filtered"
+if [[ ! -f "${HGDP_FILTERED}.bed" ]]; then
+    echo "  Filtering HGDP (MAF > ${MAF_THRESHOLD}, missing < ${GENO_THRESHOLD})..."
+    ${PLINK2} --bfile ${REF_DIR}/extractedChrAllUnpruned \
+        --maf ${MAF_THRESHOLD} \
+        --geno ${GENO_THRESHOLD} \
+        --output-chr chrM \
+        --memory 100000 \
+        --make-bed \
+        --out ${HGDP_FILTERED}
+    HGDP_FILTERED_SNPS=$(wc -l < "${HGDP_FILTERED}.bim")
+    echo "  HGDP SNPs after filtering: ${HGDP_FILTERED_SNPS}"
+else
+    echo "  Using existing filtered HGDP data"
+    HGDP_FILTERED_SNPS=$(wc -l < "${HGDP_FILTERED}.bim")
+    echo "  Filtered HGDP SNPs: ${HGDP_FILTERED_SNPS}"
+fi
+echo ""
+
+# =============================================================================
+# STEP 9: Check overlap after filtering both datasets
+# =============================================================================
+echo "=========================================="
+echo "Step 9: Check Overlap (after filtering)"
+echo "=========================================="
+
+awk '{print $1":"$4}' "${AOU_FILTERED}.bim" | sort > "${TEMP_DIR}/aou_filtered_pos.txt"
+awk '{print $1":"$4}' "${HGDP_FILTERED}.bim" | sort > "${TEMP_DIR}/hgdp_filtered_pos.txt"
+OVERLAP_AFTER=$(comm -12 "${TEMP_DIR}/aou_filtered_pos.txt" "${TEMP_DIR}/hgdp_filtered_pos.txt" | wc -l)
+echo "  Overlap after filtering both: ${OVERLAP_AFTER}"
+echo ""
+
+# =============================================================================
+# STEP 10: Standardize SNP IDs (pos:ref:alt)
+# =============================================================================
+echo "=========================================="
+echo "Step 10: Standardize SNP IDs (pos:ref:alt)"
+echo "=========================================="
 
 # Standardize SNP IDs to pos:ref:alt format (handles chr naming differences)
 echo "Standardizing SNP IDs to pos:ref:alt format..."
 
 # Standardize HGDP (chr1:... → pos:ref:alt)
 if [[ ! -f "${TEMP_DIR}/hgdp_standardized.bed" ]]; then
-    echo "  Standardizing HGDP dataset..."
-    ${PLINK2} --bfile ${REF_DIR}/extractedChrAllUnpruned \
+    echo "  Standardizing HGDP dataset (using filtered data)..."
+    ${PLINK2} --bfile ${HGDP_FILTERED} \
         --set-all-var-ids '@:#:$r:$a' \
         --new-id-max-allele-len 100 missing \
         --make-bed \
@@ -198,8 +294,8 @@ fi
 
 # Standardize AoU (chr1:... → pos:ref:alt)
 if [[ ! -f "${TEMP_DIR}/aou_standardized.bed" ]]; then
-    echo "  Standardizing AoU dataset..."
-    ${PLINK2} --bfile ${SHARED_AOU_DIR}/extractedChrAll \
+    echo "  Standardizing AoU dataset (using filtered data)..."
+    ${PLINK2} --bfile ${AOU_FILTERED} \
         --set-all-var-ids '@:#:$r:$a' \
         --new-id-max-allele-len 100 missing \
         --memory 100000 \
@@ -211,27 +307,33 @@ fi
 
 echo "  ✓ SNP IDs standardized (originals untouched)"
 
-# LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
+# =============================================================================
+# STEP 11: LD prune reference and apply to AoU
+# =============================================================================
 echo ""
 echo "=========================================="
-echo "Step 8: LD prune reference and apply to AoU"
+echo "Step 11: LD prune reference and apply to AoU"
 echo "=========================================="
 
 # LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
 echo "LD pruning reference SNPs and applying to AoU..."
+echo "  Parameters: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 HGDP_PRUNE_PREFIX="${TEMP_DIR}/hgdp_prune"
 HGDP_PRUNED_PREFIX="${TEMP_DIR}/hgdp_pruned"
 AOU_PRUNED_PREFIX="${TEMP_DIR}/aou_pruned"
 
 if [[ ! -f "${HGDP_PRUNE_PREFIX}.prune.in" ]]; then
-    echo "  Computing prune list on HGDP reference (150kb, step 1, r2=0.05)..."
+    echo "  Computing prune list on HGDP reference..."
     ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
-        --indep-pairwise 150 kb 1 0.05 \
+        --indep-pairwise ${LD_WINDOW} ${LD_STEP} ${LD_R2} \
         --memory 100000 \
         --out ${HGDP_PRUNE_PREFIX}
 else
     echo "  Prune list already exists"
 fi
+
+PRUNE_IN_COUNT=$(wc -l < "${HGDP_PRUNE_PREFIX}.prune.in")
+echo "  SNPs retained after LD pruning: ${PRUNE_IN_COUNT}"
 
 if [[ ! -f "${HGDP_PRUNED_PREFIX}.bed" ]]; then
     echo "  Applying prune list to HGDP reference..."
@@ -257,6 +359,14 @@ fi
 # Update downstream inputs to use pruned datasets
 HGDP_PLINK_PREFIX="${HGDP_PRUNED_PREFIX}"
 AOU_PLINK_PREFIX="${AOU_PRUNED_PREFIX}"
+
+# =============================================================================
+# STEP 12: Find SNP intersection and check allele compatibility
+# =============================================================================
+echo ""
+echo "=========================================="
+echo "Step 12: Find SNP intersection"
+echo "=========================================="
 
 # Find SNP intersection
 echo "Finding SNP intersection..."
@@ -343,6 +453,14 @@ fi
 FINAL_SNP_COUNT=$(wc -l < "${TEMP_DIR}/final_common_snps.txt")
 echo "  ✓ Final SNP count: $FINAL_SNP_COUNT"
 
+# =============================================================================
+# STEP 13: Create intersected PLINK files
+# =============================================================================
+echo ""
+echo "=========================================="
+echo "Step 13: Create final datasets"
+echo "=========================================="
+
 # Create intersected PLINK files
 echo "Creating intersected PLINK files..."
 
@@ -406,10 +524,10 @@ echo "    Common SNPs: $FINAL_SNP_COUNT SNPs"
 echo ""
 
 # =============================================================================
-# STEP 6: Create Labels and Colormaps
+# STEP 14: Create Labels and Colormaps
 # =============================================================================
 echo "=========================================="
-echo "Step 6: Labels and Colormaps"
+echo "Step 14: Labels and Colormaps"
 echo "=========================================="
 
 # Create HGDP labels
@@ -530,11 +648,17 @@ echo "Data Preparation Complete!"
 echo "=========================================="
 echo ""
 echo "✓ All steps completed successfully:"
-echo "  ✓ Step 2: HGDP+1KGP reference data downloaded and split"
-echo "  ✓ Step 3: AoU genotype data downloaded and split"
-echo "  ✓ Step 4: Metadata extraction (if CDR_VERSION set)"
-echo "  ✓ Step 5: Common SNPs found and fit/project subsets created"
-echo "  ✓ Step 6: Labels created for both datasets"
+echo "  ✓ Step 1-4: HGDP+1KGP reference data downloaded and split"
+echo "  ✓ Step 5: AoU genotype data downloaded"
+echo "  ✓ Step 6: Overlap before filtering (${OVERLAP_BEFORE} positions)"
+echo "  ✓ Step 7: AoU data filtered (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
+echo "  ✓ Step 8: HGDP data filtered (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD})"
+echo "  ✓ Step 9: Overlap after filtering (${OVERLAP_AFTER} positions)"
+echo "  ✓ Step 10: SNP IDs standardized"
+echo "  ✓ Step 11: LD pruning (${LD_WINDOW}kb, r²=${LD_R2})"
+echo "  ✓ Step 12: SNP intersection found"
+echo "  ✓ Step 13: Final datasets created"
+echo "  ✓ Step 14: Labels created"
 echo ""
 echo "Generated files in ${DATA_DIR}:"
 echo "  📊 Processed PLINK data:"
@@ -545,13 +669,20 @@ echo "  🏷️  Sample labels:"
 echo "    - hgdp_labels.csv    (HGDP sample metadata)"
 echo "    - aou_labels.csv     (AoU sample metadata)"
 echo ""
-echo "  📋 Processing logs (in data/temp/):"
-echo "    - *_standardized.{bed,bim,fam} (SNP IDs standardized to pos:ref:alt)"
+echo "  📋 Intermediate files (in data/temp/):"
+echo "    - aou_filtered.{bed,bim,fam} (filtered AoU data)"
+echo "    - hgdp_filtered.{bed,bim,fam} (filtered HGDP data)"
+echo "    - *_standardized.{bed,bim,fam} (SNP IDs standardized)"
+echo "    - *_pruned.{bed,bim,fam} (LD-pruned data)"
 echo "    - common_snps.txt, flip_list.txt, exclude_list.txt"
 echo ""
-echo "Shared AoU data location:"
-echo "  ${SHARED_AOU_DIR}/"
-echo "  (This is shared across all AoU experiments)"
+echo "Filtering parameters used:"
+echo "  • MAF threshold: ${MAF_THRESHOLD}"
+echo "  • Geno threshold: ${GENO_THRESHOLD}"
+echo "  • LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
+echo ""
+echo "To adjust SNP count, modify these environment variables and re-run:"
+echo "  MAF_THRESHOLD=0.01 GENO_THRESHOLD=0.01 LD_R2=0.2 bash prepare_data.sh"
 echo ""
 echo "Next step: Run the cross-projection pipeline"
 echo "  bash run_pipeline.sh"
