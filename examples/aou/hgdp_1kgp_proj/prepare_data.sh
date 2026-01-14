@@ -139,49 +139,56 @@ fi
 echo ""
 
 # =============================================================================
-# STEP 6.5: Use Filtered AoU Data
-#   The shared download script creates a filtered dataset (indels removed, QC applied)
-#   This reduces the dataset from ~1.7M SNPs to ~500K SNPs (>10x reduction)
+# STEP 7: Check overlap before filtering
 # =============================================================================
 echo "=========================================="
-echo "Step 6.5: Use Filtered AoU Data"
+echo "Step 7: Check Overlap (before filtering)"
 echo "=========================================="
-echo ""
 
-# Create temp directory
 TEMP_DIR="${DATA_DIR}/temp"
 mkdir -p "$TEMP_DIR"
 
-# Check if filtered data exists from shared download
-AOU_FILTERED_SHARED="${SHARED_AOU_DIR}/extractedChrAll_filtered"
-
-if [[ -f "${AOU_FILTERED_SHARED}.bed" ]]; then
-    echo "  ✓ Using filtered AoU data from shared location"
-    AOU_INPUT="${AOU_FILTERED_SHARED}"
-    FILTERED_SNPS=$(wc -l < "${AOU_INPUT}.bim")
-    echo "    Filtered SNPs: $FILTERED_SNPS"
-    echo "    Location: ${AOU_FILTERED_SHARED}"
-else
-    echo "  ⚠ Filtered AoU data not found at: ${AOU_FILTERED_SHARED}"
-    echo "    Using unfiltered data from: ${SHARED_AOU_DIR}/extractedChrAll"
-    echo ""
-    echo "  Note: To use filtered data, run the shared download script:"
-    echo "    bash ${SCRIPT_DIR}/../shared/download_aou_data.sh"
-    echo ""
-    AOU_INPUT="${SHARED_AOU_DIR}/extractedChrAll"
-fi
-
+AOU_UNFILTERED="${SHARED_AOU_DIR}/extractedChrAll"
+awk '{print $1":"$4}' "${AOU_UNFILTERED}.bim" | sort > "${TEMP_DIR}/aou_unfiltered_pos.txt"
+awk '{print $1":"$4}' "${REF_DIR}/extractedChrAllUnpruned.bim" | sort > "${TEMP_DIR}/hgdp_pos.txt"
+OVERLAP_BEFORE=$(comm -12 "${TEMP_DIR}/aou_unfiltered_pos.txt" "${TEMP_DIR}/hgdp_pos.txt" | wc -l)
+echo "  Overlap before filtering: ${OVERLAP_BEFORE}"
 echo ""
 
 # =============================================================================
-# STEP 7-10: Standardize IDs, prune, intersect, and create subsets
-#   7) Standardize SNP IDs (pos:ref:alt)
-#   8) Apply reference LD prune list to HGDP and AoU
-#   9) Find SNP intersection & check alleles
-#  10) Create intersected PLINKs and final subsets
+# STEP 8: Use filtered AoU data
 # =============================================================================
 echo "=========================================="
-echo "Step 7: Standardize SNP IDs (pos:ref:alt)"
+echo "Step 8: Use Filtered AoU Data"
+echo "=========================================="
+
+AOU_FILTERED_SHARED="${SHARED_AOU_DIR}/extractedChrAll_filtered"
+if [[ -f "${AOU_FILTERED_SHARED}.bed" ]]; then
+    echo "  Using filtered data"
+    AOU_INPUT="${AOU_FILTERED_SHARED}"
+else
+    echo "  Using unfiltered data"
+    AOU_INPUT="${SHARED_AOU_DIR}/extractedChrAll"
+fi
+echo ""
+
+# =============================================================================
+# STEP 9: Check overlap after filtering
+# =============================================================================
+echo "=========================================="
+echo "Step 9: Check Overlap (after filtering)"
+echo "=========================================="
+
+awk '{print $1":"$4}' "${AOU_INPUT}.bim" | sort > "${TEMP_DIR}/aou_filtered_pos.txt"
+OVERLAP_AFTER=$(comm -12 "${TEMP_DIR}/aou_filtered_pos.txt" "${TEMP_DIR}/hgdp_pos.txt" | wc -l)
+echo "  Overlap after filtering: ${OVERLAP_AFTER}"
+echo ""
+
+# =============================================================================
+# STEP 10: Standardize SNP IDs (pos:ref:alt)
+# =============================================================================
+echo "=========================================="
+echo "Step 10: Standardize SNP IDs (pos:ref:alt)"
 echo "=========================================="
 
 # Find plink2
@@ -246,7 +253,7 @@ echo "  ✓ SNP IDs standardized (originals untouched)"
 # LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
 echo ""
 echo "=========================================="
-echo "Step 8: LD prune reference and apply to AoU"
+echo "Step 11: LD prune reference and apply to AoU"
 echo "=========================================="
 
 # LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
@@ -564,11 +571,13 @@ echo ""
 echo "✓ All steps completed successfully:"
 echo "  ✓ Step 1-5: HGDP+1KGP reference data downloaded and split"
 echo "  ✓ Step 6: AoU genotype data downloaded and split"
-echo "  ✓ Step 6.5: AoU data filtered (indels removed, QC filters applied)"
-echo "  ✓ Step 7: SNP IDs standardized to pos:ref:alt format"
-echo "  ✓ Step 8: LD pruning applied"
-echo "  ✓ Step 9-10: Common SNPs found and fit/project subsets created"
-echo "  ✓ Step 11: Labels created for both datasets"
+echo "  ✓ Step 7: Overlap before filtering (${OVERLAP_BEFORE} positions)"
+echo "  ✓ Step 8: AoU data filtered"
+echo "  ✓ Step 9: Overlap after filtering (${OVERLAP_AFTER} positions)"
+echo "  ✓ Step 10: SNP IDs standardized"
+echo "  ✓ Step 11: LD pruning applied"
+echo "  ✓ Step 12-13: Common SNPs found and subsets created"
+echo "  ✓ Step 14: Labels created"
 echo ""
 echo "Generated files in ${DATA_DIR}:"
 echo "  📊 Processed PLINK data:"
