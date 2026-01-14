@@ -202,6 +202,7 @@ if [[ -n "$PLINK2" ]] && [[ ! -f "${AOU_FILTERED_PREFIX}.bed" ]]; then
         --extract ${TEMP_DIR}/snps_no_indels.txt \
         --geno 0.05 \
         --maf 0.001 \
+        --output-chr chrM \
         --memory 100000 \
         --make-bed \
         --out ${AOU_FILTERED_PREFIX}
