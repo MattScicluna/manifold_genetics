@@ -36,6 +36,14 @@ AOU_BUCKET_ROOT_V8="gs://fc-aou-datasets-controlled/v8/microarray/plink"
 GOOGLE_PROJECT="${GOOGLE_PROJECT:-}"
 CDR_VERSION="${WORKSPACE_CDR:-}"
 
+# Filtering parameters (adjust to control final SNP count)
+# Target: ~150-200K overlap after filtering
+# Note: Using looser initial filters since LD pruning will do the heavy lifting
+# Original values: MAF=0.05, GENO=0.05
+# Matching R pipeline: MAF=0.01, GENO=0.01 (FST filtering removed, compensated by stricter LD pruning)
+MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"  # Minor allele frequency threshold
+GENO_THRESHOLD="${GENO_THRESHOLD:-0.01}"  # Missing genotype rate threshold
+
 # Directories
 AOU_DIR="${OUTPUT_DIR}/AllofUs_V8"
 META_DIR="${OUTPUT_DIR}/Metadata"
@@ -195,13 +203,15 @@ if [[ -n "$PLINK2" ]] && [[ ! -f "${AOU_FILTERED_PREFIX}.bed" ]]; then
 
     # Step 2: Apply quality filters with plink2
     # - Extract SNPs without indels
-    # - Filter missing genotypes (--geno 0.05 = remove SNPs with >5% missingness)
-    # - Filter MAF (--maf 0.001 = remove SNPs with MAF < 0.1%)
-    echo "  Applying quality filters (missing rate <5%, MAF >0.1%)..."
+    # - Filter missing genotypes
+    # - Filter MAF
+    echo "  Applying quality filters:"
+    echo "    Missing rate threshold: <${GENO_THRESHOLD}"
+    echo "    MAF threshold: >${MAF_THRESHOLD}"
     ${PLINK2} --bfile ${AOU_DIR}/extractedChrAll \
         --extract ${TEMP_DIR}/snps_no_indels.txt \
-        --geno 0.05 \
-        --maf 0.001 \
+        --geno ${GENO_THRESHOLD} \
+        --maf ${MAF_THRESHOLD} \
         --output-chr chrM \
         --memory 100000 \
         --make-bed \

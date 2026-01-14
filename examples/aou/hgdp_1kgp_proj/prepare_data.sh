@@ -257,15 +257,17 @@ echo "Step 11: LD prune reference and apply to AoU"
 echo "=========================================="
 
 # LD prune reference set and apply to AoU (keeps both datasets aligned and smaller)
+# Original parameters: --indep-pairwise 150 kb 1 0.05
+# Matching R pipeline: --indep-pairwise 50 10 0.1 (stricter r2 threshold to compensate for no FST filtering)
 echo "LD pruning reference SNPs and applying to AoU..."
 HGDP_PRUNE_PREFIX="${TEMP_DIR}/hgdp_prune"
 HGDP_PRUNED_PREFIX="${TEMP_DIR}/hgdp_pruned"
 AOU_PRUNED_PREFIX="${TEMP_DIR}/aou_pruned"
 
 if [[ ! -f "${HGDP_PRUNE_PREFIX}.prune.in" ]]; then
-    echo "  Computing prune list on HGDP reference (150kb, step 1, r2=0.05)..."
+    echo "  Computing prune list on HGDP reference (50kb window, step 10, r2=0.1)..."
     ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
-        --indep-pairwise 150 kb 1 0.05 \
+        --indep-pairwise 50 10 0.1 \
         --memory 100000 \
         --out ${HGDP_PRUNE_PREFIX}
 else
