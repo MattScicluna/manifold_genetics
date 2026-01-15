@@ -92,10 +92,9 @@ if [[ ! -f "$AOU_METADATA" ]]; then
 fi
 
 # Filter for white/European samples using Python
-if [[ ! -f "${DATA_DIR}/white_samples.txt" ]]; then
-    echo "  Filtering for white/European ancestry samples..."
+echo "  Filtering for white/European ancestry samples..."
 
-    python3 << EOF
+python3 << EOF
 import pandas as pd
 
 # Read metadata
