@@ -1,56 +1,72 @@
 #!/bin/bash
 #
-# UKBB 10K WB + 5K Irish Subset Pipeline
+# UKBB 10k WB + 5k Irish Subset Pipeline
 #
-# This is a minimal wrapper that sets UKBB-specific paths and calls
-# the generic subsample template.
+# This script configures and runs the pipeline on a subsample of the
+# UK Biobank (UKBB) cohort.
+#
+# This script is a minimal wrapper that calls the shared pipeline runner
+# with the appropriate mode.
 #
 # Usage:
-#   bash examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh
+#   bash examples/ukbb/10k_WB_5k_Irish/run_pipeline.sh
 #
 
 set -e
+
+# ============================================================================ 
+# CONFIGURATION
+# ============================================================================ 
 
 # Get directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ============================================================================
-# UKBB-Specific Configuration
-# ============================================================================
+# --- IMPORTANT: UPDATE THESE PATHS ---
+# Default paths (relative to script directory)
+DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
+OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
+FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
+PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
+FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
+PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
+COLORMAP="${COLORMAP:-${PROJECT_ROOT}/examples/colormaps/ukbb.json}"
+# ------------------------------------ 
 
-# IMPORTANT: Update these paths to point to your actual data location
-# These are placeholder paths - replace with your real data paths before running
+# ============================================================================ 
+# Detect cluster environment
+# ============================================================================ 
 
-# For development: Uncomment and set your actual paths here
-# export DATA_DIR="/path/to/your/ukbb/data"
-# export FIT_PLINK="/path/to/ukbb_5k_irish_fit"
-# export PROJECT_PLINK="/path/to/ukbb_10k_wb_project"
-# export FIT_LABELS="/path/to/fit_labels.csv"
-# export PROJECT_LABELS="/path/to/project_labels.csv"
-# export COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
-# export OUTPUT_DIR="/path/to/output"
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 
-# Default paths (relative to script directory) - will work if data is in ./data/
-export DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
-export OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
-export FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
-export PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
-export FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
-export PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
-export COLORMAP="${COLORMAP:-${PROJECT_ROOT}/examples/colormaps/ukbb.json}"
+# ============================================================================ 
+# Run pipeline with subsample mode
+# ============================================================================ 
 
-# Set pipeline parameters
-export N_PCS=20
-export K_MIN=2
-export K_MAX=10
-export EMBEDDING="phate"
-export ADMIXTURE_GROUP_COLUMN="self_described_ancestry"
+# This pipeline uses "subsample" mode, which is designed for visualizing
+# large, standalone cohorts.
+#
+# The shared runner script will automatically apply the correct defaults for this mode:
+# - PHATE: knn=500, t=50
+# - Random landmarking with 10,000 landmarks
+#
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode subsample \
+    --fit-plink "$FIT_PLINK" \
+    --project-plink "$PROJECT_PLINK" \
+    --fit-labels "$FIT_LABELS" \
+    --project-labels "$PROJECT_LABELS" \
+    --colormap "$COLORMAP" \
+    --output "$OUTPUT_DIR" \
+    --n-pcs 20 \
+    --k-min 2 \
+    --k-max 10 \
+    --embedding "phate" \
+    --admixture-group-column "self_described_ancestry" \
+    --threads "$CLUSTER_CPUS" \
+    ${CLUSTER_GPUS:+"--num-gpus" "$CLUSTER_GPUS"} \
+    "$@"
 
-# ============================================================================
-# Call Generic Subsample Template
-# ============================================================================
-
-# Note: Subsample mode uses random landmarking by default
-# Note: "$@" passes through any additional arguments (e.g., --skip-metrics)
-bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" "$@"
+echo ""
+echo "Pipeline complete! Results in: ${OUTPUT_DIR}"
+echo ""
