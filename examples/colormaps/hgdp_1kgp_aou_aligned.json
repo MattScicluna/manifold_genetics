@@ -4,17 +4,16 @@
     "ASW": "#283593",
     "BantuKenya": "#3949AB",
     "BantuSouthAfrica": "#3F51B5",
-    "BiakaPygmy": "#5C6BC0",
+    "Biaka": "#5C6BC0",
     "ESN": "#7986CB",
     "GWD": "#9FA8DA",
     "LWK": "#C5CAE9",
     "MSL": "#1A237E",
     "Mandenka": "#283593",
-    "MbutiPygmy": "#3949AB",
+    "Mbuti": "#3949AB",
     "San": "#3F51B5",
     "YRI": "#5C6BC0",
     "Yoruba": "#283593",
-
     "CLM": "#0097A7",
     "Colombian": "#00ACC1",
     "Karitiana": "#00BCD4",
@@ -24,7 +23,6 @@
     "PUR": "#B2EBF2",
     "Pima": "#41C9F8",
     "Surui": "#41C9F8",
-
     "BEB": "#C62828",
     "Balochi": "#D32F2F",
     "Brahui": "#E53935",
@@ -38,7 +36,6 @@
     "Pathan": "#E53935",
     "STU": "#F44336",
     "Sindhi": "#B71C1C",
-
     "CDX": "#7B1FA2",
     "CHB": "#8E24AA",
     "CHS": "#9C27B0",
@@ -46,13 +43,14 @@
     "Dai": "#BA68C8",
     "Daur": "#CE93D8",
     "Han": "#E1BEE7",
+    "NorthernHan": "#E1BEE7",
     "Hezhen": "#B71C1C",
     "JPT": "#C62828",
     "Japanese": "#D32F2F",
     "KHV": "#E53935",
     "Lahu": "#F44336",
     "Miao": "#EF5350",
-    "Mongola": "#E57373",
+    "Mongolian": "#E57373",
     "Naxi": "#EF9A9A",
     "Oroqen": "#B71C1C",
     "She": "#C62828",
@@ -62,7 +60,6 @@
     "Xibo": "#EF5350",
     "Yakut": "#E57373",
     "Yi": "#B71C1C",
-
     "Adygei": "#E65100",
     "Basque": "#EF6C00",
     "CEU": "#F57C00",
@@ -70,28 +67,18 @@
     "French": "#FF9800",
     "GBR": "#FFA726",
     "IBS": "#FFB74D",
-    "Italian": "#FFCC80",
+    "BergamoItalian": "#FFCC80",
     "Orcadian": "#FFA000",
     "Russian": "#E65100",
     "Sardinian": "#EF6C00",
     "TSI": "#F57C00",
     "Tuscan": "#FB8C00",
-
     "Bedouin": "#4E342E",
     "Druze": "#5D4037",
     "Mozabite": "#6D4C41",
     "Palestinian": "#80461B",
-
-    "Melanesian": "#AA00FF",
-    "Papuan": "#E040FB"
-  },
-  "Genetic_region_merged": {
-    "Africa": "#283593",
-    "America": "#41C9F8",
-    "Europe": "#FFA000",
-    "Middle_East": "#80461B",
-    "Central_South_Asia": "#B71C1C",
-    "East_Asia": "#B71C1C",
-    "Oceania": "#E040FB"
+    "Bougainville": "#AA00FF",
+    "PapuanHighlands": "#E040FB",
+    "PapuanSepik": "#E040FB"
   }
 }
