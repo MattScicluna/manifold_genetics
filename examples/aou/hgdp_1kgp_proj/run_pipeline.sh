@@ -49,7 +49,7 @@ export N_PCS=20
 export K_MIN=2
 export K_MAX=10
 export EMBEDDING="phate"
-export ADMIXTURE_GROUP_COLUMN="race_ethnicity"
+export ADMIXTURE_GROUP_COLUMN="race"
 export USE_LANDMARKING=true  # AoU is large, requires landmarking
 
 # ============================================================================

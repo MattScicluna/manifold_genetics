@@ -368,35 +368,43 @@ echo "=========================================="
 echo "Step 12: Find SNP intersection"
 echo "=========================================="
 
-# Find SNP intersection
-echo "Finding SNP intersection..."
+# Check if final common SNPs already computed
+if [[ -f "${TEMP_DIR}/final_common_snps.txt" ]] && [[ -f "${TEMP_DIR}/flip_list.txt" ]] && [[ -f "${TEMP_DIR}/exclude_list.txt" ]]; then
+    echo "  SNP intersection already computed, skipping..."
+    FINAL_SNP_COUNT=$(wc -l < "${TEMP_DIR}/final_common_snps.txt")
+    FLIP_COUNT=$(wc -l < "${TEMP_DIR}/flip_list.txt")
+    EXCLUDE_COUNT=$(wc -l < "${TEMP_DIR}/exclude_list.txt")
+    echo "  Final SNPs: $FINAL_SNP_COUNT, Flip: $FLIP_COUNT, Exclude: $EXCLUDE_COUNT"
+else
+    # Find SNP intersection
+    echo "Finding SNP intersection..."
 
-awk '{print $2}' "${HGDP_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/hgdp_snps.txt"
-awk '{print $2}' "${AOU_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/aou_snps.txt"
+    awk '{print $2}' "${HGDP_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/hgdp_snps.txt"
+    awk '{print $2}' "${AOU_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/aou_snps.txt"
 
-HGDP_SNP_COUNT=$(wc -l < "${TEMP_DIR}/hgdp_snps.txt")
-AOU_SNP_COUNT=$(wc -l < "${TEMP_DIR}/aou_snps.txt")
+    HGDP_SNP_COUNT=$(wc -l < "${TEMP_DIR}/hgdp_snps.txt")
+    AOU_SNP_COUNT=$(wc -l < "${TEMP_DIR}/aou_snps.txt")
 
-echo "  Extracted SNP lists:"
-echo "    HGDP: $HGDP_SNP_COUNT SNPs"
-echo "    AoU: $AOU_SNP_COUNT SNPs"
+    echo "  Extracted SNP lists:"
+    echo "    HGDP: $HGDP_SNP_COUNT SNPs"
+    echo "    AoU: $AOU_SNP_COUNT SNPs"
 
-comm -12 "${TEMP_DIR}/hgdp_snps.txt" "${TEMP_DIR}/aou_snps.txt" > "${TEMP_DIR}/common_snps.txt"
+    comm -12 "${TEMP_DIR}/hgdp_snps.txt" "${TEMP_DIR}/aou_snps.txt" > "${TEMP_DIR}/common_snps.txt"
 
-COMMON_SNP_COUNT=$(wc -l < "${TEMP_DIR}/common_snps.txt")
-echo "  ✓ Found $COMMON_SNP_COUNT common SNPs"
+    COMMON_SNP_COUNT=$(wc -l < "${TEMP_DIR}/common_snps.txt")
+    echo "  ✓ Found $COMMON_SNP_COUNT common SNPs"
 
-if [[ $COMMON_SNP_COUNT -lt 50000 ]]; then
-    echo "  ✗ Less than 50K common SNPs! Data may be incompatible."
-    exit 1
-elif [[ $COMMON_SNP_COUNT -lt 100000 ]]; then
-    echo "  ⚠ Less than 100K common SNPs! Check data compatibility."
-fi
+    if [[ $COMMON_SNP_COUNT -lt 50000 ]]; then
+        echo "  ✗ Less than 50K common SNPs! Data may be incompatible."
+        exit 1
+    elif [[ $COMMON_SNP_COUNT -lt 100000 ]]; then
+        echo "  ⚠ Less than 100K common SNPs! Check data compatibility."
+    fi
 
-# Check allele consistency
-echo "Checking allele consistency..."
+    # Check allele consistency
+    echo "Checking allele consistency..."
 
-python3 << EOF
+    python3 << EOF
 import sys
 from pathlib import Path
 
@@ -432,26 +440,27 @@ with open(output_dir / "exclude_list.txt", 'w') as f:
         f.write(f"{snp}\n")
 EOF
 
-# Count results
-FLIP_COUNT=$(wc -l < "${TEMP_DIR}/flip_list.txt" 2>/dev/null || echo "0")
-EXCLUDE_COUNT=$(wc -l < "${TEMP_DIR}/exclude_list.txt" 2>/dev/null || echo "0")
-USABLE_SNPS=$((COMMON_SNP_COUNT - EXCLUDE_COUNT))
+    # Count results
+    FLIP_COUNT=$(wc -l < "${TEMP_DIR}/flip_list.txt" 2>/dev/null || echo "0")
+    EXCLUDE_COUNT=$(wc -l < "${TEMP_DIR}/exclude_list.txt" 2>/dev/null || echo "0")
+    USABLE_SNPS=$((COMMON_SNP_COUNT - EXCLUDE_COUNT))
 
-echo "  ✓ Allele check complete:"
-echo "    SNPs to flip: $FLIP_COUNT"
-echo "    SNPs to exclude: $EXCLUDE_COUNT"
-echo "    Usable SNPs: $USABLE_SNPS"
+    echo "  ✓ Allele check complete:"
+    echo "    SNPs to flip: $FLIP_COUNT"
+    echo "    SNPs to exclude: $EXCLUDE_COUNT"
+    echo "    Usable SNPs: $USABLE_SNPS"
 
-# Create final common SNPs list (excluding incompatible)
-if [[ $EXCLUDE_COUNT -gt 0 ]]; then
-    echo "Removing excluded SNPs from common list..."
-    comm -23 <(sort "${TEMP_DIR}/common_snps.txt") <(sort "${TEMP_DIR}/exclude_list.txt") > "${TEMP_DIR}/final_common_snps.txt"
-else
-    cp "${TEMP_DIR}/common_snps.txt" "${TEMP_DIR}/final_common_snps.txt"
+    # Create final common SNPs list (excluding incompatible)
+    if [[ $EXCLUDE_COUNT -gt 0 ]]; then
+        echo "Removing excluded SNPs from common list..."
+        comm -23 <(sort "${TEMP_DIR}/common_snps.txt") <(sort "${TEMP_DIR}/exclude_list.txt") > "${TEMP_DIR}/final_common_snps.txt"
+    else
+        cp "${TEMP_DIR}/common_snps.txt" "${TEMP_DIR}/final_common_snps.txt"
+    fi
+
+    FINAL_SNP_COUNT=$(wc -l < "${TEMP_DIR}/final_common_snps.txt")
+    echo "  ✓ Final SNP count: $FINAL_SNP_COUNT"
 fi
-
-FINAL_SNP_COUNT=$(wc -l < "${TEMP_DIR}/final_common_snps.txt")
-echo "  ✓ Final SNP count: $FINAL_SNP_COUNT"
 
 # =============================================================================
 # STEP 13: Create intersected PLINK files
@@ -533,10 +542,16 @@ echo "=========================================="
 # Create HGDP labels
 echo "Creating HGDP labels..."
 
-# Check if HGDP labels exist in the HGDP+1KGP example
-HGDP_SOURCE_LABELS="${PROJECT_ROOT}/examples/hgdp_1kgp/data/hgdp_1kgp_labels.csv"
+# Check if HGDP labels already exist
+if [[ -f "${DATA_DIR}/hgdp_labels.csv" ]]; then
+    echo "  HGDP labels already exist, skipping..."
+    HGDP_LABEL_COUNT=$(wc -l < "${DATA_DIR}/hgdp_labels.csv")
+    echo "  Existing labels: $((HGDP_LABEL_COUNT - 1)) samples"
+else
+    # Check if HGDP labels exist in the HGDP+1KGP example
+    HGDP_SOURCE_LABELS="${PROJECT_ROOT}/examples/hgdp_1kgp/data/hgdp_1kgp_labels.csv"
 
-if [[ -f "$HGDP_SOURCE_LABELS" ]]; then
+    if [[ -f "$HGDP_SOURCE_LABELS" ]]; then
     python3 << EOF
 import pandas as pd
 
@@ -576,16 +591,23 @@ sample_ids.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
 print(f"  ✓ Created basic HGDP labels: {len(sample_ids)} samples")
 print("  Note: Only contains sample_id column. Add population labels manually if needed.")
 EOF
+    fi
 fi
 
 # Create AoU labels
 echo "Creating AoU labels..."
 
-# Check if AoU metadata exists
-AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
+# Check if AoU labels already exist
+if [[ -f "${DATA_DIR}/aou_labels.csv" ]]; then
+    echo "  AoU labels already exist, skipping..."
+    AOU_LABEL_COUNT=$(wc -l < "${DATA_DIR}/aou_labels.csv")
+    echo "  Existing labels: $((AOU_LABEL_COUNT - 1)) samples"
+else
+    # Check if AoU metadata exists
+    AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
 
-if [[ -f "$AOU_METADATA" ]]; then
-    python3 << EOF
+    if [[ -f "$AOU_METADATA" ]]; then
+        python3 << EOF
 import pandas as pd
 
 # Read AoU metadata
@@ -634,6 +656,7 @@ sample_ids.to_csv("${DATA_DIR}/aou_labels.csv", index=False)
 print(f"  ✓ Created basic AoU labels: {len(sample_ids)} samples")
 print("  Note: Only contains sample_id column. Add demographic labels manually if needed.")
 EOF
+    fi
 fi
 
 echo ""
