@@ -131,10 +131,15 @@ else:
 
 print(f"    White/European samples found: {len(white_samples)}")
 
+# Create IID to FID mapping
+iid_to_fid = dict(zip(fam['IID'].astype(str), fam['FID'].astype(str)))
+
 # Write sample list in PLINK format (FID IID)
 with open("${DATA_DIR}/white_samples.txt", 'w') as f:
     for sample_id in white_samples['sample_id']:
-        f.write(f"{sample_id}\t{sample_id}\n")
+        if sample_id in iid_to_fid:
+            fid = iid_to_fid[sample_id]
+            f.write(f"{fid}\t{sample_id}\n")
 
 print(f"  ✓ Saved {len(white_samples)} white sample IDs to white_samples.txt")
 EOF
