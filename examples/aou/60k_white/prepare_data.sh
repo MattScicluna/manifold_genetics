@@ -142,9 +142,6 @@ with open("${DATA_DIR}/white_samples.txt", 'w') as f:
 
 print(f"  ✓ Saved {len(white_samples)} white sample IDs to white_samples.txt")
 EOF
-else
-    echo "  White samples list already exists"
-fi
 
 WHITE_SAMPLE_COUNT=$(wc -l < "${DATA_DIR}/white_samples.txt")
 echo "  White/European samples: $WHITE_SAMPLE_COUNT"
