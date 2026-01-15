@@ -554,7 +554,9 @@ if [[ -f "${DATA_DIR}/hgdp_labels.csv" ]]; then
     echo "  Existing labels: $((HGDP_LABEL_COUNT - 1)) samples"
 else
     # Check if HGDP labels exist in the HGDP+1KGP example
-    HGDP_SOURCE_LABELS="${PROJECT_ROOT}/examples/hgdp_1kgp/data/hgdp_1kgp_labels.csv"
+    # Note: hgdp_project_labels.csv is created by examples/hgdp_1kgp/prepare_data.sh
+    # We use project_labels (not fit_labels) to ensure all samples are covered
+    HGDP_SOURCE_LABELS="${PROJECT_ROOT}/examples/hgdp_1kgp/data/hgdp_project_labels.csv"
 
     if [[ -f "$HGDP_SOURCE_LABELS" ]]; then
     python3 << EOF
@@ -584,18 +586,15 @@ if len(hgdp_labels) < len(available_samples):
     print(f"  Warning: {missing} samples in intersected data have no labels")
 EOF
 else
-    echo "  ⚠ HGDP source labels not found at: $HGDP_SOURCE_LABELS"
-    echo "  Creating basic HGDP labels from .fam file..."
-    awk '{print $2}' "${DATA_DIR}/fit_subset.fam" > "${TEMP_DIR}/hgdp_sample_ids.txt"
-    python3 << EOF
-import pandas as pd
-
-# Create basic labels file with just sample_id
-sample_ids = pd.read_csv("${TEMP_DIR}/hgdp_sample_ids.txt", header=None, names=['sample_id'])
-sample_ids.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
-print(f"  ✓ Created basic HGDP labels: {len(sample_ids)} samples")
-print("  Note: Only contains sample_id column. Add population labels manually if needed.")
-EOF
+    echo ""
+    echo "  ✗ ERROR: HGDP source labels not found at: $HGDP_SOURCE_LABELS"
+    echo ""
+    echo "  To get HGDP+1KGP labels with population information, run:"
+    echo ""
+    echo "    bash ${PROJECT_ROOT}/examples/hgdp_1kgp/prepare_data.sh"
+    echo ""
+    echo "  Then re-run this script."
+    exit 1
     fi
 fi
 
@@ -636,6 +635,8 @@ if 'race' in aou_labels.columns:
     columns_to_keep.append('race')
 if 'ethnicity' in aou_labels.columns:
     columns_to_keep.append('ethnicity')
+if 'race_ethnicity' in aou_labels.columns:
+    columns_to_keep.append('race_ethnicity')
 
 aou_labels = aou_labels[columns_to_keep]
 
@@ -649,18 +650,16 @@ if len(aou_labels) < len(available_samples):
     print(f"  Warning: {missing} samples in intersected data have no metadata")
 EOF
 else
-    echo "  ⚠ AoU metadata not found at: $AOU_METADATA"
-    echo "  Creating basic AoU labels from .fam file..."
-    awk '{print $2}' "${DATA_DIR}/project_subset.fam" > "${TEMP_DIR}/aou_sample_ids.txt"
-    python3 << EOF
-import pandas as pd
-
-# Create basic labels file with just sample_id
-sample_ids = pd.read_csv("${TEMP_DIR}/aou_sample_ids.txt", header=None, names=['sample_id'])
-sample_ids.to_csv("${DATA_DIR}/aou_labels.csv", index=False)
-print(f"  ✓ Created basic AoU labels: {len(sample_ids)} samples")
-print("  Note: Only contains sample_id column. Add demographic labels manually if needed.")
-EOF
+    echo ""
+    echo "  ✗ ERROR: AoU metadata not found at: $AOU_METADATA"
+    echo ""
+    echo "  This file is created by the AoU data download script."
+    echo "  Ensure WORKSPACE_CDR is set and re-run:"
+    echo ""
+    echo "    bash ${PROJECT_ROOT}/examples/aou/shared/download_aou_data.sh"
+    echo ""
+    echo "  Then re-run this script."
+    exit 1
     fi
 fi
 
