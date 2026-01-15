@@ -182,6 +182,9 @@ else
         echo "  Running BigQuery metadata extraction..."
         echo "  Note: This step requires Python with pandas-gbq"
         echo ""
+        echo "  If 'pandas-gbq' is not installed in your Python virtual environment, add it using:"
+        echo "    uv pip install -e '.[aou]'"
+        echo ""
 
         # Create Python script for metadata extraction
         cat > "${META_DIR}/extract_metadata.py" <<'EOF'
