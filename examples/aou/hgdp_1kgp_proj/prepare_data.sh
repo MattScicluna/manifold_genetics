@@ -569,10 +569,14 @@ hgdp_labels = pd.DataFrame({
     'Population': fam['FID'].astype(str)
 })
 
+# Clean up population names: strip "forReference" prefix
+hgdp_labels['Population'] = hgdp_labels['Population'].str.replace('^forReference', '', regex=True)
+
 # Save labels
 hgdp_labels.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
 print(f"  ✓ Saved HGDP labels: {len(hgdp_labels)} samples")
 print(f"  Unique populations: {hgdp_labels['Population'].nunique()}")
+print(f"  Populations: {sorted(hgdp_labels['Population'].unique())}")
 EOF
 fi
 
