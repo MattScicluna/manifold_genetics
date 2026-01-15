@@ -222,8 +222,30 @@ sql_person = f"""
         ON person.sex_at_birth_concept_id = p_sex_at_birth_concept.concept_id
 """
 df_person = pd.read_gbq(sql_person, dialect="standard")
+
+# Preprocess race and ethnicity columns
+print("\nPreprocessing race and ethnicity columns...")
+
+# Clean race column: map uninformative values to "No information"
+race_no_info = ['I prefer not to answer', 'None of these', 'PMI: Skip', 'None Indicated']
+df_person['race'] = df_person['race'].replace(race_no_info, 'No information')
+
+# Clean ethnicity column: map uninformative values to "No information"
+ethnicity_no_info = ['PMI: Prefer Not To Answer', 'What Race Ethnicity: Race Ethnicity None Of These', 'PMI: Skip']
+df_person['ethnicity'] = df_person['ethnicity'].replace(ethnicity_no_info, 'No information')
+
+# Create race_ethnicity column:
+# - Same as race, except assign "Hispanic or Latino" when race is "No information"
+#   and ethnicity is "Hispanic or Latino"
+df_person['race_ethnicity'] = df_person['race']
+hispanic_mask = (df_person['race'] == 'No information') & (df_person['ethnicity'] == 'Hispanic or Latino')
+df_person.loc[hispanic_mask, 'race_ethnicity'] = 'Hispanic or Latino'
+
+print(f"  race_ethnicity value counts:")
+print(df_person['race_ethnicity'].value_counts().to_string())
+
 df_person.to_csv(os.path.join(META_DIR, 'DemographicData.tsv'), sep="\t", index=False)
-print(f"  Saved {len(df_person)} demographic records")
+print(f"\n  Saved {len(df_person)} demographic records")
 
 # Query 2: Socioeconomics
 print("\nQuerying Socioeconomics...")
