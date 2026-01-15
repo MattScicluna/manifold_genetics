@@ -125,13 +125,18 @@ echo ""
 # Check if shared AoU data is complete
 AOU_DATA_COMPLETE=true
 
-# Check for main files
+# Check for PLINK files
 for ext in bed bim fam; do
     if [[ ! -f "${SHARED_AOU_DIR}/extractedChrAll.${ext}" ]]; then
         AOU_DATA_COMPLETE=false
         break
     fi
 done
+
+# Check for metadata files
+if [[ ! -f "${SHARED_META_DIR}/DemographicData.tsv" ]]; then
+    AOU_DATA_COMPLETE=false
+fi
 
 if [[ "$AOU_DATA_COMPLETE" == "true" ]]; then
     echo "✓ Shared AoU data already downloaded at: ${SHARED_AOU_DIR}"
