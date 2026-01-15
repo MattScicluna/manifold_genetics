@@ -553,49 +553,27 @@ if [[ -f "${DATA_DIR}/hgdp_labels.csv" ]]; then
     HGDP_LABEL_COUNT=$(wc -l < "${DATA_DIR}/hgdp_labels.csv")
     echo "  Existing labels: $((HGDP_LABEL_COUNT - 1)) samples"
 else
-    # Check if HGDP labels exist in the HGDP+1KGP example
-    # Note: hgdp_project_labels.csv is created by examples/hgdp_1kgp/prepare_data.sh
-    # We use project_labels (not fit_labels) to ensure all samples are covered
-    HGDP_SOURCE_LABELS="${PROJECT_ROOT}/examples/hgdp_1kgp/data/hgdp_project_labels.csv"
-
-    if [[ -f "$HGDP_SOURCE_LABELS" ]]; then
+    # Create HGDP labels directly from .fam file
+    # The FID (column 1) contains the Population label (e.g., ACB, GBR, etc.)
+    # The IID (column 2) contains the sample_id
     python3 << EOF
 import pandas as pd
 
-# Read existing HGDP labels from hgdp_1kgp example
-print("Reading HGDP labels from existing example...")
-hgdp_all_labels = pd.read_csv("${HGDP_SOURCE_LABELS}")
-print(f"  Total labels available: {len(hgdp_all_labels)}")
-
-# Read intersected HGDP .fam file to get available samples
+print("Creating HGDP labels from .fam file...")
 fam = pd.read_csv("${DATA_DIR}/fit_subset.fam", sep=r'\s+', header=None,
                   names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
-available_samples = set(fam['IID'].astype(str))
-print(f"  Available in intersected data: {len(available_samples)}")
 
-# Filter labels to only include samples we have
-hgdp_all_labels['sample_id'] = hgdp_all_labels['sample_id'].astype(str)
-hgdp_labels = hgdp_all_labels[hgdp_all_labels['sample_id'].isin(available_samples)].copy()
+# Create labels DataFrame with sample_id and Population
+hgdp_labels = pd.DataFrame({
+    'sample_id': fam['IID'].astype(str),
+    'Population': fam['FID'].astype(str)
+})
 
-# Save filtered labels
+# Save labels
 hgdp_labels.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
 print(f"  ✓ Saved HGDP labels: {len(hgdp_labels)} samples")
-
-if len(hgdp_labels) < len(available_samples):
-    missing = len(available_samples) - len(hgdp_labels)
-    print(f"  Warning: {missing} samples in intersected data have no labels")
+print(f"  Unique populations: {hgdp_labels['Population'].nunique()}")
 EOF
-else
-    echo ""
-    echo "  ✗ ERROR: HGDP source labels not found at: $HGDP_SOURCE_LABELS"
-    echo ""
-    echo "  To get HGDP+1KGP labels with population information, run:"
-    echo ""
-    echo "    bash ${PROJECT_ROOT}/examples/hgdp_1kgp/prepare_data.sh"
-    echo ""
-    echo "  Then re-run this script."
-    exit 1
-    fi
 fi
 
 # Create AoU labels
