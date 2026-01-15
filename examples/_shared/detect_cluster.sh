@@ -43,24 +43,30 @@ detect_cluster() {
         fi
     fi
 
-    # Detect GPUs (try multiple SLURM variable names across clusters)
+    # Detect GPUs (prioritize allocation over hardware)
     CLUSTER_GPUS=0
 
-    if [[ -n "$SLURM_GPUS" ]]; then
+    # 1. Trust CUDA_VISIBLE_DEVICES if set (standard for controlling access)
+    if [[ -n "$CUDA_VISIBLE_DEVICES" ]]; then
+        if [[ "$CUDA_VISIBLE_DEVICES" == "NoDevFiles" ]]; then
+            CLUSTER_GPUS=0
+        else
+            # Count comma-separated devices
+            CLUSTER_GPUS=$(echo "$CUDA_VISIBLE_DEVICES" | tr ',' '\n' | wc -l)
+        fi
+    # 2. Try SLURM allocation variables (specific to the job/task)
+    elif [[ -n "$SLURM_GPUS_PER_TASK" ]]; then
+        CLUSTER_GPUS="$SLURM_GPUS_PER_TASK"
+    elif [[ -n "$SLURM_GPUS" ]]; then
         CLUSTER_GPUS="$SLURM_GPUS"
-    elif [[ -n "$SLURM_GPUS_ON_NODE" ]]; then
-        CLUSTER_GPUS="$SLURM_GPUS_ON_NODE"
-    elif [[ -n "$SLURM_GPUS_PER_NODE" ]]; then
-        CLUSTER_GPUS="$SLURM_GPUS_PER_NODE"
     elif [[ -n "$SLURM_JOB_GPUS" ]]; then
-        CLUSTER_GPUS="$SLURM_JOB_GPUS"
-    else
-        # Fall back to nvidia-smi if available
-        if command -v nvidia-smi &> /dev/null; then
-            GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
-            if [[ $GPU_COUNT -gt 0 ]]; then
-                CLUSTER_GPUS=$GPU_COUNT
-            fi
+        # SLURM_JOB_GPUS is often a list of IDs, count them
+        CLUSTER_GPUS=$(echo "$SLURM_JOB_GPUS" | tr ',' '\n' | wc -l)
+    # 3. Fall back to nvidia-smi (mostly for local machines)
+    elif command -v nvidia-smi &> /dev/null; then
+        GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
+        if [[ $GPU_COUNT -gt 0 ]]; then
+            CLUSTER_GPUS=$GPU_COUNT
         fi
     fi
 
