@@ -553,50 +553,31 @@ if [[ -f "${DATA_DIR}/hgdp_labels.csv" ]]; then
     HGDP_LABEL_COUNT=$(wc -l < "${DATA_DIR}/hgdp_labels.csv")
     echo "  Existing labels: $((HGDP_LABEL_COUNT - 1)) samples"
 else
-    # Check if HGDP labels exist in the HGDP+1KGP example
-    HGDP_SOURCE_LABELS="${PROJECT_ROOT}/examples/hgdp_1kgp/data/hgdp_1kgp_labels.csv"
-
-    if [[ -f "$HGDP_SOURCE_LABELS" ]]; then
+    # Create HGDP labels directly from .fam file
+    # The FID (column 1) contains the Population label (e.g., ACB, GBR, etc.)
+    # The IID (column 2) contains the sample_id
     python3 << EOF
 import pandas as pd
 
-# Read existing HGDP labels from hgdp_1kgp example
-print("Reading HGDP labels from existing example...")
-hgdp_all_labels = pd.read_csv("${HGDP_SOURCE_LABELS}")
-print(f"  Total labels available: {len(hgdp_all_labels)}")
-
-# Read intersected HGDP .fam file to get available samples
+print("Creating HGDP labels from .fam file...")
 fam = pd.read_csv("${DATA_DIR}/fit_subset.fam", sep=r'\s+', header=None,
                   names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
-available_samples = set(fam['IID'].astype(str))
-print(f"  Available in intersected data: {len(available_samples)}")
 
-# Filter labels to only include samples we have
-hgdp_all_labels['sample_id'] = hgdp_all_labels['sample_id'].astype(str)
-hgdp_labels = hgdp_all_labels[hgdp_all_labels['sample_id'].isin(available_samples)].copy()
+# Create labels DataFrame with sample_id and Population
+hgdp_labels = pd.DataFrame({
+    'sample_id': fam['IID'].astype(str),
+    'Population': fam['FID'].astype(str)
+})
 
-# Save filtered labels
+# Clean up population names: strip "forReference" prefix
+hgdp_labels['Population'] = hgdp_labels['Population'].str.replace('^forReference', '', regex=True)
+
+# Save labels
 hgdp_labels.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
 print(f"  ✓ Saved HGDP labels: {len(hgdp_labels)} samples")
-
-if len(hgdp_labels) < len(available_samples):
-    missing = len(available_samples) - len(hgdp_labels)
-    print(f"  Warning: {missing} samples in intersected data have no labels")
+print(f"  Unique populations: {hgdp_labels['Population'].nunique()}")
+print(f"  Populations: {sorted(hgdp_labels['Population'].unique())}")
 EOF
-else
-    echo "  ⚠ HGDP source labels not found at: $HGDP_SOURCE_LABELS"
-    echo "  Creating basic HGDP labels from .fam file..."
-    awk '{print $2}' "${DATA_DIR}/fit_subset.fam" > "${TEMP_DIR}/hgdp_sample_ids.txt"
-    python3 << EOF
-import pandas as pd
-
-# Create basic labels file with just sample_id
-sample_ids = pd.read_csv("${TEMP_DIR}/hgdp_sample_ids.txt", header=None, names=['sample_id'])
-sample_ids.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
-print(f"  ✓ Created basic HGDP labels: {len(sample_ids)} samples")
-print("  Note: Only contains sample_id column. Add population labels manually if needed.")
-EOF
-    fi
 fi
 
 # Create AoU labels
@@ -636,6 +617,8 @@ if 'race' in aou_labels.columns:
     columns_to_keep.append('race')
 if 'ethnicity' in aou_labels.columns:
     columns_to_keep.append('ethnicity')
+if 'race_ethnicity' in aou_labels.columns:
+    columns_to_keep.append('race_ethnicity')
 
 aou_labels = aou_labels[columns_to_keep]
 
@@ -649,18 +632,16 @@ if len(aou_labels) < len(available_samples):
     print(f"  Warning: {missing} samples in intersected data have no metadata")
 EOF
 else
-    echo "  ⚠ AoU metadata not found at: $AOU_METADATA"
-    echo "  Creating basic AoU labels from .fam file..."
-    awk '{print $2}' "${DATA_DIR}/project_subset.fam" > "${TEMP_DIR}/aou_sample_ids.txt"
-    python3 << EOF
-import pandas as pd
-
-# Create basic labels file with just sample_id
-sample_ids = pd.read_csv("${TEMP_DIR}/aou_sample_ids.txt", header=None, names=['sample_id'])
-sample_ids.to_csv("${DATA_DIR}/aou_labels.csv", index=False)
-print(f"  ✓ Created basic AoU labels: {len(sample_ids)} samples")
-print("  Note: Only contains sample_id column. Add demographic labels manually if needed.")
-EOF
+    echo ""
+    echo "  ✗ ERROR: AoU metadata not found at: $AOU_METADATA"
+    echo ""
+    echo "  This file is created by the AoU data download script."
+    echo "  Ensure WORKSPACE_CDR is set and re-run:"
+    echo ""
+    echo "    bash ${PROJECT_ROOT}/examples/aou/shared/download_aou_data.sh"
+    echo ""
+    echo "  Then re-run this script."
+    exit 1
     fi
 fi
 
