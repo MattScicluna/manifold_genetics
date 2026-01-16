@@ -105,7 +105,7 @@ metadata = metadata[metadata['sample_id'].isin(available_samples)]
 
 # Identify White vs Other
 if 'race_ethnicity' in metadata.columns:
-    white_mask = metadata['race_ethnicity'].str.contains('White', case=False, na=False) |
+    white_mask = metadata['race_ethnicity'].str.contains('White', case=False, na=False) | \
                  metadata['race_ethnicity'].str.contains('European', case=False, na=False)
 elif 'race' in metadata.columns:
     white_mask = metadata['race'].str.contains('White', case=False, na=False) |
