@@ -91,60 +91,56 @@ if [[ ! -f "$AOU_METADATA" ]]; then
     exit 1
 fi
 
-# Filter for white/European samples using Python
-echo "  Filtering for white/European ancestry samples..."
+# Filter for white/European vs Other samples using Python
+echo "  Classifying samples..."
 
 python3 << EOF
 import pandas as pd
 
 # Read metadata
-print("  Reading AoU demographic data...")
 metadata = pd.read_csv("${AOU_METADATA}", sep='\t', low_memory=False)
-print(f"    Total metadata records: {len(metadata)}")
+metadata['sample_id'] = metadata['person_id'].astype(str)
 
-# Read intersected AoU .fam to get available samples
+# Read intersected AoU .fam to get available samples and FIDs
 fam = pd.read_csv("${INTERSECTED_AOU}.fam", sep=r'\s+', header=None,
                   names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+iid_to_fid = dict(zip(fam['IID'].astype(str), fam['FID'].astype(str)))
 available_samples = set(fam['IID'].astype(str))
-print(f"    Available in intersected data: {len(available_samples)}")
 
 # Filter metadata for available samples
-metadata['sample_id'] = metadata['person_id'].astype(str)
 metadata = metadata[metadata['sample_id'].isin(available_samples)]
 
 # Filter for white/European ancestry
-# Adjust the column name and values based on your actual metadata
 if 'race_ethnicity' in metadata.columns:
-    # Try common patterns for white/European designation
     white_mask = metadata['race_ethnicity'].str.contains('White', case=False, na=False) | \
                  metadata['race_ethnicity'].str.contains('European', case=False, na=False)
-    white_samples = metadata[white_mask]
 elif 'race' in metadata.columns:
     white_mask = metadata['race'].str.contains('White', case=False, na=False) | \
                  metadata['race'].str.contains('European', case=False, na=False)
-    white_samples = metadata[white_mask]
 else:
     print("  ✗ Could not find race/ethnicity column in metadata!")
-    print(f"  Available columns: {', '.join(metadata.columns[:10])}...")
     exit(1)
 
-print(f"    White/European samples found: {len(white_samples)}")
+white_samples = metadata[white_mask]
+other_samples = metadata[~white_mask]
 
-# Create IID to FID mapping
-iid_to_fid = dict(zip(fam['IID'].astype(str), fam['FID'].astype(str)))
+print(f"    White/European samples: {len(white_samples)}")
+print(f"    Other samples: {len(other_samples)}")
 
-# Write sample list in PLINK format (FID IID)
-with open("${DATA_DIR}/white_samples.txt", 'w') as f:
-    for sample_id in white_samples['sample_id']:
-        if sample_id in iid_to_fid:
-            fid = iid_to_fid[sample_id]
-            f.write(f"{fid}\t{sample_id}\n")
+# Write sample lists
+for name, df in [("white", white_samples), ("other", other_samples)]:
+    with open(f"${DATA_DIR}/{name}_samples.txt", 'w') as f:
+        for sample_id in df['sample_id']:
+            if sample_id in iid_to_fid:
+                f.write(f"{iid_to_fid[sample_id]}\t{sample_id}\n")
 
-print(f"  ✓ Saved {len(white_samples)} white sample IDs to white_samples.txt")
+print(f"  ✓ Saved sample lists to ${DATA_DIR}/")
 EOF
 
 WHITE_SAMPLE_COUNT=$(wc -l < "${DATA_DIR}/white_samples.txt")
+OTHER_SAMPLE_COUNT=$(wc -l < "${DATA_DIR}/other_samples.txt")
 echo "  White/European samples: $WHITE_SAMPLE_COUNT"
+echo "  Other samples: $OTHER_SAMPLE_COUNT"
 echo ""
 
 # Find plink2
@@ -162,55 +158,59 @@ else
     exit 1
 fi
 
-# Extract white samples from intersected AoU data
-if [[ ! -f "${DATA_DIR}/white_all.bed" ]]; then
-    echo "  Extracting white samples from intersected AoU data..."
-    ${PLINK2} --bfile ${INTERSECTED_AOU} \
-        --keep ${DATA_DIR}/white_samples.txt \
-        --memory 100000 \
-        --make-bed \
-        --out ${DATA_DIR}/white_all
-else
-    echo "  White samples dataset already exists"
-fi
+# Extract subsets from intersected AoU data
+for group in "white" "other"; do
+    if [[ ! -f "${DATA_DIR}/${group}_all.bed" ]]; then
+        echo "  Extracting ${group} samples from intersected AoU data..."
+        ${PLINK2} --bfile ${INTERSECTED_AOU} \
+            --keep ${DATA_DIR}/${group}_samples.txt \
+            --memory 100000 \
+            --make-bed \
+            --out ${DATA_DIR}/${group}_all
+    else
+        echo "  ${group} samples dataset already exists"
+    fi
+done
 
 WHITE_ALL_SAMPLES=$(wc -l < "${DATA_DIR}/white_all.fam")
-echo "  ✓ White subset created: $WHITE_ALL_SAMPLES samples"
+OTHER_ALL_SAMPLES=$(wc -l < "${DATA_DIR}/other_all.fam")
+echo "  ✓ Base subsets created"
 echo ""
 
 # =============================================================================
-# STEP 3: Create Fit Subset (60K samples)
+# STEP 3: Create Fit Subset (60K White + All Other)
 # =============================================================================
 echo "=========================================="
-echo "Step 3: Create Fit Subset (60K samples)"
+echo "Step 3: Create Fit Subset (60K White + All Other)"
 echo "=========================================="
 
-# Determine target fit size (60K or less if not enough samples)
-TARGET_FIT_SIZE=60000
-if [[ $WHITE_ALL_SAMPLES -lt $TARGET_FIT_SIZE ]]; then
-    echo "  ⚠ Only $WHITE_ALL_SAMPLES white samples available (less than 60K)"
-    echo "    Using all samples for fit, none for project"
-    TARGET_FIT_SIZE=$WHITE_ALL_SAMPLES
-fi
-
-# Create fit subset by randomly selecting samples
-if [[ ! -f "${DATA_DIR}/fit_subset.bed" ]]; then
-    echo "  Randomly selecting $TARGET_FIT_SIZE samples for fit subset (seed=42)..."
-
-    if [[ $WHITE_ALL_SAMPLES -le $TARGET_FIT_SIZE ]]; then
-        # Use all samples
-        cp "${DATA_DIR}/white_all.bed" "${DATA_DIR}/fit_subset.bed"
-        cp "${DATA_DIR}/white_all.bim" "${DATA_DIR}/fit_subset.bim"
-        cp "${DATA_DIR}/white_all.fam" "${DATA_DIR}/fit_subset.fam"
+# 1. Subsample White group
+TARGET_WHITE_FIT=60000
+if [[ ! -f "${DATA_DIR}/white_fit.bed" ]]; then
+    echo "  Subsampling $TARGET_WHITE_FIT white samples..."
+    if [[ $WHITE_ALL_SAMPLES -le $TARGET_WHITE_FIT ]]; then
+        cp "${DATA_DIR}/white_all.bed" "${DATA_DIR}/white_fit.bed"
+        cp "${DATA_DIR}/white_all.bim" "${DATA_DIR}/white_fit.bim"
+        cp "${DATA_DIR}/white_all.fam" "${DATA_DIR}/white_fit.fam"
     else
-        # Randomly thin to 60K
         ${PLINK2} --bfile ${DATA_DIR}/white_all \
-            --thin-indiv-count $TARGET_FIT_SIZE \
+            --thin-indiv-count $TARGET_WHITE_FIT \
             --seed 42 \
             --memory 100000 \
             --make-bed \
-            --out ${DATA_DIR}/fit_subset
+            --out ${DATA_DIR}/white_fit
     fi
+fi
+
+# 2. Merge White Fit + All Other
+if [[ ! -f "${DATA_DIR}/fit_subset.bed" ]]; then
+    echo "  Merging 60K white samples with all other samples..."
+    echo "${DATA_DIR}/other_all" > "${TEMP_DIR}/merge_list.txt"
+    ${PLINK2} --bfile ${DATA_DIR}/white_fit \
+        --pmerge ${DATA_DIR}/other_all \
+        --memory 100000 \
+        --make-bed \
+        --out ${DATA_DIR}/fit_subset
 else
     echo "  Fit subset already exists"
 fi
@@ -220,41 +220,24 @@ echo "  ✓ Fit subset created: $FIT_SAMPLES samples"
 echo ""
 
 # =============================================================================
-# STEP 4: Create Project Subset (remaining samples)
+# STEP 4: Create Project Subset (Entire Dataset)
 # =============================================================================
 echo "=========================================="
-echo "Step 4: Create Project Subset (remaining)"
+echo "Step 4: Create Project Subset (Entire Dataset)"
 echo "=========================================="
 
-# Check if we have enough samples for a project subset
-REMAINING_SAMPLES=$((WHITE_ALL_SAMPLES - FIT_SAMPLES))
-
-if [[ $REMAINING_SAMPLES -le 0 ]]; then
-    echo "  ⚠ No remaining samples for project subset"
-    echo "    All white samples were used for fit subset"
-    echo ""
+if [[ ! -f "${DATA_DIR}/project_subset.bed" ]]; then
+    echo "  Copying intersected data to project subset..."
+    cp "${INTERSECTED_AOU}.bed" "${DATA_DIR}/project_subset.bed"
+    cp "${INTERSECTED_AOU}.bim" "${DATA_DIR}/project_subset.bim"
+    cp "${INTERSECTED_AOU}.fam" "${DATA_DIR}/project_subset.fam"
 else
-    # Create project subset with remaining samples
-    if [[ ! -f "${DATA_DIR}/project_subset.bed" ]]; then
-        echo "  Creating project subset with remaining $REMAINING_SAMPLES samples..."
-
-        # Create list of fit sample IDs to remove
-        awk '{print $1"\t"$2}' "${DATA_DIR}/fit_subset.fam" > "${TEMP_DIR}/fit_sample_ids.txt"
-
-        # Extract remaining samples
-        ${PLINK2} --bfile ${DATA_DIR}/white_all \
-            --remove ${TEMP_DIR}/fit_sample_ids.txt \
-            --memory 100000 \
-            --make-bed \
-            --out ${DATA_DIR}/project_subset
-    else
-        echo "  Project subset already exists"
-    fi
-
-    PROJECT_SAMPLES=$(wc -l < "${DATA_DIR}/project_subset.fam")
-    echo "  ✓ Project subset created: $PROJECT_SAMPLES samples"
-    echo ""
+    echo "  Project subset already exists"
 fi
+
+PROJECT_SAMPLES=$(wc -l < "${DATA_DIR}/project_subset.fam")
+echo "  ✓ Project subset created: $PROJECT_SAMPLES samples"
+echo ""
 
 # =============================================================================
 # STEP 5: Create Labels
@@ -264,10 +247,9 @@ echo "Step 5: Create Labels"
 echo "=========================================="
 
 # Create fit labels
-if [[ ! -f "${DATA_DIR}/fit_labels.csv" ]]; then
-    echo "  Creating fit subset labels..."
+echo "  Creating fit subset labels..."
 
-    python3 << EOF
+python3 << EOF
 import pandas as pd
 
 # Read metadata
@@ -297,16 +279,12 @@ fit_labels = fit_labels[columns_to_keep]
 fit_labels.to_csv("${DATA_DIR}/fit_labels.csv", index=False)
 print(f"  ✓ Saved fit labels: {len(fit_labels)} samples")
 EOF
-else
-    echo "  Fit labels already exist"
-fi
 
 # Create project labels (if project subset exists)
 if [[ -f "${DATA_DIR}/project_subset.bed" ]]; then
-    if [[ ! -f "${DATA_DIR}/project_labels.csv" ]]; then
-        echo "  Creating project subset labels..."
+    echo "  Creating project subset labels..."
 
-        python3 << EOF
+    python3 << EOF
 import pandas as pd
 
 # Read metadata
@@ -336,9 +314,6 @@ project_labels = project_labels[columns_to_keep]
 project_labels.to_csv("${DATA_DIR}/project_labels.csv", index=False)
 print(f"  ✓ Saved project labels: {len(project_labels)} samples")
 EOF
-    else
-        echo "  Project labels already exist"
-    fi
 fi
 
 echo "  ✓ Label files created"
@@ -353,34 +328,19 @@ echo "=========================================="
 echo ""
 echo "✓ All steps completed successfully:"
 echo "  ✓ Step 1: Used HGDP-intersected AoU data ($COMMON_SNPS SNPs)"
-echo "  ✓ Step 2: Filtered for white/European ancestry ($WHITE_ALL_SAMPLES samples)"
-echo "  ✓ Step 3: Created fit subset ($FIT_SAMPLES samples)"
-if [[ -f "${DATA_DIR}/project_subset.bed" ]]; then
-    PROJECT_SAMPLES=$(wc -l < "${DATA_DIR}/project_subset.fam")
-    echo "  ✓ Step 4: Created project subset ($PROJECT_SAMPLES samples)"
-else
-    echo "  ⚠ Step 4: No project subset (all samples used for fit)"
-fi
+echo "  ✓ Step 2: Filtered for White ($WHITE_ALL_SAMPLES) and Other ($OTHER_ALL_SAMPLES) samples"
+echo "  ✓ Step 3: Created fit subset ($FIT_SAMPLES samples) - 60K White + All Other"
+echo "  ✓ Step 4: Created project subset ($PROJECT_SAMPLES samples) - Entire Dataset"
 echo "  ✓ Step 5: Created label files"
 echo ""
 echo "Generated files in ${DATA_DIR}:"
 echo "  📊 Processed PLINK data:"
-echo "    - white_all.{bed,bim,fam}      (All white samples, $WHITE_ALL_SAMPLES samples, $COMMON_SNPS SNPs)"
 echo "    - fit_subset.{bed,bim,fam}     (Fit subset, $FIT_SAMPLES samples)"
-if [[ -f "${DATA_DIR}/project_subset.bed" ]]; then
-    echo "    - project_subset.{bed,bim,fam} (Project subset, $PROJECT_SAMPLES samples)"
-fi
+echo "    - project_subset.{bed,bim,fam} (Project subset, $PROJECT_SAMPLES samples)"
 echo ""
 echo "  🏷️  Sample labels:"
 echo "    - fit_labels.csv"
-if [[ -f "${DATA_DIR}/project_labels.csv" ]]; then
-    echo "    - project_labels.csv"
-fi
-echo ""
-echo "Key advantages of this pipeline:"
-echo "  • Uses HGDP-intersected SNPs ($COMMON_SNPS instead of 1.7M) → Lower memory usage"
-echo "  • Memory-limited plink2 operations (--memory 100000) → Won't OOM crash"
-echo "  • Checkpointed steps → Can resume if interrupted"
+echo "    - project_labels.csv"
 echo ""
 echo "Next step: Run the pipeline analysis"
 echo "  bash run_pipeline.sh"
