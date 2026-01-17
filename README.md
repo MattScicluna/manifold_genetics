@@ -16,7 +16,7 @@ A lightweight, batteries-included Python package for genetic analysis with dimen
 
 ### Step 1: Installation
 
-#### UV Installation Instructions
+#### Standard Installation
 
 Install `uv` if you haven't already:
 
@@ -24,24 +24,15 @@ Install `uv` if you haven't already:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Clone the repository and set up the environment:
+Clone the repository and setup environment:
 
 ```bash
 git clone https://github.com/MattScicluna/manifold_genetics
 cd manifold_genetics
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 bash setup.sh
 ```
-
-#### Standard Installation
 
 **IMPORTANT**: Run `setup.sh` before using this package. This requires **internet access** (only needed once).
-
-```bash
-cd /path/to/manifold_genetics
-bash setup.sh
-```
 
 This will:
 - Create virtual environment in `.venv/`
