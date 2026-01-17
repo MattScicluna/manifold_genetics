@@ -163,7 +163,7 @@ fi
 
 print_success "Python environment ready"
 
-# Step 5: Create fit indices (3,452 unrelated samples)
+# Step 5: Create fit indices (3,400 unrelated samples)
 print_status "Creating fit indices (unrelated samples)..."
 
 python3 - <<'PYEOF'
