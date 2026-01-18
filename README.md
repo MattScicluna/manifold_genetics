@@ -16,41 +16,54 @@ A lightweight, batteries-included Python package for genetic analysis with dimen
 
 ### Step 1: Installation
 
-#### Standard Installation
+#### Installing uv
 
-Install `uv` if you haven't already:
+First, install `uv` (a fast Python package installer and resolver):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Clone the repository and setup environment:
+#### Setting up the Python environment
+
+Clone the repository and create the Python environment (we recommend Python 3.11):
 
 ```bash
 git clone https://github.com/MattScicluna/manifold_genetics
 cd manifold_genetics
+
+# Create virtual environment with Python 3.11 (recommended)
+uv venv --python python3.11
+
+# Install dependencies
+uv sync --frozen
+
+# For contributors (includes dev tools like pytest, black, etc.)
+uv sync --frozen --extra dev
+```
+
+#### External tools
+
+The package requires external command-line tools (plink2, flashpca) that are not Python packages.
+
+Run `setup.sh` to download these tools (requires internet access, ~28MB total):
+
+```bash
 bash setup.sh
 ```
 
-**IMPORTANT**: Run `setup.sh` before using this package. This requires **internet access** (only needed once).
+**NOTE**: `setup.sh` does NOT manage the Python environment. It only downloads external binaries to `bin/`.
 
-This will:
-- Create virtual environment in `.venv/`
-- Install all Python dependencies
-- **Download plink2 and flashPCA** to `bin/` (~28MB total)
-
-After setup, always activate the virtual environment:
-```bash
-source .venv/bin/activate
-```
+This will download:
+- **plink2** to `bin/plink2` (~20MB)
+- **flashpca** to `bin/flashpca` (~2MB)
 
 ### Step 2: Verify Installation (Optional but Recommended)
 
-Run the test suite tso confirm everything is working:
+Run the test suite to confirm everything is working:
 
 ```bash
-source .venv/bin/activate
-pytest -m "not slow and not network"
+uv run pytest -m "not slow and not network"
 ```
 
 Expected: **55 tests passing** in ~150 seconds. See [Testing](#testing) section for details.
@@ -63,7 +76,6 @@ The package includes a complete working example using HGDP+1000 Genomes Project 
 
 ```bash
 cd /path/to/manifold_genetics
-source .venv/bin/activate
 
 # Download data (~200MB, requires internet)
 bash examples/hgdp_1kgp/download_data.sh
@@ -75,7 +87,7 @@ bash examples/hgdp_1kgp/prepare_data.sh
 #### Run the full pipeline:
 
 ```bash
-# From repository root, with virtual environment activated
+# From repository root
 bash examples/hgdp_1kgp/run_pipeline.sh
 ```
 
@@ -102,7 +114,7 @@ bash examples/hgdp_1kgp/run_pipeline.sh
 Run from the repository root. Outputs land under `examples/hgdp_1kgp/outputs/` in subfolders (`pca/`, `admixture/`, `embeddings/`, `figures/`), and metrics are computed from the pipeline run.
 
 ```bash
-manifold-genetics pipeline \
+uv run manifold-genetics pipeline \
     --fit-plink examples/hgdp_1kgp/data/fit_subset \
     --project-plink examples/hgdp_1kgp/data/project_subset \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
@@ -119,7 +131,7 @@ manifold-genetics pipeline \
 
 Skip steps as needed:
 ```bash
-manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
+uv run manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
 ```
 
 ### Equivalent Individual Commands (same outputs as pipeline)
@@ -128,7 +140,7 @@ Run from repo root; paths below match the pipeline output layout.
 
 ```bash
 # 1) PCA: fit on fit_subset, project on project_subset
-manifold-genetics pca \
+uv run manifold-genetics pca \
     --fit-plink examples/hgdp_1kgp/data/fit_subset \
     --project-plink examples/hgdp_1kgp/data/project_subset \
     --fit-output examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
@@ -137,7 +149,7 @@ manifold-genetics pca \
     --n-pcs 50
 
 # 2) Admixture: fit on fit_subset, project on project_subset
-manifold-genetics admixture \
+uv run manifold-genetics admixture \
     --fit-plink examples/hgdp_1kgp/data/fit_subset \
     --project-plink examples/hgdp_1kgp/data/project_subset \
     --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
@@ -147,7 +159,7 @@ manifold-genetics admixture \
 # Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and transform.{K}.csv
 
 # 3) Embedding (PHATE): fit and transform on projected (transform) PCA coordinates
-manifold-genetics embed \
+uv run manifold-genetics embed \
     --method phate \
     --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
     --project-output examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
@@ -156,7 +168,7 @@ manifold-genetics embed \
 # 4) Visualization
 
 # PCA
-manifold-genetics plot-pca \
+uv run manifold-genetics plot-pca \
     --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --colormap examples/colormaps/hgdp_1kgp.json \
@@ -164,14 +176,14 @@ manifold-genetics plot-pca \
     --n-pcs 50
 
 # PHATE
-manifold-genetics plot \
+uv run manifold-genetics plot \
     --input examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --colormap examples/colormaps/hgdp_1kgp.json \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/phate.png
 
 # Admixture barplots (stacked bars per K)
-manifold-genetics plot-admixture \
+uv run manifold-genetics plot-admixture \
     --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --group-column Genetic_region_merged \
@@ -180,20 +192,20 @@ manifold-genetics plot-admixture \
     --output examples/hgdp_1kgp/outputs/figures/admixture/transform_bars.png
 
 # Admixture embedding grid (seismic colormap per component)
-manifold-genetics plot-admixture-embedding \
+uv run manifold-genetics plot-admixture-embedding \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
     --k-min 2 --k-max 5 \
     --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png
 
 # 5) Metrics (optional, standalone)
-manifold-genetics metrics-geographic \
+uv run manifold-genetics metrics-geographic \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --geographic examples/hgdp_1kgp/data/hgdp_project_geographic.csv \
     --output examples/hgdp_1kgp/outputs/metrics/geographic.json \
     --num-dists-sampled 50000
 
-manifold-genetics metrics-admixture \
+uv run manifold-genetics metrics-admixture \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --q-dir examples/hgdp_1kgp/outputs/admixture \
     --output examples/hgdp_1kgp/outputs/metrics/admixture.json \
@@ -277,14 +289,9 @@ Typically 2D for visualization (controlled by `--n-components`).
    - Labels CSV - sample metadata with `sample_id` column
    - Colormap JSON - hex colors for each column label from labels CSV file. NOTE: ordering of labels is plotting order for subsequent plots.
 
-2. **Activate environment:**
+2. **Run the pipeline:**
    ```bash
-   source .venv/bin/activate
-   ```
-
-3. **Run the pipeline:**
-   ```bash
-   manifold-genetics pipeline \
+   uv run manifold-genetics pipeline \
        --fit-plink data/your_data \
        --project-plink data/your_data \
        --labels data/labels.csv \
@@ -300,7 +307,7 @@ See [Data Formats](#data-formats) section above for detailed file format specifi
 
 **Adjust parameters:**
 ```bash
-manifold-genetics pipeline \
+uv run manifold-genetics pipeline \
     --fit-plink data/your_data \
     --project-plink data/your_data \
     --labels data/labels.csv \
@@ -318,7 +325,7 @@ manifold-genetics pipeline \
 **For large datasets (>10K samples):**
 ```bash
 # Use landmarking for computational efficiency
-manifold-genetics pipeline ... \
+uv run manifold-genetics pipeline ... \
     --n-landmark 10000 \
     --random-landmarking \
     --neuraladmixture-batch-size 400
@@ -326,7 +333,7 @@ manifold-genetics pipeline ... \
 
 **Skip steps:**
 ```bash
-manifold-genetics pipeline ... \
+uv run manifold-genetics pipeline ... \
     --skip-admixture \      # Skip ancestry analysis
     --skip-metrics          # Skip preservation metrics
 ```
@@ -367,22 +374,16 @@ No manual installation needed!
 
 ## Troubleshooting
 
-**Virtual environment not activated**:
-```bash
-source .venv/bin/activate
-```
-
 **Import errors after installation**:
 ```bash
-source .venv/bin/activate
-pip install -e . --force-reinstall --no-deps
+uv sync --frozen --force-reinstall
 ```
 
 ## Testing
 
 Run all tests:
 ```bash
-pytest -v
+uv run pytest -v
 ```
 
 ## Additional Examples
