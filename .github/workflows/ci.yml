@@ -58,7 +58,7 @@ jobs:
           echo "=== uv Version ==="
           uv --version
           echo "=== Installed Packages ==="
-          uv pip list
+          uv pip freeze
 
   lint:
     runs-on: ubuntu-latest
