@@ -9,7 +9,7 @@
 # with the appropriate mode.
 #
 # Usage:
-#   bash examples/ukbb/10k_WB_5k_Irish/run_pipeline.sh
+#   bash examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh
 #
 
 set -e
@@ -64,7 +64,7 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --embedding "phate" \
     --admixture-group-column "self_described_ancestry" \
     --threads "$CLUSTER_CPUS" \
-    ${CLUSTER_GPUS:+"--num-gpus" "$CLUSTER_GPUS"} \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
     "$@"
 
 echo ""
