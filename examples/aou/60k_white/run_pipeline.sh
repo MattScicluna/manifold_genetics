@@ -2,8 +2,11 @@
 #
 # AoU 60K White Subset Pipeline
 #
-# This is a minimal wrapper that sets AoU-specific paths and calls
-# the generic subsample template.
+# This script configures and runs the pipeline on a subsample of the
+# All of Us (AoU) cohort.
+#
+# This script is a minimal wrapper that calls the shared pipeline runner
+# with the appropriate mode.
 #
 # Usage:
 #   bash examples/aou/60k_white/run_pipeline.sh
@@ -11,46 +14,59 @@
 
 set -e
 
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
 # Get directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ============================================================================
-# AoU-Specific Configuration
-# ============================================================================
-
-# IMPORTANT: Update these paths to point to your actual data location
-# These are placeholder paths - replace with your real data paths before running
-
-# For development: Uncomment and set your actual paths here
-# export DATA_DIR="/path/to/your/aou/data"
-# export FIT_PLINK="/path/to/aou_60k_white_fit"
-# export PROJECT_PLINK="/path/to/aou_60k_white_project"
-# export FIT_LABELS="/path/to/fit_labels.csv"
-# export PROJECT_LABELS="/path/to/project_labels.csv"
-# export COLORMAP="${PROJECT_ROOT}/examples/colormaps/aou.json"
-# export OUTPUT_DIR="/path/to/output"
-
-# Default paths (relative to script directory) - will work if data is in ./data/
-export DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
-export OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
-export FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
-export PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
-export FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
-export PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
-export COLORMAP="${COLORMAP:-${PROJECT_ROOT}/examples/colormaps/aou.json}"
-
-# Set pipeline parameters
-export N_PCS=20
-export K_MIN=2
-export K_MAX=10
-export EMBEDDING="phate"
-export ADMIXTURE_GROUP_COLUMN="race_ethnicity"
+# --- IMPORTANT: UPDATE THESE PATHS ---
+# Default paths (relative to script directory)
+DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
+OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
+FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
+PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
+FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
+PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
+COLORMAP="${COLORMAP:-${PROJECT_ROOT}/examples/colormaps/aou.json}"
+# ------------------------------------
 
 # ============================================================================
-# Call Generic Subsample Template
+# Detect cluster environment
 # ============================================================================
 
-# Note: Subsample mode uses random landmarking by default
-# Note: "$@" passes through any additional arguments (e.g., --skip-metrics)
-bash "${PROJECT_ROOT}/examples/generic/subset/run_pipeline.sh" "$@"
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
+
+# ============================================================================
+# Run pipeline with subsample mode
+# ============================================================================
+
+# This pipeline uses "subsample" mode, which is designed for visualizing
+# large, standalone cohorts.
+#
+# The shared runner script will automatically apply the correct defaults for this mode:
+# - PHATE: knn=500, t=50
+# - Random landmarking with 10,000 landmarks
+#
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode subsample \
+    --fit-plink "$FIT_PLINK" \
+    --project-plink "$PROJECT_PLINK" \
+    --fit-labels "$FIT_LABELS" \
+    --project-labels "$PROJECT_LABELS" \
+    --colormap "$COLORMAP" \
+    --output "$OUTPUT_DIR" \
+    --n-pcs 20 \
+    --k-min 2 \
+    --k-max 10 \
+    --embedding "phate" \
+    --admixture-group-column "race_ethnicity" \
+    --threads "$CLUSTER_CPUS" \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
+    "$@"
+
+echo ""
+echo "Pipeline complete! Results in: ${OUTPUT_DIR}"
+echo ""

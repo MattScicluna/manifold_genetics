@@ -71,7 +71,8 @@ set_projection_mode_defaults() {
 }
 
 set_subsample_mode_defaults() {
-    # Within-cohort: default is fit on subsample only (cheaper)
+    # Within-cohort: Fit and transform is on fit subset only (cheaper)
+    # Usually, the fit subset is a balanced subset of the data
     # Override with --embedding-input both to project on full cohort (more expensive)
     EMBEDDING_INPUT="${EMBEDDING_INPUT:-fit}"
     KNN="${KNN:-500}"
@@ -83,7 +84,7 @@ set_subsample_mode_defaults() {
 }
 
 set_transform_mode_defaults() {
-    # Fit and transform on target dataset only: when transform set contains fit set
+    # Within-cohort: fit and transform on target dataset only: when transform set contains fit set
     # No cross-projection needed - just fit+transform on the same target dataset
     EMBEDDING_INPUT="${EMBEDDING_INPUT:-project}"
     KNN="${KNN:-100}"

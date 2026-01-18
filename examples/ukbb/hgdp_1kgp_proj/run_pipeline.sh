@@ -2,8 +2,11 @@
 #
 # UKBB-HGDP Cross-Projection Pipeline
 #
-# This is a minimal wrapper that sets UKBB-specific paths and calls
-# the generic cross-projection template.
+# This script configures and runs the cross-projection pipeline, fitting
+# models on HGDP+1KGP and projecting them onto the UK Biobank (UKBB) cohort.
+#
+# This script is a minimal wrapper that calls the shared pipeline runner
+# with the appropriate mode.
 #
 # Usage:
 #   bash examples/ukbb/hgdp_1kgp_proj/run_pipeline.sh
@@ -11,52 +14,63 @@
 
 set -e
 
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
 # Get directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ============================================================================
-# UKBB-Specific Configuration
-# ============================================================================
-
-# IMPORTANT: Update these paths to point to your actual data location
-# These are placeholder paths - replace with your real data paths before running
-
-# For development: Uncomment and set your actual paths here
-# export DATA_DIR="/path/to/your/ukbb/data"
-# export FIT_PLINK="/path/to/hgdp_1kgp_fit"
-# export PROJECT_PLINK="/path/to/ukbb_project"
-# export FIT_LABELS="/path/to/hgdp_labels.csv"
-# export PROJECT_LABELS="/path/to/ukbb_labels.csv"
-# export FIT_COLORMAP="${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json"
-# export PROJECT_COLORMAP="${PROJECT_ROOT}/examples/colormaps/ukbb.json"
-# export OUTPUT_DIR="/path/to/output"
-
-# Default paths (relative to script directory) - will work if data is in ./data/
-export DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
-export OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
-export FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
-export PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
-export FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
-export PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
-export FIT_COLORMAP="${FIT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json}"
-export PROJECT_COLORMAP="${PROJECT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/ukbb.json}"
-
-# Set pipeline parameters
-export N_PCS=20
-export K_MIN=2
-export K_MAX=10
-export EMBEDDING="phate"
-export ADMIXTURE_GROUP_COLUMN="self_described_ancestry"
-export USE_LANDMARKING=false  # UKBB size doesn't require landmarking
-
-# Performance tuning
-export NEURALADMIXTURE_BATCH_SIZE=400
-export EMBED_BATCH_SIZE=60000
+# --- IMPORTANT: UPDATE THESE PATHS ---
+# Default paths (relative to script directory)
+DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
+OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
+FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
+PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
+FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
+PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
+FIT_COLORMAP="${FIT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json}"
+PROJECT_COLORMAP="${PROJECT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/ukbb.json}"
+# ------------------------------------
 
 # ============================================================================
-# Call Generic Cross-Projection Template
+# Detect cluster environment
 # ============================================================================
 
-# Note: "$@" passes through any additional arguments (e.g., --skip-metrics)
-bash "${PROJECT_ROOT}/examples/generic/hgdp_1kgp_proj/run_pipeline.sh" "$@"
+source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
+
+# ============================================================================
+# Run pipeline with projection mode
+# ============================================================================
+
+# This pipeline uses "projection" mode, which is designed for projecting a
+# large cohort onto a smaller reference panel (e.g., UKBB onto HGDP+1KGP).
+#
+# The shared runner script will automatically apply the correct defaults for this mode:
+# - PHATE: knn=100, t=3
+# - No landmarking (as UKBB is the project set, not the fit set for embedding)
+#
+bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
+    --mode projection \
+    --fit-plink "$FIT_PLINK" \
+    --project-plink "$PROJECT_PLINK" \
+    --fit-labels "$FIT_LABELS" \
+    --project-labels "$PROJECT_LABELS" \
+    --fit-colormap "$FIT_COLORMAP" \
+    --project-colormap "$PROJECT_COLORMAP" \
+    --output "$OUTPUT_DIR" \
+    --n-pcs 20 \
+    --k-min 2 \
+    --k-max 10 \
+    --embedding "phate" \
+    --admixture-group-column "self_described_ancestry" \
+    --threads "$CLUSTER_CPUS" \
+    --neuraladmixture-batch-size 400 \
+    --embed-batch-size 60000 \
+    ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
+    "$@"
+
+echo ""
+echo "Pipeline complete! Results in: ${OUTPUT_DIR}"
+echo ""
