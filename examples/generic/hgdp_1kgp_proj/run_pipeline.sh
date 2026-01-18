@@ -34,7 +34,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs}"
 FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
 PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
 FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
-PROJECT_LABels="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
+PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
 FIT_COLORMAP="${FIT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json}"
 PROJECT_COLORMAP="${PROJECT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/custom.json}"
 # ------------------------------------
@@ -74,15 +74,19 @@ CMD=(
     --k-max 10
     --embedding "phate"
     --threads "$CLUSTER_CPUS"
-    # --- OPTIONAL: Add performance tuning or other flags here ---
-    # --n-landmark 10000
-    # --random-landmarking
-    # --neuraladmixture-batch-size 400
-    # --skip-admixture
 )
 
+# --- OPTIONAL: Add performance tuning or other flags here ---
+# Add these to the command above if needed, e.g.:
+#   --n-landmark 10000
+#   --random-landmarking
+#   --neuraladmixture-batch-size 400
+#   --skip-admixture
+
 # Add GPU flag if available
-${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"}
+if [[ -n "$CLUSTER_GPUS" ]]; then
+    CMD+=(--num-gpus "$CLUSTER_GPUS")
+fi
 
 # Execute with any additional arguments passed from the command line
 "${CMD[@]}" "$@"
