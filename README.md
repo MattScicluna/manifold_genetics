@@ -52,7 +52,7 @@ Run `setup.sh` to download these tools (requires internet access, ~28MB total):
 bash setup.sh
 ```
 
-**NOTE**: `setup.sh` does NOT manage the Python environment. It only downloads external binaries to `bin/`.
+**NOTE**: `setup.sh` does NOT manage the Python environment. It only downloads external binaries to the `bin/` directory.
 
 This will download:
 - **plink2** to `bin/plink2` (~20MB)
