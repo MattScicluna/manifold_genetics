@@ -63,6 +63,10 @@ This will download:
 Run the test suite to confirm everything is working:
 
 ```bash
+# Install dev dependencies (includes pytest)
+uv sync --frozen --extra dev
+
+# Run tests
 uv run pytest -m "not slow and not network"
 ```
 
@@ -381,8 +385,12 @@ uv sync --frozen --force-reinstall
 
 ## Testing
 
-Run all tests:
+Tests require dev dependencies:
 ```bash
+# Install dev dependencies (includes pytest)
+uv sync --frozen --extra dev
+
+# Run all tests
 uv run pytest -v
 ```
 
