@@ -281,7 +281,6 @@ echo ""
 
 HGDP_INPUT="${REF_DIR}/extractedChrAllUnpruned"
 HGDP_FILTERED="${TEMP_DIR}/hgdp_filtered"
-SHARED_DIR="${SCRIPT_DIR}/../_shared"
 
 if [[ ! -f "${HGDP_FILTERED}.bed" ]]; then
     INITIAL_HGDP_SNPS=$(wc -l < "${HGDP_INPUT}.bim")
@@ -325,7 +324,7 @@ if [[ ! -f "${HGDP_FILTERED}.bed" ]]; then
 
     # Run Python script to identify SNPs to keep
     echo "    Identifying best SNP per position..."
-    python3 ${SHARED_DIR}/filter_duplicates.py \
+    python3 -m manifold_genetics.utils.filter_duplicates \
         --bim ${HGDP_NO_INDELS}.bim \
         --lmiss ${TEMP_DIR}/hgdp_missing.lmiss \
         --frq ${TEMP_DIR}/hgdp_freq.frq \
