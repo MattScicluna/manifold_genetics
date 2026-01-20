@@ -2,7 +2,7 @@
 #
 # External tools setup script for manifold-genetics
 #
-# This script downloads external command-line tools (plink2, flashPCA).
+# This script downloads external command-line tools (plink, plink2, flashPCA).
 # It does NOT manage the Python environment.
 #
 # For Python environment setup, see README.md and use:
@@ -37,7 +37,7 @@ echo "Downloading External Tools"
 echo "=========================================="
 echo ""
 echo "IMPORTANT: Compute nodes have no internet access."
-echo "Downloading plink2 and flashPCA now..."
+echo "Downloading plink, plink2, and flashPCA now..."
 echo ""
 
 mkdir -p bin
@@ -84,6 +84,52 @@ if [ ! -f "bin/plink2" ]; then
     fi
 else
     echo "✓ plink2 already exists"
+fi
+
+# Download plink (v1.9) - needed for --missing and --freq commands
+if [ ! -f "bin/plink" ]; then
+    echo "Downloading plink (v1.9)..."
+    PLINK1_URL="https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20231211.zip"
+
+    # Try wget first, then curl
+    if command -v wget &> /dev/null; then
+        wget -O bin/plink1.zip "$PLINK1_URL"
+    else
+        curl -L -o bin/plink1.zip "$PLINK1_URL"
+    fi
+
+    # Verify it's actually a zip file
+    if file bin/plink1.zip | grep -q "Zip archive"; then
+        unzip -o bin/plink1.zip -d bin/
+        chmod +x bin/plink
+        rm bin/plink1.zip
+        # Clean up extra files from plink1 zip (LICENSE, prettify, toy.*)
+        rm -f bin/LICENSE bin/prettify bin/toy.*
+        echo "✓ plink (v1.9) downloaded: $(ls -lh bin/plink | awk '{print $5}')"
+    else
+        echo "ERROR: Downloaded file is not a valid zip archive"
+        echo "File type: $(file bin/plink1.zip)"
+        echo ""
+        echo "Trying alternative URL..."
+        PLINK1_ALT_URL="https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_latest.zip"
+        rm -f bin/plink1.zip
+        wget -O bin/plink1.zip "$PLINK1_ALT_URL" || curl -L -o bin/plink1.zip "$PLINK1_ALT_URL"
+
+        if file bin/plink1.zip | grep -q "Zip archive"; then
+            unzip -o bin/plink1.zip -d bin/
+            chmod +x bin/plink
+            rm bin/plink1.zip
+            rm -f bin/LICENSE bin/prettify bin/toy.*
+            echo "✓ plink (v1.9) downloaded (alternative URL)"
+        else
+            echo "ERROR: Could not download plink. Please download manually from:"
+            echo "  https://www.cog-genomics.org/plink/1.9/"
+            echo "  and place the binary in: $(pwd)/bin/plink"
+            exit 1
+        fi
+    fi
+else
+    echo "✓ plink (v1.9) already exists"
 fi
 
 # Download flashPCA

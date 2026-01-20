@@ -29,8 +29,8 @@ CDR_VERSION="${WORKSPACE_CDR:-}"
 # Filtering parameters (adjust to control final SNP count)
 # =============================================================================
 # Target: ~150-200K SNPs after all filtering
-MAF_THRESHOLD="${MAF_THRESHOLD:-0.001}"   # Minor allele frequency (remove rare variants)
-GENO_THRESHOLD="${GENO_THRESHOLD:-0.01}"  # Missing genotype rate (remove low-quality SNPs)
+MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"    # Minor allele frequency (remove rare variants, 1% default)
+GENO_THRESHOLD="${GENO_THRESHOLD:-0.05}"  # Missing genotype rate (remove low-quality SNPs, 5% default)
 LD_WINDOW="${LD_WINDOW:-150}"             # LD pruning window size (kb)
 LD_STEP="${LD_STEP:-1}"                   # LD pruning step size
 LD_R2="${LD_R2:-0.05}"                    # LD pruning r² threshold (higher = more SNPs retained)
@@ -57,6 +57,64 @@ echo ""
 
 # Create directories
 mkdir -p "${DATA_DIR}" "${REF_DIR}"
+
+# =============================================================================
+# Find plink and plink2 binaries (needed throughout the script)
+# =============================================================================
+echo "=========================================="
+echo "Checking for required tools"
+echo "=========================================="
+echo ""
+
+# Find plink2
+echo "Looking for plink2..."
+PLINK2=""
+if [[ -f "${PROJECT_ROOT}/bin/plink2" ]]; then
+    PLINK2="${PROJECT_ROOT}/bin/plink2"
+    echo "  ✓ Using plink2 from bin/plink2"
+elif command -v plink2 &> /dev/null; then
+    PLINK2="plink2"
+    echo "  ✓ Using plink2 from PATH"
+else
+    echo "  ✗ plink2 not found!"
+    echo ""
+    echo "Please ensure plink2 is available via one of:"
+    echo "  1. Run setup.sh to download to bin/plink2 (recommended)"
+    echo "  2. Add plink2 to your PATH"
+    echo ""
+    exit 1
+fi
+
+if ! ${PLINK2} --version &> /dev/null; then
+    echo "  ✗ plink2 found but not executable!"
+    exit 1
+fi
+
+# Find plink (v1.9)
+echo "Looking for plink (v1.9)..."
+PLINK=""
+if [[ -f "${PROJECT_ROOT}/bin/plink" ]]; then
+    PLINK="${PROJECT_ROOT}/bin/plink"
+    echo "  ✓ Using plink from bin/plink"
+elif command -v plink &> /dev/null; then
+    PLINK="plink"
+    echo "  ✓ Using plink from PATH"
+else
+    echo "  ✗ plink (v1.9) not found!"
+    echo ""
+    echo "Please ensure plink is available via one of:"
+    echo "  1. Run setup.sh to download to bin/plink (recommended)"
+    echo "  2. Add plink to your PATH"
+    echo ""
+    exit 1
+fi
+
+if ! ${PLINK} --version &> /dev/null; then
+    echo "  ✗ plink found but not executable!"
+    exit 1
+fi
+
+echo ""
 
 # =============================================================================
 # STEP 1-5: Reference Data Processing (HGDP+1KGP)
@@ -103,8 +161,10 @@ fi
 # 4. Split by chromosome (1-22)
 echo "Splitting reference data by chromosome (using ${CPU_CORES} cores)..."
 if [[ ! -f "${REF_DIR}/extractedChr22.bed" ]]; then
+    # Export PLINK path for xargs subshell
+    export PLINK
     seq 1 22 | xargs -I {} -P "${CPU_CORES}" sh -c \
-        "plink --bfile ${REF_DIR}/extractedChrAllUnpruned \
+        "${PLINK} --bfile ${REF_DIR}/extractedChrAllUnpruned \
                --keep-allele-order --allow-no-sex --chr {} \
                --make-bed --out ${REF_DIR}/extractedChr{}"
 else
@@ -166,37 +226,6 @@ echo "  Overlap before filtering: ${OVERLAP_BEFORE}"
 echo ""
 
 # =============================================================================
-# Find plink2 (needed for filtering and downstream steps)
-# =============================================================================
-echo "Looking for plink2..."
-PLINK2=""
-
-# Check bin/ directory first (preferred)
-if [[ -f "${PROJECT_ROOT}/bin/plink2" ]]; then
-    PLINK2="${PROJECT_ROOT}/bin/plink2"
-    echo "  ✓ Using plink2 from bin/plink2"
-# Check if plink2 is in PATH
-elif command -v plink2 &> /dev/null; then
-    PLINK2="plink2"
-    echo "  ✓ Using plink2 from PATH"
-else
-    echo "  ✗ plink2 not found!"
-    echo ""
-    echo "Please ensure plink2 is available via one of:"
-    echo "  1. Run setup.sh to download to bin/plink2 (recommended)"
-    echo "  2. Add plink2 to your PATH"
-    echo ""
-    exit 1
-fi
-
-# Verify plink2 works
-if ! ${PLINK2} --version &> /dev/null; then
-    echo "  ✗ plink2 found but not executable!"
-    exit 1
-fi
-echo ""
-
-# =============================================================================
 # STEP 7: Filter AoU Data (indel removal + QC)
 # =============================================================================
 echo "=========================================="
@@ -237,24 +266,151 @@ fi
 echo ""
 
 # =============================================================================
-# STEP 8: Filter HGDP Data
+# STEP 8: Filter HGDP Data (comprehensive filtering)
 # =============================================================================
 echo "=========================================="
 echo "Step 8: Filter HGDP Data"
 echo "=========================================="
+echo ""
+echo "This step applies comprehensive filtering to HGDP+1KGP:"
+echo "  8a. Remove indels (keep only biallelic SNPs)"
+echo "  8b. Remove duplicate/multi-allelic positions"
+echo "  8c. Exclude GIAB difficult regions"
+echo "  8d. Exclude HLA/MHC region"
+echo "  8e. Apply MAF filter (>= ${MAF_THRESHOLD})"
+echo "  8f. Apply missingness filter (< ${GENO_THRESHOLD})"
+echo ""
 
+HGDP_INPUT="${REF_DIR}/extractedChrAllUnpruned"
 HGDP_FILTERED="${TEMP_DIR}/hgdp_filtered"
+SHARED_DIR="${SCRIPT_DIR}/../_shared"
+
 if [[ ! -f "${HGDP_FILTERED}.bed" ]]; then
-    echo "  Filtering HGDP (MAF > ${MAF_THRESHOLD}, missing < ${GENO_THRESHOLD})..."
-    ${PLINK2} --bfile ${REF_DIR}/extractedChrAllUnpruned \
+    INITIAL_HGDP_SNPS=$(wc -l < "${HGDP_INPUT}.bim")
+    echo "  Initial HGDP SNPs: $INITIAL_HGDP_SNPS"
+
+    # -------------------------------------------------------------------------
+    # 8a. Remove indels (keep only single-nucleotide biallelic SNPs)
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "  [8a] Removing indels (keeping only A/T/G/C SNPs)..."
+    awk 'length($5) == 1 && length($6) == 1 && $5 ~ /^[ATGC]$/ && $6 ~ /^[ATGC]$/ {print $2}' \
+        "${HGDP_INPUT}.bim" > "${TEMP_DIR}/hgdp_snps_no_indels.txt"
+    NO_INDEL_COUNT=$(wc -l < "${TEMP_DIR}/hgdp_snps_no_indels.txt")
+    echo "    SNPs after indel removal: $NO_INDEL_COUNT"
+
+    # Create intermediate file without indels
+    HGDP_NO_INDELS="${TEMP_DIR}/hgdp_no_indels"
+    ${PLINK} --bfile ${HGDP_INPUT} \
+        --extract ${TEMP_DIR}/hgdp_snps_no_indels.txt \
+        --keep-allele-order \
+        --make-bed \
+        --out ${HGDP_NO_INDELS}
+
+    # -------------------------------------------------------------------------
+    # 8b. Remove duplicate/multi-allelic positions (keep lowest missingness, highest MAF)
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "  [8b] Removing duplicate/multi-allelic positions..."
+
+    # Calculate missingness
+    echo "    Calculating per-SNP missingness..."
+    ${PLINK} --bfile ${HGDP_NO_INDELS} \
+        --missing \
+        --out ${TEMP_DIR}/hgdp_missing
+
+    # Calculate allele frequencies
+    echo "    Calculating allele frequencies..."
+    ${PLINK} --bfile ${HGDP_NO_INDELS} \
+        --freq \
+        --out ${TEMP_DIR}/hgdp_freq
+
+    # Run Python script to identify SNPs to keep
+    echo "    Identifying best SNP per position..."
+    python3 ${SHARED_DIR}/filter_duplicates.py \
+        --bim ${HGDP_NO_INDELS}.bim \
+        --lmiss ${TEMP_DIR}/hgdp_missing.lmiss \
+        --frq ${TEMP_DIR}/hgdp_freq.frq \
+        --out ${TEMP_DIR}/hgdp_dedup
+
+    DEDUP_COUNT=$(wc -l < "${TEMP_DIR}/hgdp_dedup.keep_snps.txt")
+    echo "    SNPs after deduplication: $DEDUP_COUNT"
+
+    # Create intermediate file without duplicates
+    HGDP_DEDUP="${TEMP_DIR}/hgdp_deduped"
+    ${PLINK} --bfile ${HGDP_NO_INDELS} \
+        --extract ${TEMP_DIR}/hgdp_dedup.keep_snps.txt \
+        --keep-allele-order \
+        --make-bed \
+        --out ${HGDP_DEDUP}
+
+    # -------------------------------------------------------------------------
+    # 8c & 8d. Exclude GIAB difficult regions and HLA region
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "  [8c] Downloading GIAB difficult regions blacklist..."
+
+    GIAB_URL="https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/genome-stratifications/v3.6/GRCh38@all/Union/GRCh38_alldifficultregions.bed.gz"
+    GIAB_BED="${TEMP_DIR}/GRCh38_alldifficultregions.bed"
+    EXCLUDE_BED="${TEMP_DIR}/exclude_regions.bed"
+
+    if [[ ! -f "${GIAB_BED}" ]]; then
+        echo "    Downloading from NCBI..."
+        curl -sL "${GIAB_URL}" | gunzip > "${GIAB_BED}"
+        echo "    Downloaded $(wc -l < "${GIAB_BED}") regions"
+    else
+        echo "    GIAB blacklist already downloaded"
+    fi
+
+    echo ""
+    echo "  [8d] Creating HLA/MHC exclusion region..."
+
+    # HLA region (chr6:28.5-33.5Mb) - uses 'chr' prefix to match BIM
+    HLA_BED="${TEMP_DIR}/HLA_region.bed"
+    echo -e "chr6\t28510120\t33480577" > "${HLA_BED}"
+
+    # Combine GIAB and HLA regions
+    # Add 'chr' prefix to GIAB regions if needed (GIAB uses 'chr' prefix already for GRCh38)
+    cat "${GIAB_BED}" "${HLA_BED}" > "${EXCLUDE_BED}"
+    EXCLUDE_REGION_COUNT=$(wc -l < "${EXCLUDE_BED}")
+    echo "    Total exclusion regions: $EXCLUDE_REGION_COUNT"
+
+    # Exclude difficult regions
+    echo "    Excluding difficult regions and HLA..."
+    HGDP_NO_DIFFICULT="${TEMP_DIR}/hgdp_no_difficult"
+    ${PLINK2} --bfile ${HGDP_DEDUP} \
+        --exclude range ${EXCLUDE_BED} \
+        --make-bed \
+        --out ${HGDP_NO_DIFFICULT}
+
+    NO_DIFFICULT_COUNT=$(wc -l < "${HGDP_NO_DIFFICULT}.bim")
+    echo "    SNPs after excluding difficult regions: $NO_DIFFICULT_COUNT"
+
+    # -------------------------------------------------------------------------
+    # 8e & 8f. Apply MAF and missingness filters
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "  [8e/8f] Applying MAF (>= ${MAF_THRESHOLD}) and geno (< ${GENO_THRESHOLD}) filters..."
+
+    ${PLINK2} --bfile ${HGDP_NO_DIFFICULT} \
         --maf ${MAF_THRESHOLD} \
         --geno ${GENO_THRESHOLD} \
         --output-chr chrM \
-        --memory 100000 \
         --make-bed \
         --out ${HGDP_FILTERED}
+
     HGDP_FILTERED_SNPS=$(wc -l < "${HGDP_FILTERED}.bim")
-    echo "  HGDP SNPs after filtering: ${HGDP_FILTERED_SNPS}"
+
+    # -------------------------------------------------------------------------
+    # Summary
+    # -------------------------------------------------------------------------
+    echo ""
+    echo "  HGDP filtering summary:"
+    echo "    Initial SNPs:                    $INITIAL_HGDP_SNPS"
+    echo "    After indel removal:             $NO_INDEL_COUNT"
+    echo "    After deduplication:             $DEDUP_COUNT"
+    echo "    After excluding difficult/HLA:   $NO_DIFFICULT_COUNT"
+    echo "    After MAF/geno filters:          $HGDP_FILTERED_SNPS"
 else
     echo "  Using existing filtered HGDP data"
     HGDP_FILTERED_SNPS=$(wc -l < "${HGDP_FILTERED}.bim")
@@ -661,7 +817,12 @@ echo "  ✓ Step 1-4: HGDP+1KGP reference data downloaded and split"
 echo "  ✓ Step 5: AoU genotype data downloaded"
 echo "  ✓ Step 6: Overlap before filtering (${OVERLAP_BEFORE} positions)"
 echo "  ✓ Step 7: AoU data filtered (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
-echo "  ✓ Step 8: HGDP data filtered (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD})"
+echo "  ✓ Step 8: HGDP data filtered (comprehensive):"
+echo "      - 8a: Indels removed"
+echo "      - 8b: Duplicate/multi-allelic positions removed"
+echo "      - 8c: GIAB difficult regions excluded"
+echo "      - 8d: HLA/MHC region excluded"
+echo "      - 8e/8f: MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}"
 echo "  ✓ Step 9: Overlap after filtering (${OVERLAP_AFTER} positions)"
 echo "  ✓ Step 10: SNP IDs standardized"
 echo "  ✓ Step 11: LD pruning (${LD_WINDOW}kb, r²=${LD_R2})"
@@ -680,7 +841,11 @@ echo "    - aou_labels.csv     (AoU sample metadata)"
 echo ""
 echo "  📋 Intermediate files (in data/temp/):"
 echo "    - aou_filtered.{bed,bim,fam} (filtered AoU data)"
-echo "    - hgdp_filtered.{bed,bim,fam} (filtered HGDP data)"
+echo "    - hgdp_no_indels.{bed,bim,fam} (HGDP without indels)"
+echo "    - hgdp_deduped.{bed,bim,fam} (HGDP without duplicates)"
+echo "    - hgdp_no_difficult.{bed,bim,fam} (HGDP without GIAB/HLA)"
+echo "    - hgdp_filtered.{bed,bim,fam} (final filtered HGDP data)"
+echo "    - GRCh38_alldifficultregions.bed (GIAB blacklist)"
 echo "    - *_standardized.{bed,bim,fam} (SNP IDs standardized)"
 echo "    - *_pruned.{bed,bim,fam} (LD-pruned data)"
 echo "    - common_snps.txt, flip_list.txt, exclude_list.txt"
