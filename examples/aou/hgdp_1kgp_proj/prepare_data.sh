@@ -36,7 +36,8 @@ LD_STEP="${LD_STEP:-1}"                   # LD pruning step size
 LD_R2="${LD_R2:-0.05}"                    # LD pruning r² threshold (higher = more SNPs retained)
 
 # Directories
-REF_DIR="${DATA_DIR}/1KGPHGDP"
+TEMP_DIR="${DATA_DIR}/temp"
+REF_DIR="${TEMP_DIR}/1KGPHGDP"
 SHARED_AOU_DIR="${SCRIPT_DIR}/../shared/data/AllofUs_V8"
 SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
 
@@ -56,7 +57,7 @@ echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 echo ""
 
 # Create directories
-mkdir -p "${DATA_DIR}" "${REF_DIR}"
+mkdir -p "${DATA_DIR}" "${TEMP_DIR}" "${REF_DIR}"
 
 # =============================================================================
 # Find plink and plink2 binaries (needed throughout the script)
@@ -127,13 +128,13 @@ echo "=========================================="
 echo "Step 1-4: HGDP+1KGP Reference Data"
 echo "=========================================="
 
-TAR_PATH="${DATA_DIR}/1KGPHGDP.tar.gz"
+TAR_PATH="${TEMP_DIR}/1KGPHGDP.tar.gz"
 
 # 1. Download
 if [[ ! -f "${TAR_PATH}" ]]; then
     echo "Downloading HGDP+1KGP reference data..."
     echo "  Source: ${REF_DATA_URL}"
-    gsutil cp "${REF_DATA_URL}" "${DATA_DIR}/"
+    gsutil cp "${REF_DATA_URL}" "${TEMP_DIR}/"
 else
     echo "  Reference data archive already exists"
 fi
@@ -141,7 +142,7 @@ fi
 # 2. Extract
 if [[ ! -f "${REF_DIR}/extractedChrAllUnpruned.bed" ]]; then
     echo "Extracting reference data..."
-    tar -xf "${TAR_PATH}" --directory "${DATA_DIR}/"
+    tar -xf "${TAR_PATH}" --directory "${TEMP_DIR}/"
 else
     echo "  Reference data already extracted"
 fi
@@ -214,9 +215,6 @@ echo ""
 echo "=========================================="
 echo "Step 6: Check Overlap (before filtering)"
 echo "=========================================="
-
-TEMP_DIR="${DATA_DIR}/temp"
-mkdir -p "$TEMP_DIR"
 
 AOU_UNFILTERED="${SHARED_AOU_DIR}/extractedChrAll"
 awk '{print $1":"$4}' "${AOU_UNFILTERED}.bim" | sort > "${TEMP_DIR}/aou_unfiltered_pos.txt"
@@ -840,6 +838,8 @@ echo "    - hgdp_labels.csv    (HGDP sample metadata)"
 echo "    - aou_labels.csv     (AoU sample metadata)"
 echo ""
 echo "  📋 Intermediate files (in data/temp/):"
+echo "    - 1KGPHGDP.tar.gz (downloaded reference archive)"
+echo "    - 1KGPHGDP/ (extracted reference data)"
 echo "    - aou_filtered.{bed,bim,fam} (filtered AoU data)"
 echo "    - hgdp_no_indels.{bed,bim,fam} (HGDP without indels)"
 echo "    - hgdp_deduped.{bed,bim,fam} (HGDP without duplicates)"
