@@ -210,18 +210,20 @@ fi
 echo ""
 
 # =============================================================================
-# STEP 6: Check overlap before filtering
+# STEP 6: Check overlap before filtering (SKIPPED - slow)
 # =============================================================================
-echo "=========================================="
-echo "Step 6: Check Overlap (before filtering)"
-echo "=========================================="
+# echo "=========================================="
+# echo "Step 6: Check Overlap (before filtering)"
+# echo "=========================================="
+#
+# AOU_UNFILTERED="${SHARED_AOU_DIR}/extractedChrAll"
+# awk '{print $1":"$4}' "${AOU_UNFILTERED}.bim" | sort > "${TEMP_DIR}/aou_unfiltered_pos.txt"
+# awk '{print $1":"$4}' "${REF_DIR}/extractedChrAllUnpruned.bim" | sort > "${TEMP_DIR}/hgdp_pos.txt"
+# OVERLAP_BEFORE=$(comm -12 "${TEMP_DIR}/aou_unfiltered_pos.txt" "${TEMP_DIR}/hgdp_pos.txt" | wc -l)
+# echo "  Overlap before filtering: ${OVERLAP_BEFORE}"
+# echo ""
 
 AOU_UNFILTERED="${SHARED_AOU_DIR}/extractedChrAll"
-awk '{print $1":"$4}' "${AOU_UNFILTERED}.bim" | sort > "${TEMP_DIR}/aou_unfiltered_pos.txt"
-awk '{print $1":"$4}' "${REF_DIR}/extractedChrAllUnpruned.bim" | sort > "${TEMP_DIR}/hgdp_pos.txt"
-OVERLAP_BEFORE=$(comm -12 "${TEMP_DIR}/aou_unfiltered_pos.txt" "${TEMP_DIR}/hgdp_pos.txt" | wc -l)
-echo "  Overlap before filtering: ${OVERLAP_BEFORE}"
-echo ""
 
 # =============================================================================
 # STEP 7: Filter AoU Data (indel removal + QC)
@@ -812,7 +814,7 @@ echo ""
 echo "✓ All steps completed successfully:"
 echo "  ✓ Step 1-4: HGDP+1KGP reference data downloaded and split"
 echo "  ✓ Step 5: AoU genotype data downloaded"
-echo "  ✓ Step 6: Overlap before filtering (${OVERLAP_BEFORE} positions)"
+echo "  - Step 6: Overlap before filtering (skipped)"
 echo "  ✓ Step 7: AoU data filtered (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
 echo "  ✓ Step 8: HGDP data filtered (comprehensive):"
 echo "      - 8a: Indels removed"
