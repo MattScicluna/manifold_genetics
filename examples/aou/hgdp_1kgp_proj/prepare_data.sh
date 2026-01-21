@@ -495,17 +495,21 @@ AOU_WRAYNER_DIR="${TEMP_DIR}/aou_wrayner"
 mkdir -p "${AOU_WRAYNER_DIR}"
 
 if [[ ! -f "${AOU_HARMONIZED}.bed" ]]; then
-    # Compute allele frequencies
+    # Create temporary BIM without "chr" prefix (WRayner expects numeric chromosomes)
+    echo "    Creating temporary BIM without chr prefix for WRayner..."
+    sed 's/^chr//' "${AOU_FILTERED}.bim" > "${AOU_WRAYNER_DIR}/aou_nochr.bim"
+
+    # Compute allele frequencies (using original files)
     echo "    Computing allele frequencies..."
     ${PLINK} --bfile ${AOU_FILTERED} \
         --freq \
         --out ${AOU_WRAYNER_DIR}/aou_freq
 
-    # Run WRayner tool
+    # Run WRayner tool (using BIM without chr prefix)
     echo "    Running WRayner HRC check..."
     cd "${AOU_WRAYNER_DIR}"
     perl "${WRAYNER_SCRIPT}" \
-        -b "${AOU_FILTERED}.bim" \
+        -b "${AOU_WRAYNER_DIR}/aou_nochr.bim" \
         -f "${AOU_WRAYNER_DIR}/aou_freq.frq" \
         -r "${TOPMED_REF}" \
         -h
@@ -567,17 +571,21 @@ HGDP_WRAYNER_DIR="${TEMP_DIR}/hgdp_wrayner"
 mkdir -p "${HGDP_WRAYNER_DIR}"
 
 if [[ ! -f "${HGDP_HARMONIZED}.bed" ]]; then
-    # Compute allele frequencies
+    # Create temporary BIM without "chr" prefix (WRayner expects numeric chromosomes)
+    echo "    Creating temporary BIM without chr prefix for WRayner..."
+    sed 's/^chr//' "${HGDP_FILTERED}.bim" > "${HGDP_WRAYNER_DIR}/hgdp_nochr.bim"
+
+    # Compute allele frequencies (using original files)
     echo "    Computing allele frequencies..."
     ${PLINK} --bfile ${HGDP_FILTERED} \
         --freq \
         --out ${HGDP_WRAYNER_DIR}/hgdp_freq
 
-    # Run WRayner tool
+    # Run WRayner tool (using BIM without chr prefix)
     echo "    Running WRayner HRC check..."
     cd "${HGDP_WRAYNER_DIR}"
     perl "${WRAYNER_SCRIPT}" \
-        -b "${HGDP_FILTERED}.bim" \
+        -b "${HGDP_WRAYNER_DIR}/hgdp_nochr.bim" \
         -f "${HGDP_WRAYNER_DIR}/hgdp_freq.frq" \
         -r "${TOPMED_REF}" \
         -h
