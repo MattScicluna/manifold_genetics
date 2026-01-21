@@ -431,41 +431,209 @@ echo "  Overlap after filtering both: ${OVERLAP_AFTER}"
 echo ""
 
 # =============================================================================
-# STEP 10: Standardize SNP IDs (pos:ref:alt)
+# STEP 10: Harmonization with WRayner tools
 # =============================================================================
 echo "=========================================="
-echo "Step 10: Standardize SNP IDs (pos:ref:alt)"
+echo "Step 10: Harmonization with WRayner tools"
 echo "=========================================="
+echo ""
+echo "This step uses WRayner's HRC-1000G-check-bim tool to:"
+echo "  - Check SNPs against TOPMed reference"
+echo "  - Identify and exclude problematic positions"
+echo "  - Standardize SNP IDs to chr:pos:ref:alt format"
+echo ""
 
-# Standardize SNP IDs to pos:ref:alt format (handles chr naming differences)
-echo "Standardizing SNP IDs to pos:ref:alt format..."
+WRAYNER_DIR="${TEMP_DIR}/wrayner_tools"
+mkdir -p "${WRAYNER_DIR}"
 
-# Standardize HGDP (chr1:... → pos:ref:alt)
-if [[ ! -f "${TEMP_DIR}/hgdp_standardized.bed" ]]; then
-    echo "  Standardizing HGDP dataset (using filtered data)..."
-    ${PLINK2} --bfile ${HGDP_FILTERED} \
-        --set-all-var-ids '@:#:$r:$a' \
-        --new-id-max-allele-len 100 missing \
-        --make-bed \
-        --out ${TEMP_DIR}/hgdp_standardized
+# -------------------------------------------------------------------------
+# 10a. Download WRayner tools if needed
+# -------------------------------------------------------------------------
+WRAYNER_SCRIPT="${WRAYNER_DIR}/HRC-1000G-check-bim.pl"
+if [[ ! -f "${WRAYNER_SCRIPT}" ]]; then
+    echo "  [10a] Downloading WRayner HRC-1000G-check-bim tools..."
+    curl -sL "https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip" -o "${WRAYNER_DIR}/HRC-1000G-check-bim.zip"
+    unzip -q -o "${WRAYNER_DIR}/HRC-1000G-check-bim.zip" -d "${WRAYNER_DIR}/"
+    echo "    ✓ WRayner tools downloaded"
 else
-    echo "  HGDP dataset already standardized"
+    echo "  [10a] WRayner tools already downloaded"
 fi
 
-# Standardize AoU (chr1:... → pos:ref:alt)
-if [[ ! -f "${TEMP_DIR}/aou_standardized.bed" ]]; then
-    echo "  Standardizing AoU dataset (using filtered data)..."
-    ${PLINK2} --bfile ${AOU_FILTERED} \
-        --set-all-var-ids '@:#:$r:$a' \
-        --new-id-max-allele-len 100 missing \
-        --memory 100000 \
-        --make-bed \
-        --out ${TEMP_DIR}/aou_standardized
+# -------------------------------------------------------------------------
+# 10b. Download TOPMed reference file if needed
+# -------------------------------------------------------------------------
+# The reference was created from: https://legacy.bravo.sph.umich.edu/freeze5/hg38/download
+# Using: ./CreateTOPMed.pl -i bravo-dbsnp-all.vcf.gz
+# This produces: bravo-dbsnp-all.hrc_format.tab.gz
+TOPMED_REF="${WRAYNER_DIR}/bravo-dbsnp-all.hrc_format.tab.gz"
+TOPMED_REF_URL="https://www.dropbox.com/scl/fi/jiy6ty8pmrrr2s5eox1nf/bravo-dbsnp-all.hrc_format.tab.gz?rlkey=aihwmah4uwvazla7yl438odut&st=8gklc135&dl=1"
+
+if [[ ! -f "${TOPMED_REF}" ]]; then
+    echo "  [10b] Downloading TOPMed reference file..."
+    echo "    This is a large file (~2GB), please wait..."
+    curl -L -o "${TOPMED_REF}" "${TOPMED_REF_URL}"
+    if [[ ! -f "${TOPMED_REF}" ]]; then
+        echo "  ✗ Failed to download TOPMed reference file"
+        echo "  Please manually download from: ${TOPMED_REF_URL}"
+        echo "  And place at: ${TOPMED_REF}"
+        exit 1
+    fi
+    echo "    ✓ TOPMed reference downloaded"
 else
-    echo "  AoU dataset already standardized"
+    echo "  [10b] TOPMed reference already downloaded"
+fi
+echo "    Using: ${TOPMED_REF}"
+
+# -------------------------------------------------------------------------
+# 10c. Harmonize AoU dataset
+# -------------------------------------------------------------------------
+echo ""
+echo "  [10c] Harmonizing AoU dataset..."
+
+AOU_HARMONIZED="${TEMP_DIR}/aou_harmonized"
+AOU_WRAYNER_DIR="${TEMP_DIR}/aou_wrayner"
+mkdir -p "${AOU_WRAYNER_DIR}"
+
+if [[ ! -f "${AOU_HARMONIZED}.bed" ]]; then
+    # Compute allele frequencies
+    echo "    Computing allele frequencies..."
+    ${PLINK} --bfile ${AOU_FILTERED} \
+        --freq \
+        --out ${AOU_WRAYNER_DIR}/aou_freq
+
+    # Run WRayner tool
+    echo "    Running WRayner HRC check..."
+    cd "${AOU_WRAYNER_DIR}"
+    perl "${WRAYNER_SCRIPT}" \
+        -b "${AOU_FILTERED}.bim" \
+        -f "${AOU_WRAYNER_DIR}/aou_freq.frq" \
+        -r "${TOPMED_REF}" \
+        -h
+    cd "${SCRIPT_DIR}"
+
+    # Move WRayner temp files
+    mkdir -p "${AOU_WRAYNER_DIR}/wrayner_tmp"
+    mv ${AOU_WRAYNER_DIR}/Strand-Flip* ${AOU_WRAYNER_DIR}/Position* ${AOU_WRAYNER_DIR}/Chromosome* \
+       ${AOU_WRAYNER_DIR}/Run-plink.sh ${AOU_WRAYNER_DIR}/LOG* ${AOU_WRAYNER_DIR}/ID* \
+       ${AOU_WRAYNER_DIR}/FreqPlot* ${AOU_WRAYNER_DIR}/Force-Allele1* \
+       ${AOU_WRAYNER_DIR}/wrayner_tmp/ 2>/dev/null || true
+
+    # Find the exclude file (naming depends on input filename)
+    EXCLUDE_FILE=$(ls ${AOU_WRAYNER_DIR}/Exclude-*.txt 2>/dev/null | head -1)
+    if [[ -n "${EXCLUDE_FILE}" ]] && [[ -f "${EXCLUDE_FILE}" ]]; then
+        EXCLUDE_COUNT=$(wc -l < "${EXCLUDE_FILE}")
+        echo "    Excluding ${EXCLUDE_COUNT} problematic SNPs..."
+        mv "${EXCLUDE_FILE}" "${AOU_WRAYNER_DIR}/wrayner_tmp/"
+        EXCLUDE_FILE="${AOU_WRAYNER_DIR}/wrayner_tmp/$(basename ${EXCLUDE_FILE})"
+
+        ${PLINK} --bfile ${AOU_FILTERED} \
+            --exclude "${EXCLUDE_FILE}" \
+            --make-bed \
+            --out ${TEMP_DIR}/aou_wrayner_filtered
+    else
+        echo "    No exclude file generated, using filtered data directly..."
+        cp ${AOU_FILTERED}.bed ${TEMP_DIR}/aou_wrayner_filtered.bed
+        cp ${AOU_FILTERED}.bim ${TEMP_DIR}/aou_wrayner_filtered.bim
+        cp ${AOU_FILTERED}.fam ${TEMP_DIR}/aou_wrayner_filtered.fam
+    fi
+
+    # Rename SNP IDs to chr:pos:ref:alt format
+    echo "    Standardizing SNP IDs to chr:pos:ref:alt format..."
+    cp ${TEMP_DIR}/aou_wrayner_filtered.bim ${TEMP_DIR}/aou_wrayner_filtered.bim.bkp
+    awk '{print $1"\tchr"$1":"$4":"$6":"$5"\t"$3"\t"$4"\t"$5"\t"$6}' \
+        ${TEMP_DIR}/aou_wrayner_filtered.bim.bkp > ${TEMP_DIR}/aou_wrayner_filtered.bim
+
+    # Create final harmonized output
+    cp ${TEMP_DIR}/aou_wrayner_filtered.bed ${AOU_HARMONIZED}.bed
+    cp ${TEMP_DIR}/aou_wrayner_filtered.bim ${AOU_HARMONIZED}.bim
+    cp ${TEMP_DIR}/aou_wrayner_filtered.fam ${AOU_HARMONIZED}.fam
+
+    AOU_HARMONIZED_SNPS=$(wc -l < "${AOU_HARMONIZED}.bim")
+    echo "    ✓ AoU harmonized: ${AOU_HARMONIZED_SNPS} SNPs"
+else
+    echo "    AoU dataset already harmonized"
+    AOU_HARMONIZED_SNPS=$(wc -l < "${AOU_HARMONIZED}.bim")
+    echo "    Harmonized AoU SNPs: ${AOU_HARMONIZED_SNPS}"
 fi
 
-echo "  ✓ SNP IDs standardized (originals untouched)"
+# -------------------------------------------------------------------------
+# 10d. Harmonize HGDP dataset
+# -------------------------------------------------------------------------
+echo ""
+echo "  [10d] Harmonizing HGDP dataset..."
+
+HGDP_HARMONIZED="${TEMP_DIR}/hgdp_harmonized"
+HGDP_WRAYNER_DIR="${TEMP_DIR}/hgdp_wrayner"
+mkdir -p "${HGDP_WRAYNER_DIR}"
+
+if [[ ! -f "${HGDP_HARMONIZED}.bed" ]]; then
+    # Compute allele frequencies
+    echo "    Computing allele frequencies..."
+    ${PLINK} --bfile ${HGDP_FILTERED} \
+        --freq \
+        --out ${HGDP_WRAYNER_DIR}/hgdp_freq
+
+    # Run WRayner tool
+    echo "    Running WRayner HRC check..."
+    cd "${HGDP_WRAYNER_DIR}"
+    perl "${WRAYNER_SCRIPT}" \
+        -b "${HGDP_FILTERED}.bim" \
+        -f "${HGDP_WRAYNER_DIR}/hgdp_freq.frq" \
+        -r "${TOPMED_REF}" \
+        -h
+    cd "${SCRIPT_DIR}"
+
+    # Move WRayner temp files
+    mkdir -p "${HGDP_WRAYNER_DIR}/wrayner_tmp"
+    mv ${HGDP_WRAYNER_DIR}/Strand-Flip* ${HGDP_WRAYNER_DIR}/Position* ${HGDP_WRAYNER_DIR}/Chromosome* \
+       ${HGDP_WRAYNER_DIR}/Run-plink.sh ${HGDP_WRAYNER_DIR}/LOG* ${HGDP_WRAYNER_DIR}/ID* \
+       ${HGDP_WRAYNER_DIR}/FreqPlot* ${HGDP_WRAYNER_DIR}/Force-Allele1* \
+       ${HGDP_WRAYNER_DIR}/wrayner_tmp/ 2>/dev/null || true
+
+    # Find the exclude file
+    EXCLUDE_FILE=$(ls ${HGDP_WRAYNER_DIR}/Exclude-*.txt 2>/dev/null | head -1)
+    if [[ -n "${EXCLUDE_FILE}" ]] && [[ -f "${EXCLUDE_FILE}" ]]; then
+        EXCLUDE_COUNT=$(wc -l < "${EXCLUDE_FILE}")
+        echo "    Excluding ${EXCLUDE_COUNT} problematic SNPs..."
+        mv "${EXCLUDE_FILE}" "${HGDP_WRAYNER_DIR}/wrayner_tmp/"
+        EXCLUDE_FILE="${HGDP_WRAYNER_DIR}/wrayner_tmp/$(basename ${EXCLUDE_FILE})"
+
+        ${PLINK} --bfile ${HGDP_FILTERED} \
+            --exclude "${EXCLUDE_FILE}" \
+            --make-bed \
+            --out ${TEMP_DIR}/hgdp_wrayner_filtered
+    else
+        echo "    No exclude file generated, using filtered data directly..."
+        cp ${HGDP_FILTERED}.bed ${TEMP_DIR}/hgdp_wrayner_filtered.bed
+        cp ${HGDP_FILTERED}.bim ${TEMP_DIR}/hgdp_wrayner_filtered.bim
+        cp ${HGDP_FILTERED}.fam ${TEMP_DIR}/hgdp_wrayner_filtered.fam
+    fi
+
+    # Rename SNP IDs to chr:pos:ref:alt format
+    echo "    Standardizing SNP IDs to chr:pos:ref:alt format..."
+    cp ${TEMP_DIR}/hgdp_wrayner_filtered.bim ${TEMP_DIR}/hgdp_wrayner_filtered.bim.bkp
+    awk '{print $1"\tchr"$1":"$4":"$6":"$5"\t"$3"\t"$4"\t"$5"\t"$6}' \
+        ${TEMP_DIR}/hgdp_wrayner_filtered.bim.bkp > ${TEMP_DIR}/hgdp_wrayner_filtered.bim
+
+    # Create final harmonized output
+    cp ${TEMP_DIR}/hgdp_wrayner_filtered.bed ${HGDP_HARMONIZED}.bed
+    cp ${TEMP_DIR}/hgdp_wrayner_filtered.bim ${HGDP_HARMONIZED}.bim
+    cp ${TEMP_DIR}/hgdp_wrayner_filtered.fam ${HGDP_HARMONIZED}.fam
+
+    HGDP_HARMONIZED_SNPS=$(wc -l < "${HGDP_HARMONIZED}.bim")
+    echo "    ✓ HGDP harmonized: ${HGDP_HARMONIZED_SNPS} SNPs"
+else
+    echo "    HGDP dataset already harmonized"
+    HGDP_HARMONIZED_SNPS=$(wc -l < "${HGDP_HARMONIZED}.bim")
+    echo "    Harmonized HGDP SNPs: ${HGDP_HARMONIZED_SNPS}"
+fi
+
+# Update variables for downstream steps (use harmonized instead of filtered)
+AOU_STANDARDIZED="${AOU_HARMONIZED}"
+HGDP_STANDARDIZED="${HGDP_HARMONIZED}"
+
+echo ""
+echo "  ✓ Harmonization complete"
 
 # =============================================================================
 # STEP 11: LD prune reference and apply to AoU
@@ -484,7 +652,7 @@ AOU_PRUNED_PREFIX="${TEMP_DIR}/aou_pruned"
 
 if [[ ! -f "${HGDP_PRUNE_PREFIX}.prune.in" ]]; then
     echo "  Computing prune list on HGDP reference..."
-    ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
+    ${PLINK2} --bfile ${HGDP_STANDARDIZED} \
         --indep-pairwise ${LD_WINDOW} ${LD_STEP} ${LD_R2} \
         --memory 100000 \
         --out ${HGDP_PRUNE_PREFIX}
@@ -497,7 +665,7 @@ echo "  SNPs retained after LD pruning: ${PRUNE_IN_COUNT}"
 
 if [[ ! -f "${HGDP_PRUNED_PREFIX}.bed" ]]; then
     echo "  Applying prune list to HGDP reference..."
-    ${PLINK2} --bfile ${TEMP_DIR}/hgdp_standardized \
+    ${PLINK2} --bfile ${HGDP_STANDARDIZED} \
         --extract ${HGDP_PRUNE_PREFIX}.prune.in \
         --make-bed \
         --out ${HGDP_PRUNED_PREFIX}
@@ -507,7 +675,7 @@ fi
 
 if [[ ! -f "${AOU_PRUNED_PREFIX}.bed" ]]; then
     echo "  Applying prune list to AoU dataset..."
-    ${PLINK2} --bfile ${TEMP_DIR}/aou_standardized \
+    ${PLINK2} --bfile ${AOU_STANDARDIZED} \
         --extract ${HGDP_PRUNE_PREFIX}.prune.in \
         --memory 100000 \
         --make-bed \
@@ -823,7 +991,7 @@ echo "      - 8c: GIAB difficult regions excluded"
 echo "      - 8d: HLA/MHC region excluded"
 echo "      - 8e/8f: MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}"
 echo "  ✓ Step 9: Overlap after filtering (${OVERLAP_AFTER} positions)"
-echo "  ✓ Step 10: SNP IDs standardized"
+echo "  ✓ Step 10: WRayner harmonization (TOPMed reference check, SNP ID standardization)"
 echo "  ✓ Step 11: LD pruning (${LD_WINDOW}kb, r²=${LD_R2})"
 echo "  ✓ Step 12: SNP intersection found"
 echo "  ✓ Step 13: Final datasets created"
@@ -847,7 +1015,9 @@ echo "    - hgdp_deduped.{bed,bim,fam} (HGDP without duplicates)"
 echo "    - hgdp_no_difficult.{bed,bim,fam} (HGDP without GIAB/HLA)"
 echo "    - hgdp_filtered.{bed,bim,fam} (final filtered HGDP data)"
 echo "    - GRCh38_alldifficultregions.bed (GIAB blacklist)"
-echo "    - *_standardized.{bed,bim,fam} (SNP IDs standardized)"
+echo "    - wrayner_tools/ (WRayner HRC-1000G-check-bim scripts)"
+echo "    - *_harmonized.{bed,bim,fam} (WRayner harmonized, SNP IDs standardized)"
+echo "    - *_wrayner/ (WRayner output files and logs)"
 echo "    - *_pruned.{bed,bim,fam} (LD-pruned data)"
 echo "    - common_snps.txt, flip_list.txt, exclude_list.txt"
 echo ""
