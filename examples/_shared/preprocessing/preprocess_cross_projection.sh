@@ -61,6 +61,7 @@ SKIP_GIAB=false
 SKIP_HLA=false
 SKIP_LD_PRUNE=false
 SKIP_DEDUP=false
+SKIP_MAF=false
 
 # Reference-specific options
 REFERENCE_HAS_CHR_PREFIX=false
@@ -138,6 +139,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_DEDUP=true
             shift
             ;;
+        --skip-maf)
+            SKIP_MAF=true
+            shift
+            ;;
         --reference-has-chr-prefix)
             REFERENCE_HAS_CHR_PREFIX=true
             shift
@@ -173,6 +178,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-hla                Skip HLA/MHC region exclusion"
             echo "  --skip-ld-prune           Skip LD pruning"
             echo "  --skip-dedup              Skip deduplication of reference"
+            echo "  --skip-maf                Skip MAF filtering"
             echo ""
             echo "Reference-specific options:"
             echo "  --reference-has-chr-prefix   Reference already has 'chr' prefix in chromosomes"
@@ -218,7 +224,11 @@ echo "  Temp: ${TEMP_DIR}"
 echo "  Threads: ${THREADS}"
 echo ""
 echo "Filtering parameters:"
-echo "  MAF threshold: ${MAF_THRESHOLD}"
+if [[ "$SKIP_MAF" != "true" ]]; then
+    echo "  MAF threshold: ${MAF_THRESHOLD}"
+else
+    echo "  MAF threshold: (skipped)"
+fi
 echo "  Geno threshold: ${GENO_THRESHOLD}"
 if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
     echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
@@ -226,6 +236,7 @@ fi
 echo ""
 echo "Steps enabled:"
 echo "  Filtering: yes"
+echo "  MAF filtering: $([ "$SKIP_MAF" == "true" ] && echo "no" || echo "yes")"
 echo "  Deduplication: $([ "$SKIP_DEDUP" == "true" ] && echo "no" || echo "yes")"
 echo "  GIAB exclusion: $([ "$SKIP_GIAB" == "true" ] && echo "no" || echo "yes")"
 echo "  HLA exclusion: $([ "$SKIP_HLA" == "true" ] && echo "no" || echo "yes")"
@@ -273,7 +284,11 @@ print_header "Filtering Biobank Data"
 BIOBANK_FILTERED="${TEMP_DIR}/biobank_filtered"
 
 if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
-    print_status "Filtering biobank (MAF > ${MAF_THRESHOLD}, missing < ${GENO_THRESHOLD}, no indels)..."
+    if [[ "$SKIP_MAF" == "true" ]]; then
+        print_status "Filtering biobank (missing < ${GENO_THRESHOLD}, no indels, MAF skipped)..."
+    else
+        print_status "Filtering biobank (MAF > ${MAF_THRESHOLD}, missing < ${GENO_THRESHOLD}, no indels)..."
+    fi
 
     INITIAL_BIOBANK_SNPS=$(get_snp_count "$BIOBANK_PLINK")
     echo "  Initial biobank SNPs: $INITIAL_BIOBANK_SNPS"
@@ -286,15 +301,18 @@ if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
     echo "    SNPs after indel removal: $NO_INDEL_SNPS"
 
     # Step 2: Apply quality filters
-    ${PLINK2} --bfile ${BIOBANK_PLINK} \
-        --extract ${TEMP_DIR}/biobank_snps_no_indels.txt \
-        --geno ${GENO_THRESHOLD} \
-        --maf ${MAF_THRESHOLD} \
-        --output-chr chrM \
-        --memory ${MEMORY} \
-        --threads ${THREADS} \
-        --make-bed \
-        --out ${BIOBANK_FILTERED}
+    BIOBANK_FILTER_CMD="${PLINK2} --bfile ${BIOBANK_PLINK}"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --extract ${TEMP_DIR}/biobank_snps_no_indels.txt"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --geno ${GENO_THRESHOLD}"
+    if [[ "$SKIP_MAF" != "true" ]]; then
+        BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --maf ${MAF_THRESHOLD}"
+    fi
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --output-chr chrM"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --memory ${MEMORY}"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --threads ${THREADS}"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --make-bed"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --out ${BIOBANK_FILTERED}"
+    eval $BIOBANK_FILTER_CMD
 
     BIOBANK_FILTERED_SNPS=$(get_snp_count "$BIOBANK_FILTERED")
     print_success "Biobank SNPs after filtering: ${BIOBANK_FILTERED_SNPS}"
@@ -444,14 +462,21 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
     # -------------------------------------------------------------------------
     # 3e. Apply MAF and missingness filters
     # -------------------------------------------------------------------------
-    print_status "[3e] Applying MAF (>= ${MAF_THRESHOLD}) and geno (< ${GENO_THRESHOLD}) filters..."
+    if [[ "$SKIP_MAF" == "true" ]]; then
+        print_status "[3e] Applying geno (< ${GENO_THRESHOLD}) filter (MAF skipped)..."
+    else
+        print_status "[3e] Applying MAF (>= ${MAF_THRESHOLD}) and geno (< ${GENO_THRESHOLD}) filters..."
+    fi
 
-    ${PLINK2} --bfile ${CURRENT_REF} \
-        --maf ${MAF_THRESHOLD} \
-        --geno ${GENO_THRESHOLD} \
-        --output-chr chrM \
-        --make-bed \
-        --out ${REFERENCE_FILTERED}
+    REF_FILTER_CMD="${PLINK2} --bfile ${CURRENT_REF}"
+    if [[ "$SKIP_MAF" != "true" ]]; then
+        REF_FILTER_CMD="$REF_FILTER_CMD --maf ${MAF_THRESHOLD}"
+    fi
+    REF_FILTER_CMD="$REF_FILTER_CMD --geno ${GENO_THRESHOLD}"
+    REF_FILTER_CMD="$REF_FILTER_CMD --output-chr chrM"
+    REF_FILTER_CMD="$REF_FILTER_CMD --make-bed"
+    REF_FILTER_CMD="$REF_FILTER_CMD --out ${REFERENCE_FILTERED}"
+    eval $REF_FILTER_CMD
 
     REF_FILTERED_SNPS=$(get_snp_count "$REFERENCE_FILTERED")
     print_success "Reference SNPs after filtering: ${REF_FILTERED_SNPS}"
@@ -930,7 +955,11 @@ echo "  fit_subset.{bed,bim,fam}     (Reference: $FIT_SAMPLES samples, $FINAL_SN
 echo "  project_subset.{bed,bim,fam} (Biobank: $PROJECT_SAMPLES samples, $FINAL_SNP_COUNT SNPs)"
 echo ""
 echo "Steps completed:"
-echo "  [✓] Filtering (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
+if [[ "$SKIP_MAF" == "true" ]]; then
+    echo "  [✓] Filtering (geno<${GENO_THRESHOLD}, no indels, MAF skipped)"
+else
+    echo "  [✓] Filtering (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
+fi
 if [[ "$SKIP_DEDUP" != "true" ]]; then
     echo "  [✓] Deduplication (remove multi-allelic positions)"
 fi

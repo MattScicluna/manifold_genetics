@@ -89,7 +89,7 @@ bash "${PROJECT_ROOT}/examples/_shared/preprocessing/preprocess_cross_projection
     --temp-dir "$TEMP_DIR" \
     --memory 100000 \
     --threads "$THREADS" \
-    --skip-wrayner --skip-giab --skip-hla --skip-ld-prune --skip-dedup
+    --skip-wrayner --skip-giab --skip-hla --skip-ld-prune --skip-dedup --skip-maf
 
 # ============================================================================
 # Step 3: Filter labels to match intersected samples

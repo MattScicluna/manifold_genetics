@@ -31,7 +31,7 @@ CDR_VERSION="${WORKSPACE_CDR:-}"
 # =============================================================================
 # Filtering parameters (passed to shared preprocessing script)
 # =============================================================================
-MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"
+# MAF filtering is skipped by default (--skip-maf)
 GENO_THRESHOLD="${GENO_THRESHOLD:-0.05}"
 LD_WINDOW="${LD_WINDOW:-150}"
 LD_STEP="${LD_STEP:-1}"
@@ -51,7 +51,7 @@ echo "  Google project: ${GOOGLE_PROJECT:-'Not set'}"
 echo "  CDR version: ${CDR_VERSION:-'Not set'}"
 echo ""
 echo "Filtering parameters:"
-echo "  MAF threshold: ${MAF_THRESHOLD}"
+echo "  MAF threshold: (skipped)"
 echo "  Geno threshold: ${GENO_THRESHOLD}"
 echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 echo ""
@@ -171,12 +171,12 @@ else
         --output-dir "${DATA_DIR}" \
         --temp-dir "${TEMP_DIR}" \
         --threads "${CPU_CORES}" \
-        --maf "${MAF_THRESHOLD}" \
         --geno "${GENO_THRESHOLD}" \
         --ld-window "${LD_WINDOW}" \
         --ld-step "${LD_STEP}" \
         --ld-r2 "${LD_R2}" \
-        --reference-has-chr-prefix
+        --reference-has-chr-prefix \
+        --skip-maf
 
     print_success "Shared preprocessing complete"
 fi
@@ -297,12 +297,12 @@ echo "  hgdp_labels.csv              (HGDP sample metadata)"
 echo "  aou_labels.csv               (AoU sample metadata)"
 echo ""
 echo "Filtering parameters used:"
-echo "  MAF threshold: ${MAF_THRESHOLD}"
+echo "  MAF threshold: (skipped)"
 echo "  Geno threshold: ${GENO_THRESHOLD}"
 echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 echo ""
 echo "To adjust parameters, modify environment variables and re-run:"
-echo "  MAF_THRESHOLD=0.01 GENO_THRESHOLD=0.01 LD_R2=0.2 bash prepare_data.sh"
+echo "  GENO_THRESHOLD=0.01 LD_R2=0.2 bash prepare_data.sh"
 echo ""
 echo "Next step: Run the cross-projection pipeline"
 echo "  bash run_pipeline.sh"
