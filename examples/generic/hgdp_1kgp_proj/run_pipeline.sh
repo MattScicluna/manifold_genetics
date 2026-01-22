@@ -10,10 +10,26 @@
 # This script is a self-contained example. It is not intended to be called
 # by other scripts.
 #
+# PREREQUISITES:
+#   Before running this script, prepare your data using the shared preprocessing:
+#
+#   bash examples/_shared/preprocessing/preprocess_cross_projection.sh \
+#       --reference-plink /path/to/reference \
+#       --biobank-plink /path/to/biobank \
+#       --output-dir ./data
+#
+#   For lite preprocessing (faster, no external tools):
+#
+#   bash examples/_shared/preprocessing/preprocess_cross_projection.sh \
+#       --reference-plink /path/to/reference \
+#       --biobank-plink /path/to/biobank \
+#       --output-dir ./data \
+#       --skip-wrayner --skip-giab --skip-hla --skip-ld-prune
+#
 # Usage:
-#   1. Copy this script to your dataset directory
-#   2. Update the default paths below to point to your data
-#   3. Adjust parameters as needed
+#   1. Run shared preprocessing (see above)
+#   2. Create label CSV files for your datasets
+#   3. Update the default paths below to point to your data
 #   4. Run: bash run_pipeline.sh
 #
 

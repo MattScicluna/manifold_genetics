@@ -18,6 +18,11 @@
 
 set -e
 
+# Get script directory and source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "${PROJECT_ROOT}/examples/_shared/preprocessing/common.sh"
+
 # ============================================================================
 # Argument Parsing
 # ============================================================================
@@ -82,74 +87,31 @@ if [[ -z "$PLINK" ]] || [[ -z "$FIT_SAMPLES" ]]; then
     exit 1
 fi
 
-# Get script directory for utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-
-# ANSI colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Helper functions
-print_status() {
-    echo -e "${BLUE}==>${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}✗${NC} $1"
-}
-
 # Print header
-echo ""
-echo "================================================="
-echo "  Generic Subset Data Preparation"
-echo "================================================="
-echo ""
+print_header "Generic Subset Data Preparation"
 
 # ============================================================================
 # Step 1: Verify Required Files
 # ============================================================================
 print_status "Verifying required files..."
 
-REQUIRED_FILES=(
-    "${PLINK}.bed"
-    "${PLINK}.bim"
-    "${PLINK}.fam"
-    "${FIT_SAMPLES}"
-)
-
-# Add project samples to required files if provided
-if [[ -n "$PROJECT_SAMPLES" ]]; then
-    REQUIRED_FILES+=("${PROJECT_SAMPLES}")
+if ! verify_plink_files "$PLINK"; then
+    exit 1
 fi
+print_success "PLINK files found"
 
-MISSING_FILES=()
-for file in "${REQUIRED_FILES[@]}"; do
-    if [[ ! -f "$file" ]]; then
-        MISSING_FILES+=("$file")
-    fi
-done
-
-if [[ ${#MISSING_FILES[@]} -gt 0 ]]; then
-    print_error "Missing required files:"
-    for file in "${MISSING_FILES[@]}"; do
-        echo "  - $file"
-    done
+# Check sample list files
+if [[ ! -f "$FIT_SAMPLES" ]]; then
+    print_error "Fit samples file not found: $FIT_SAMPLES"
     exit 1
 fi
 
-print_success "All required PLINK files found"
+if [[ -n "$PROJECT_SAMPLES" ]] && [[ ! -f "$PROJECT_SAMPLES" ]]; then
+    print_error "Project samples file not found: $PROJECT_SAMPLES"
+    exit 1
+fi
+
+print_success "All required files found"
 
 # ============================================================================
 # Step 2: Create Output Directory
@@ -164,30 +126,7 @@ print_success "Output directory: $OUTPUT_DIR"
 # ============================================================================
 print_status "Looking for plink2..."
 
-PLINK2=""
-
-if [[ -f "${PROJECT_ROOT}/bin/plink2" ]]; then
-    PLINK2="${PROJECT_ROOT}/bin/plink2"
-    print_success "Using plink2 from bin/plink2"
-elif module list 2>&1 | grep -q plink2; then
-    PLINK2="plink2"
-    print_success "Using plink2 from loaded module"
-elif command -v plink2 &> /dev/null; then
-    PLINK2="plink2"
-    print_success "Using plink2 from PATH"
-else
-    print_error "plink2 not found!"
-    echo ""
-    echo "Please ensure plink2 is available via one of:"
-    echo "  1. Run setup.sh to download to bin/plink2 (recommended)"
-    echo "  2. Load plink2 module: module load plink2"
-    echo "  3. Add plink2 to your PATH"
-    echo ""
-    exit 1
-fi
-
-if ! ${PLINK2} --version &> /dev/null; then
-    print_error "plink2 found but not executable!"
+if ! find_plink2 "$PROJECT_ROOT"; then
     exit 1
 fi
 
@@ -200,10 +139,10 @@ FIT_SAMPLES_COUNT=$(wc -l < "$FIT_SAMPLES")
 if [[ -n "$PROJECT_SAMPLES" ]]; then
     PROJECT_SAMPLES_COUNT=$(wc -l < "$PROJECT_SAMPLES")
 else
-    PROJECT_SAMPLES_COUNT=$(wc -l < "${PLINK}.fam")
+    PROJECT_SAMPLES_COUNT=$(get_sample_count "$PLINK")
 fi
-TOTAL_SAMPLES=$(wc -l < "${PLINK}.fam")
-TOTAL_SNPS=$(wc -l < "${PLINK}.bim")
+TOTAL_SAMPLES=$(get_sample_count "$PLINK")
+TOTAL_SNPS=$(get_snp_count "$PLINK")
 
 echo "  Total samples: $TOTAL_SAMPLES"
 echo "  Total SNPs: $TOTAL_SNPS"
@@ -247,25 +186,22 @@ fi
 # ============================================================================
 # Step 6: Summary
 # ============================================================================
-FIT_FINAL=$(wc -l < "${OUTPUT_DIR}/fit_subset.fam")
-PROJECT_FINAL=$(wc -l < "${OUTPUT_DIR}/project_subset.fam")
-SUBSET_SNPS=$(wc -l < "${OUTPUT_DIR}/fit_subset.bim")
+FIT_FINAL=$(get_sample_count "${OUTPUT_DIR}/fit_subset")
+PROJECT_FINAL=$(get_sample_count "${OUTPUT_DIR}/project_subset")
+SUBSET_SNPS=$(get_snp_count "${OUTPUT_DIR}/fit_subset")
 
-echo ""
-echo "================================================="
-print_success "Subset data preparation complete!"
-echo "================================================="
-echo ""
+print_header "Subset Data Preparation Complete!"
+
 echo "Generated PLINK subsets:"
-echo "  📊 fit_subset:"
+echo "  fit_subset:"
 echo "    - ${OUTPUT_DIR}/fit_subset.{bed,bim,fam}"
 echo "    - $FIT_FINAL samples, $SUBSET_SNPS SNPs"
 echo ""
-echo "  📊 project_subset:"
+echo "  project_subset:"
 echo "    - ${OUTPUT_DIR}/project_subset.{bed,bim,fam}"
 echo "    - $PROJECT_FINAL samples, $SUBSET_SNPS SNPs"
 echo ""
-echo "⚠️  IMPORTANT: Create label CSV files before running the pipeline:"
+echo "IMPORTANT: Create label CSV files before running the pipeline:"
 echo "    - fit_labels.csv: Labels for fit samples"
 echo "    - project_labels.csv: Labels for project samples"
 echo ""
