@@ -18,6 +18,9 @@ DATA_DIR="${SCRIPT_DIR}/data"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 TEMP_DIR="${DATA_DIR}/temp"
 
+# Source common utilities
+source "${PROJECT_ROOT}/examples/_shared/preprocessing/common.sh"
+
 # Configuration
 CPU_CORES="${SLURM_CPUS_PER_TASK:-4}"
 GOOGLE_PROJECT="${GOOGLE_PROJECT:-}"
@@ -30,10 +33,8 @@ SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
 # Use intersected AoU data from hgdp_1kgp_proj
 INTERSECTED_AOU="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
-echo "=========================================="
-echo "  AoU 60K White + Non-White Data Preparation"
-echo "=========================================="
-echo ""
+print_header "AoU 60K White + Non-White Data Preparation"
+
 echo "Configuration:"
 echo "  CPU cores: ${CPU_CORES}"
 echo "  Google project: ${GOOGLE_PROJECT:-'Not set'}"
@@ -46,21 +47,18 @@ mkdir -p "${DATA_DIR}" "${TEMP_DIR}"
 # =============================================================================
 # STEP 1: Check for Intersected AoU Data
 # =============================================================================
-echo "=========================================="
-echo "Step 1: Check for Intersected AoU Data"
-echo "=========================================="
-echo ""
+print_subheader "Step 1: Check for Intersected AoU Data"
 
 if [[ ! -f "${INTERSECTED_AOU}.bed" ]]; then
-    echo "  ✗ Intersected AoU data not found!"
+    print_error "Intersected AoU data not found!"
     echo "  Please run the hgdp_1kgp_proj pipeline first."
     exit 1
 fi
 
-AOU_SAMPLES=$(wc -l < "${INTERSECTED_AOU}.fam")
-COMMON_SNPS=$(wc -l < "${INTERSECTED_AOU}.bim")
+AOU_SAMPLES=$(get_sample_count "${INTERSECTED_AOU}")
+COMMON_SNPS=$(get_snp_count "${INTERSECTED_AOU}")
 
-echo "  ✓ Found intersected AoU data:"
+print_success "Found intersected AoU data:"
 echo "    Samples: $AOU_SAMPLES"
 echo "    SNPs: $COMMON_SNPS"
 echo ""
@@ -68,9 +66,7 @@ echo ""
 # =============================================================================
 # STEP 2: Define Fit Subset (Python Selection)
 # =============================================================================
-echo "=========================================="
-echo "Step 2: Define Fit Subset List"
-echo "=========================================="
+print_subheader "Step 2: Define Fit Subset List"
 
 AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
 
@@ -144,58 +140,54 @@ EOF
 # =============================================================================
 # STEP 3: Create Fit Subset (PLINK Extraction)
 # =============================================================================
-echo "=========================================="
-echo "Step 3: Create Fit Subset (PLINK)"
-echo "=========================================="
+print_subheader "Step 3: Create Fit Subset (PLINK)"
 
 # Find plink2
-PLINK2="${PROJECT_ROOT}/bin/plink2"
-if [[ ! -f "$PLINK2" ]]; then PLINK2="plink2"; fi
+print_status "Looking for plink2..."
+if ! find_plink2 "$PROJECT_ROOT"; then
+    exit 1
+fi
 
 if [[ ! -f "${DATA_DIR}/fit_subset.bed" ]]; then
-    echo "  Extracting fit subset from intersected data..."
+    print_status "Extracting fit subset from intersected data..."
     ${PLINK2} --bfile ${INTERSECTED_AOU} \
         --keep ${DATA_DIR}/fit_samples.txt \
         --memory 100000 \
         --make-bed \
         --out ${DATA_DIR}/fit_subset
 else
-    echo "  Fit subset already exists"
+    print_success "Fit subset already exists"
 fi
 
-FIT_SAMPLES=$(wc -l < "${DATA_DIR}/fit_subset.fam")
-echo "  ✓ Fit subset created: $FIT_SAMPLES samples"
+FIT_SAMPLES=$(get_sample_count "${DATA_DIR}/fit_subset")
+print_success "Fit subset created: $FIT_SAMPLES samples"
 echo ""
 
 # =============================================================================
 # STEP 4: Create Project Subset (Entire Dataset)
 # =============================================================================
-echo "=========================================="
-echo "Step 4: Create Project Subset (Entire Dataset)"
-echo "=========================================="
+print_subheader "Step 4: Create Project Subset (Entire Dataset)"
 
 # For the project step, we project the ENTIRE dataset (including those used in fit).
 # We simply copy the intersected dataset to the expected project_subset path.
 
 if [[ ! -f "${DATA_DIR}/project_subset.bed" ]]; then
-    echo "  Copying intersected data to project subset..."
+    print_status "Copying intersected data to project subset..."
     cp "${INTERSECTED_AOU}.bed" "${DATA_DIR}/project_subset.bed"
     cp "${INTERSECTED_AOU}.bim" "${DATA_DIR}/project_subset.bim"
     cp "${INTERSECTED_AOU}.fam" "${DATA_DIR}/project_subset.fam"
 else
-    echo "  Project subset already exists"
+    print_success "Project subset already exists"
 fi
 
-PROJECT_SAMPLES=$(wc -l < "${DATA_DIR}/project_subset.fam")
-echo "  ✓ Project subset created: $PROJECT_SAMPLES samples"
+PROJECT_SAMPLES=$(get_sample_count "${DATA_DIR}/project_subset")
+print_success "Project subset created: $PROJECT_SAMPLES samples"
 echo ""
 
 # =============================================================================
 # STEP 5: Create Labels
 # =============================================================================
-echo "=========================================="
-echo "Step 5: Create Labels"
-echo "=========================================="
+print_subheader "Step 5: Create Labels"
 
 # Create labels for both subsets
 for subset in "fit" "project"; do
@@ -218,8 +210,9 @@ labels[columns].to_csv("${DATA_DIR}/${subset}_labels.csv", index=False)
 EOF
 done
 
-echo "  ✓ Labels created"
-echo ""
-echo "Data Preparation Complete!"
+print_success "Labels created"
+
+print_header "Data Preparation Complete!"
 echo "  Fit Subset: 60K White + All Non-White ($FIT_SAMPLES samples)"
 echo "  Project Subset: Full Dataset ($PROJECT_SAMPLES samples)"
+echo ""

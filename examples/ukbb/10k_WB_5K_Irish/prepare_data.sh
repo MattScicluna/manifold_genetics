@@ -21,36 +21,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ANSI colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Helper functions
-print_status() {
-    echo -e "${BLUE}==>${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}✗${NC} $1"
-}
+# Source common utilities
+source "${PROJECT_ROOT}/examples/_shared/preprocessing/common.sh"
 
 # Print header
-echo ""
-echo "========================================="
-echo "  UKBB 10K WB + 5K Irish Data Prep"
-echo "========================================="
-echo ""
+print_header "UKBB 10K WB + 5K Irish Data Prep"
 
 # Paths
 DATA_DIR="${SCRIPT_DIR}/data"
