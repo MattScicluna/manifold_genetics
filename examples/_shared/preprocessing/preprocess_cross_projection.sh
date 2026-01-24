@@ -8,8 +8,8 @@
 #   - Optional: Exclude GIAB difficult regions
 #   - Optional: Exclude HLA/MHC region
 #   - Optional: WRayner harmonization (check against TOPMed reference)
-#   - Optional: LD pruning
 #   - SNP intersection and allele compatibility check
+#   - Optional: LD pruning (on intersected SNPs)
 #   - Create final intersected PLINK files
 #
 # Usage:
@@ -559,9 +559,11 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
     mkdir -p "${BIOBANK_WRAYNER_DIR}"
 
     if [[ ! -f "${BIOBANK_HARMONIZED}.bed" ]]; then
-        # Create temporary BIM without "chr" prefix (WRayner expects numeric chromosomes)
-        echo "    Creating temporary BIM without chr prefix for WRayner..."
+        # Create temporary PLINK files without "chr" prefix (WRayner expects numeric chromosomes)
+        echo "    Creating temporary PLINK files without chr prefix for WRayner..."
         sed 's/^chr//' "${BIOBANK_FILTERED}.bim" > "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bim"
+        cp "${BIOBANK_FILTERED}.bed" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bed"
+        cp "${BIOBANK_FILTERED}.fam" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.fam"
 
         # Compute allele frequencies
         echo "    Computing allele frequencies..."
@@ -646,7 +648,7 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
     # Standardize reference SNP IDs to match biobank format
     REFERENCE_STANDARDIZED="${TEMP_DIR}/reference_standardized"
     if [[ ! -f "${REFERENCE_STANDARDIZED}.bed" ]]; then
-        print_status "[5d] Standardizing reference SNP IDs (WRayner harmonization skipped)..."
+        print_status "[5d] Standardizing reference SNP IDs..."
         cp "${REFERENCE_FILTERED}.bim" "${TEMP_DIR}/reference_filtered.bim.bkp"
         awk '{chr=$1; if(substr(chr,1,3)!="chr") chr="chr"chr; print $1"\t"chr":"$4":"$6":"$5"\t"$3"\t"$4"\t"$5"\t"$6}' \
             "${TEMP_DIR}/reference_filtered.bim.bkp" > "${REFERENCE_STANDARDIZED}.bim"
@@ -659,93 +661,47 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
     fi
 else
     print_header "Skipping WRayner Harmonization"
-    print_status "Using plink2 SNP ID standardization instead..."
+    #print_status "Using plink2 SNP ID standardization instead..."
 
     # Standardize SNP IDs without WRayner
     BIOBANK_STANDARDIZED="${TEMP_DIR}/biobank_standardized"
     REFERENCE_STANDARDIZED="${TEMP_DIR}/reference_standardized"
 
-    if [[ ! -f "${BIOBANK_STANDARDIZED}.bed" ]]; then
-        print_status "Standardizing biobank SNP IDs..."
-        ${PLINK2} --bfile ${BIOBANK_FILTERED} \
-            --set-all-var-ids '@:#:$r:$a' \
-            --new-id-max-allele-len 100 missing \
-            --memory ${MEMORY} \
-            --threads ${THREADS} \
-            --make-bed \
-            --out ${BIOBANK_STANDARDIZED}
-        print_success "Biobank standardized"
-    fi
+    # if [[ ! -f "${BIOBANK_STANDARDIZED}.bed" ]]; then
+    #     print_status "Standardizing biobank SNP IDs..."
+    #     ${PLINK2} --bfile ${BIOBANK_FILTERED} \
+    #         --set-all-var-ids '@:#:$r:$a' \
+    #         --new-id-max-allele-len 100 missing \
+    #         --memory ${MEMORY} \
+    #         --threads ${THREADS} \
+    #         --make-bed \
+    #         --out ${BIOBANK_STANDARDIZED}
+    #     print_success "Biobank standardized"
+    # fi
 
-    if [[ ! -f "${REFERENCE_STANDARDIZED}.bed" ]]; then
-        print_status "Standardizing reference SNP IDs..."
-        ${PLINK2} --bfile ${REFERENCE_FILTERED} \
-            --set-all-var-ids '@:#:$r:$a' \
-            --new-id-max-allele-len 100 missing \
-            --memory ${MEMORY} \
-            --threads ${THREADS} \
-            --make-bed \
-            --out ${REFERENCE_STANDARDIZED}
-        print_success "Reference standardized"
-    fi
+    # if [[ ! -f "${REFERENCE_STANDARDIZED}.bed" ]]; then
+    #     print_status "Standardizing reference SNP IDs..."
+    #     ${PLINK2} --bfile ${REFERENCE_FILTERED} \
+    #         --set-all-var-ids '@:#:$r:$a' \
+    #         --new-id-max-allele-len 100 missing \
+    #         --memory ${MEMORY} \
+    #         --threads ${THREADS} \
+    #         --make-bed \
+    #         --out ${REFERENCE_STANDARDIZED}
+    #     print_success "Reference standardized"
+    # fi
+
+    cp ${BIOBANK_STANDARDIZED}.bed ${BIOBANK_FILTERED}.bed
+    cp ${BIOBANK_STANDARDIZED}.bim ${BIOBANK_FILTERED}.bim
+    cp ${BIOBANK_STANDARDIZED}.fam ${BIOBANK_FILTERED}.fam
+
+    cp ${REFERENCE_STANDARDIZED}.bed ${REFERENCE_FILTERED}.bed
+    cp ${REFERENCE_STANDARDIZED}.bim ${REFERENCE_FILTERED}.bim
+    cp ${REFERENCE_STANDARDIZED}.fam ${REFERENCE_FILTERED}.fam
 fi
 
 # ============================================================================
-# Step 6: LD Pruning (optional)
-# ============================================================================
-if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
-    print_header "LD Pruning"
-
-    echo "LD pruning reference SNPs and applying to biobank..."
-    echo "  Parameters: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
-
-    REFERENCE_PRUNE_PREFIX="${TEMP_DIR}/reference_prune"
-    REFERENCE_PRUNED_PREFIX="${TEMP_DIR}/reference_pruned"
-    BIOBANK_PRUNED_PREFIX="${TEMP_DIR}/biobank_pruned"
-
-    if [[ ! -f "${REFERENCE_PRUNE_PREFIX}.prune.in" ]]; then
-        print_status "Computing prune list on reference..."
-        ${PLINK2} --bfile ${REFERENCE_STANDARDIZED} \
-            --indep-pairwise ${LD_WINDOW} ${LD_STEP} ${LD_R2} \
-            --memory ${MEMORY} \
-            --threads ${THREADS} \
-            --out ${REFERENCE_PRUNE_PREFIX}
-    else
-        print_success "Prune list already exists"
-    fi
-
-    PRUNE_IN_COUNT=$(wc -l < "${REFERENCE_PRUNE_PREFIX}.prune.in")
-    print_success "SNPs retained after LD pruning: ${PRUNE_IN_COUNT}"
-
-    if [[ ! -f "${REFERENCE_PRUNED_PREFIX}.bed" ]]; then
-        print_status "Applying prune list to reference..."
-        ${PLINK2} --bfile ${REFERENCE_STANDARDIZED} \
-            --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
-            --make-bed \
-            --out ${REFERENCE_PRUNED_PREFIX}
-    fi
-
-    if [[ ! -f "${BIOBANK_PRUNED_PREFIX}.bed" ]]; then
-        print_status "Applying prune list to biobank..."
-        ${PLINK2} --bfile ${BIOBANK_STANDARDIZED} \
-            --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
-            --memory ${MEMORY} \
-            --threads ${THREADS} \
-            --make-bed \
-            --out ${BIOBANK_PRUNED_PREFIX}
-    fi
-
-    # Update downstream variables
-    REFERENCE_PLINK_PREFIX="${REFERENCE_PRUNED_PREFIX}"
-    BIOBANK_PLINK_PREFIX="${BIOBANK_PRUNED_PREFIX}"
-else
-    print_header "Skipping LD Pruning"
-    REFERENCE_PLINK_PREFIX="${REFERENCE_STANDARDIZED}"
-    BIOBANK_PLINK_PREFIX="${BIOBANK_STANDARDIZED}"
-fi
-
-# ============================================================================
-# Step 7: Find SNP Intersection and Check Allele Compatibility
+# Step 6: Find SNP Intersection and Check Allele Compatibility
 # ============================================================================
 print_header "SNP Intersection and Allele Compatibility"
 
@@ -758,8 +714,8 @@ if [[ -f "${TEMP_DIR}/final_common_snps.txt" ]] && [[ -f "${TEMP_DIR}/flip_list.
 else
     print_status "Finding SNP intersection..."
 
-    awk '{print $2}' "${REFERENCE_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/reference_snps.txt"
-    awk '{print $2}' "${BIOBANK_PLINK_PREFIX}.bim" | sort > "${TEMP_DIR}/biobank_snps.txt"
+    awk '{print $2}' "${REFERENCE_STANDARDIZED}.bim" | sort > "${TEMP_DIR}/reference_snps.txt"
+    awk '{print $2}' "${BIOBANK_STANDARDIZED}.bim" | sort > "${TEMP_DIR}/biobank_snps.txt"
 
     REFERENCE_SNP_COUNT=$(wc -l < "${TEMP_DIR}/reference_snps.txt")
     BIOBANK_SNP_COUNT=$(wc -l < "${TEMP_DIR}/biobank_snps.txt")
@@ -792,8 +748,8 @@ sys.path.insert(0, str(Path("${PROJECT_ROOT}/src")))
 from manifold_genetics.utils.io import check_allele_compatibility
 
 # Read inputs
-reference_bim = Path("${REFERENCE_PLINK_PREFIX}.bim")
-biobank_bim = Path("${BIOBANK_PLINK_PREFIX}.bim")
+reference_bim = Path("${REFERENCE_STANDARDIZED}.bim")
+biobank_bim = Path("${BIOBANK_STANDARDIZED}.bim")
 common_snps_file = Path("${TEMP_DIR}/common_snps.txt")
 output_dir = Path("${TEMP_DIR}")
 
@@ -840,42 +796,94 @@ EOF
     print_success "Final SNP count: $FINAL_SNP_COUNT"
 fi
 
-# ============================================================================
-# Step 8: Create Final Intersected PLINK Files
-# ============================================================================
-print_header "Creating Final Datasets"
+# Create intermediate intersected files (before LD pruning)
+REFERENCE_INTERSECTED_PRE="${TEMP_DIR}/reference_intersected_pre_prune"
+BIOBANK_INTERSECTED_PRE="${TEMP_DIR}/biobank_intersected_pre_prune"
 
-print_status "Creating intersected PLINK files..."
-
-# Create reference intersected dataset (fit_subset)
-if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+if [[ ! -f "${REFERENCE_INTERSECTED_PRE}.bed" ]]; then
     print_status "Creating reference intersected dataset..."
-    REFERENCE_CMD="${PLINK2} --bfile ${REFERENCE_PLINK_PREFIX} --extract ${TEMP_DIR}/final_common_snps.txt"
+    REFERENCE_CMD="${PLINK2} --bfile ${REFERENCE_STANDARDIZED} --extract ${TEMP_DIR}/final_common_snps.txt"
     if [[ $FLIP_COUNT -gt 0 ]]; then
         REFERENCE_CMD="$REFERENCE_CMD --flip ${TEMP_DIR}/flip_list.txt"
     fi
-    REFERENCE_CMD="$REFERENCE_CMD --make-bed --out ${TEMP_DIR}/reference_intersected"
+    REFERENCE_CMD="$REFERENCE_CMD --make-bed --out ${REFERENCE_INTERSECTED_PRE}"
     eval $REFERENCE_CMD
-else
-    print_success "Reference intersected dataset already exists"
 fi
 
-# Create biobank intersected dataset (project_subset)
-if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+if [[ ! -f "${BIOBANK_INTERSECTED_PRE}.bed" ]]; then
     print_status "Creating biobank intersected dataset..."
-    ${PLINK2} --bfile ${BIOBANK_PLINK_PREFIX} \
+    ${PLINK2} --bfile ${BIOBANK_STANDARDIZED} \
         --extract ${TEMP_DIR}/final_common_snps.txt \
         --memory ${MEMORY} \
         --threads ${THREADS} \
         --make-bed \
-        --out ${TEMP_DIR}/biobank_intersected
-else
-    print_success "Biobank intersected dataset already exists"
+        --out ${BIOBANK_INTERSECTED_PRE}
 fi
 
-print_success "Intersected datasets created"
+print_success "Intersected datasets created (pre-LD pruning)"
 
-# Create final output files
+# ============================================================================
+# Step 7: LD Pruning (optional)
+# ============================================================================
+if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
+    print_header "LD Pruning"
+
+    echo "LD pruning intersected reference SNPs and applying to biobank..."
+    echo "  Parameters: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
+
+    REFERENCE_PRUNE_PREFIX="${TEMP_DIR}/reference_prune"
+
+    if [[ ! -f "${REFERENCE_PRUNE_PREFIX}.prune.in" ]]; then
+        print_status "Computing prune list on intersected reference..."
+        ${PLINK2} --bfile ${REFERENCE_INTERSECTED_PRE} \
+            --indep-pairwise ${LD_WINDOW} ${LD_STEP} ${LD_R2} \
+            --memory ${MEMORY} \
+            --threads ${THREADS} \
+            --out ${REFERENCE_PRUNE_PREFIX}
+    else
+        print_success "Prune list already exists"
+    fi
+
+    PRUNE_IN_COUNT=$(wc -l < "${REFERENCE_PRUNE_PREFIX}.prune.in")
+    print_success "SNPs retained after LD pruning: ${PRUNE_IN_COUNT}"
+
+    if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+        print_status "Applying prune list to reference..."
+        ${PLINK2} --bfile ${REFERENCE_INTERSECTED_PRE} \
+            --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
+            --make-bed \
+            --out ${TEMP_DIR}/reference_intersected
+    fi
+
+    if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+        print_status "Applying prune list to biobank..."
+        ${PLINK2} --bfile ${BIOBANK_INTERSECTED_PRE} \
+            --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
+            --memory ${MEMORY} \
+            --threads ${THREADS} \
+            --make-bed \
+            --out ${TEMP_DIR}/biobank_intersected
+    fi
+else
+    print_header "Skipping LD Pruning"
+    # Copy pre-prune files as final intersected files
+    if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+        cp ${REFERENCE_INTERSECTED_PRE}.bed ${TEMP_DIR}/reference_intersected.bed
+        cp ${REFERENCE_INTERSECTED_PRE}.bim ${TEMP_DIR}/reference_intersected.bim
+        cp ${REFERENCE_INTERSECTED_PRE}.fam ${TEMP_DIR}/reference_intersected.fam
+    fi
+    if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+        cp ${BIOBANK_INTERSECTED_PRE}.bed ${TEMP_DIR}/biobank_intersected.bed
+        cp ${BIOBANK_INTERSECTED_PRE}.bim ${TEMP_DIR}/biobank_intersected.bim
+        cp ${BIOBANK_INTERSECTED_PRE}.fam ${TEMP_DIR}/biobank_intersected.fam
+    fi
+fi
+
+# ============================================================================
+# Step 8: Create Final Output Files
+# ============================================================================
+print_header "Creating Final Datasets"
+
 print_status "Creating final processed subsets..."
 
 # Create fit_subset (reference)
@@ -930,10 +938,10 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
 else
     echo "  [✓] SNP ID standardization (chr:pos:ref:alt)"
 fi
+echo "  [✓] SNP intersection and allele compatibility check"
 if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
     echo "  [✓] LD pruning (${LD_WINDOW}kb, r²=${LD_R2})"
 fi
-echo "  [✓] SNP intersection and allele compatibility check"
 echo "  [✓] Final intersected datasets created"
 echo ""
 echo "Intermediate files in ${TEMP_DIR}/ can be deleted to save space."
