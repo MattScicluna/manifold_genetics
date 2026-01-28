@@ -13,7 +13,7 @@ from typing import Dict, Optional, Union
 
 import torch
 
-from ...utils.io import get_sample_ids_from_plink, validate_plink_files
+from ...utils.io import get_sample_ids_from_plink, validate_plink_files, _append_extension
 from ...utils.tools import ToolResolver
 from .base import AdmixtureBackend
 
@@ -222,7 +222,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         logger.info("NEURAL ADMIXTURE TRAINING")
         logger.info("=" * 60)
 
-        plink_bed = plink_prefix.with_suffix(".bed")
+        plink_bed = _append_extension(plink_prefix, ".bed")
 
         model_files = [
             output_dir / f"{model_name}_k{k}.pt" for k in range(self.k_min, self.k_max + 1)
@@ -279,7 +279,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         if self._model_dir is None:
             raise RuntimeError("Model directory not set; fit() must be called before inference.")
 
-        plink_bed = plink_prefix.with_suffix(".bed")
+        plink_bed = _append_extension(plink_prefix, ".bed")
         q_dir.mkdir(parents=True, exist_ok=True)
 
         q_files = {
