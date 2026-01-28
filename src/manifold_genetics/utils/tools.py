@@ -304,8 +304,12 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If download fails
         """
-        # PLINK2 latest stable release URL
-        url = "https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20231211.zip"
+        # PLINK2 release URLs (try most recent first, then fallback)
+        urls = [
+            "https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20260110.zip",
+            "https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_latest.zip",
+            "https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20231211.zip",
+        ]
         output_zip = self.download_dir / "plink2.zip"
         output_bin = self.download_dir / "plink2"
 
@@ -315,9 +319,20 @@ class ToolResolver:
             return str(output_bin)
 
         try:
-            # Download zip file
-            logger.info(f"Downloading PLINK2 from {url}...")
-            urllib.request.urlretrieve(url, output_zip)
+            # Download zip file (try URLs in order)
+            last_error = None
+            for url in urls:
+                try:
+                    logger.info(f"Downloading PLINK2 from {url}...")
+                    urllib.request.urlretrieve(url, output_zip)
+                    last_error = None
+                    break
+                except Exception as e:
+                    last_error = e
+                    continue
+
+            if last_error is not None:
+                raise last_error
 
             # Extract binary
             logger.info(f"Extracting to {self.download_dir}...")
