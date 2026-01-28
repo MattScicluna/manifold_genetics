@@ -25,6 +25,7 @@ from .visualization import (
 from .pipeline import Pipeline, run_pipeline
 from .metrics import compute_geographic_preservation, compute_admixture_preservation
 from .utils.io import read_colormap
+from .utils.tools import ToolResolver
 
 
 def setup_logging(verbose: bool = False):
@@ -209,6 +210,19 @@ def cmd_plot_admixture_embedding(args):
         subsample=args.subsample,
     )
     print(f"Admixture-embedding plot written to: {output_path}")
+    return 0
+
+
+def cmd_setup(args):
+    """Download external tools (plink2, flashpca, optional plink v1.9)."""
+    setup_logging(args.verbose)
+
+    resolver = ToolResolver()
+    tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+
+    print("External tools installed:")
+    for name, path in tools.items():
+        print(f"  - {name}: {path}")
     return 0
 
 
@@ -677,6 +691,19 @@ def main():
     plot_proj_parser.add_argument("--linewidth", type=float, default=0.8, help="Edge width for hollow markers")
     plot_proj_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_proj_parser.set_defaults(func=cmd_plot_projection)
+
+    # Setup command (download external tools)
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Download external tools (plink2, flashpca, optional plink v1.9)",
+    )
+    setup_parser.add_argument(
+        "--skip-plink1",
+        action="store_true",
+        help="Skip downloading PLINK v1.9",
+    )
+    setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    setup_parser.set_defaults(func=cmd_setup)
 
     # Metrics: geographic
     geo_metrics_parser = subparsers.add_parser("metrics-geographic", help="Compute geographic preservation")

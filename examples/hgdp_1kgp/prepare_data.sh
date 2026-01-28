@@ -126,7 +126,7 @@ else
     print_error "plink2 not found!"
     echo ""
     echo "Please ensure plink2 is available via one of:"
-    echo "  1. Run setup.sh to download to bin/plink2 (recommended)"
+    echo "  1. Run 'uv run manifold-genetics setup' to download to bin/plink2 (recommended)"
     echo "  2. Load plink2 module: module load plink2"
     echo "  3. Add plink2 to your PATH"
     echo ""
