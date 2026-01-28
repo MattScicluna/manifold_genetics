@@ -33,8 +33,13 @@ def validate_plink_files(plink_prefix: Union[str, Path]) -> Path:
     required_extensions = [".bed", ".bim", ".fam"]
     missing = []
 
+    prefix_str = str(plink_prefix)
     for ext in required_extensions:
-        file_path = plink_prefix.with_suffix(ext)
+        if prefix_str.endswith(ext):
+            file_path = Path(prefix_str)
+        else:
+            # Avoid Path.with_suffix so prefixes like ".noHLA.unrelated" are preserved
+            file_path = Path(prefix_str + ext)
         if not file_path.exists():
             missing.append(str(file_path))
 
