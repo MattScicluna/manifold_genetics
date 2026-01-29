@@ -383,7 +383,7 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
         echo "    Calculating per-SNP missingness..."
         ${PLINK} --bfile ${CURRENT_REF} \
             --missing \
-            --real-ref-alleles \ 
+            --real-ref-alleles \
             --out ${TEMP_DIR}/reference_missing
 
         # Calculate allele frequencies
@@ -687,43 +687,14 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
     fi
 else
     print_header "Skipping WRayner Harmonization"
-    #print_status "Using plink2 SNP ID standardization instead..."
+    print_status "Using filtered files directly (no SNP ID standardization)..."
 
-    # Standardize SNP IDs without WRayner
-    BIOBANK_STANDARDIZED="${TEMP_DIR}/biobank_standardized"
-    REFERENCE_STANDARDIZED="${TEMP_DIR}/reference_standardized"
+    # When skipping WRayner, use the filtered files as standardized
+    # (no SNP ID renaming is performed)
+    BIOBANK_STANDARDIZED="${BIOBANK_FILTERED}"
+    REFERENCE_STANDARDIZED="${REFERENCE_FILTERED}"
 
-    # if [[ ! -f "${BIOBANK_STANDARDIZED}.bed" ]]; then
-    #     print_status "Standardizing biobank SNP IDs..."
-    #     ${PLINK2} --bfile ${BIOBANK_FILTERED} \
-    #         --set-all-var-ids '@:#:$r:$a' \
-    #         --new-id-max-allele-len 100 missing \
-    #         --memory ${MEMORY} \
-    #         --threads ${THREADS} \
-    #         --make-bed \
-    #         --out ${BIOBANK_STANDARDIZED}
-    #     print_success "Biobank standardized"
-    # fi
-
-    # if [[ ! -f "${REFERENCE_STANDARDIZED}.bed" ]]; then
-    #     print_status "Standardizing reference SNP IDs..."
-    #     ${PLINK2} --bfile ${REFERENCE_FILTERED} \
-    #         --set-all-var-ids '@:#:$r:$a' \
-    #         --new-id-max-allele-len 100 missing \
-    #         --memory ${MEMORY} \
-    #         --threads ${THREADS} \
-    #         --make-bed \
-    #         --out ${REFERENCE_STANDARDIZED}
-    #     print_success "Reference standardized"
-    # fi
-
-    cp ${BIOBANK_STANDARDIZED}.bed ${BIOBANK_FILTERED}.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
-    cp ${BIOBANK_STANDARDIZED}.bim ${BIOBANK_FILTERED}.bim
-    cp ${BIOBANK_STANDARDIZED}.fam ${BIOBANK_FILTERED}.fam
-
-    cp ${REFERENCE_STANDARDIZED}.bed ${REFERENCE_FILTERED}.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
-    cp ${REFERENCE_STANDARDIZED}.bim ${REFERENCE_FILTERED}.bim
-    cp ${REFERENCE_STANDARDIZED}.fam ${REFERENCE_FILTERED}.fam
+    print_success "Using filtered files as standardized (no WRayner)"
 fi
 
 # ============================================================================
