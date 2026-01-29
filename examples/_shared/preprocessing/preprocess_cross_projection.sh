@@ -302,12 +302,13 @@ if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
 
     # Step 2: Apply quality filters
     BIOBANK_FILTER_CMD="${PLINK2} --bfile ${BIOBANK_PLINK}"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --real-ref-alleles" #added by JC 28/01/2026
     BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --extract ${TEMP_DIR}/biobank_snps_no_indels.txt"
     BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --geno ${GENO_THRESHOLD}"
     if [[ "$SKIP_MAF" != "true" ]]; then
         BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --maf ${MAF_THRESHOLD}"
     fi
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --output-chr chrM"
+    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --output-chr chrM" #this is unnecessary as it's a line that will only override chr26 to chrM if you would have it in your set.
     BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --memory ${MEMORY}"
     BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --threads ${THREADS}"
     BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --make-bed"
@@ -360,9 +361,11 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
         print_status "[3b] Removing duplicate/multi-allelic positions..."
 
         # Calculate missingness
+        #modified by JC 28/01/2026
         echo "    Calculating per-SNP missingness..."
         ${PLINK} --bfile ${CURRENT_REF} \
             --missing \
+            --real-ref-alleles \ 
             --out ${TEMP_DIR}/reference_missing
 
         # Calculate allele frequencies
@@ -443,6 +446,7 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
     fi
 
     # Apply region exclusions if any
+    #modified by JC 28/01/2026
     if [[ -s "${EXCLUDE_BED}" ]]; then
         EXCLUDE_REGION_COUNT=$(wc -l < "${EXCLUDE_BED}")
         print_status "Excluding ${EXCLUDE_REGION_COUNT} difficult/HLA regions..."
@@ -451,6 +455,7 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
         ${PLINK2} --bfile ${CURRENT_REF} \
             --exclude range ${EXCLUDE_BED} \
             --make-bed \
+            --real-ref-alleles \
             --out ${REFERENCE_NO_DIFFICULT}
 
         NO_DIFFICULT_COUNT=$(get_snp_count "$REFERENCE_NO_DIFFICULT")
@@ -473,7 +478,8 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
         REF_FILTER_CMD="$REF_FILTER_CMD --maf ${MAF_THRESHOLD}"
     fi
     REF_FILTER_CMD="$REF_FILTER_CMD --geno ${GENO_THRESHOLD}"
-    REF_FILTER_CMD="$REF_FILTER_CMD --output-chr chrM"
+    REF_FILTER_CMD="$REF_FILTER_CMD --real-ref-alleles" #added by JC 28/01/2026
+    REF_FILTER_CMD="$REF_FILTER_CMD --output-chr chrM" #this is unnecessary as it's a line that will only override chr26 to chrM if you would have it in your set.
     REF_FILTER_CMD="$REF_FILTER_CMD --make-bed"
     REF_FILTER_CMD="$REF_FILTER_CMD --out ${REFERENCE_FILTERED}"
     eval $REF_FILTER_CMD
@@ -562,13 +568,15 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
         # Create temporary PLINK files without "chr" prefix (WRayner expects numeric chromosomes)
         echo "    Creating temporary PLINK files without chr prefix for WRayner..."
         sed 's/^chr//' "${BIOBANK_FILTERED}.bim" > "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bim"
-        cp "${BIOBANK_FILTERED}.bed" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bed"
-        cp "${BIOBANK_FILTERED}.fam" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.fam"
+        cp "${BIOBANK_FILTERED}.bed" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bed" #could you create a symlink here to save space instead?
+        cp "${BIOBANK_FILTERED}.fam" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.fam" #could you create a symlink here to save space instead?
 
         # Compute allele frequencies
+        #modified by JC 28/01/2026
         echo "    Computing allele frequencies..."
         ${PLINK} --bfile ${BIOBANK_FILTERED} \
             --freq \
+            --real-ref-alleles \
             --out ${BIOBANK_WRAYNER_DIR}/biobank_freq
 
         # Run WRayner tool (pass plink path with -l flag)
@@ -617,7 +625,7 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
                 "${UPDATED_PREFIX}.bim.bkp" > "${UPDATED_PREFIX}.bim"
 
             # Create final harmonized output
-            cp "${UPDATED_PREFIX}.bed" ${BIOBANK_HARMONIZED}.bed
+            cp "${UPDATED_PREFIX}.bed" ${BIOBANK_HARMONIZED}.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
             cp "${UPDATED_PREFIX}.bim" ${BIOBANK_HARMONIZED}.bim
             cp "${UPDATED_PREFIX}.fam" ${BIOBANK_HARMONIZED}.fam
         else
@@ -628,7 +636,7 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
             awk '{chr=$1; if(substr(chr,1,3)!="chr") chr="chr"chr; print $1"\t"chr":"$4":"$6":"$5"\t"$3"\t"$4"\t"$5"\t"$6}' \
                 ${TEMP_DIR}/biobank_wrayner_filtered.bim.bkp > ${TEMP_DIR}/biobank_wrayner_filtered.bim
 
-            cp ${BIOBANK_FILTERED}.bed ${BIOBANK_HARMONIZED}.bed
+            cp ${BIOBANK_FILTERED}.bed ${BIOBANK_HARMONIZED}.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
             cp ${TEMP_DIR}/biobank_wrayner_filtered.bim ${BIOBANK_HARMONIZED}.bim
             cp ${BIOBANK_FILTERED}.fam ${BIOBANK_HARMONIZED}.fam
         fi
@@ -652,7 +660,7 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
         cp "${REFERENCE_FILTERED}.bim" "${TEMP_DIR}/reference_filtered.bim.bkp"
         awk '{chr=$1; if(substr(chr,1,3)!="chr") chr="chr"chr; print $1"\t"chr":"$4":"$6":"$5"\t"$3"\t"$4"\t"$5"\t"$6}' \
             "${TEMP_DIR}/reference_filtered.bim.bkp" > "${REFERENCE_STANDARDIZED}.bim"
-        cp "${REFERENCE_FILTERED}.bed" "${REFERENCE_STANDARDIZED}.bed"
+        cp "${REFERENCE_FILTERED}.bed" "${REFERENCE_STANDARDIZED}.bed" #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
         cp "${REFERENCE_FILTERED}.fam" "${REFERENCE_STANDARDIZED}.fam"
         REFERENCE_STANDARDIZED_SNPS=$(get_snp_count "$REFERENCE_STANDARDIZED")
         print_success "Reference standardized: ${REFERENCE_STANDARDIZED_SNPS} SNPs"
@@ -691,11 +699,11 @@ else
     #     print_success "Reference standardized"
     # fi
 
-    cp ${BIOBANK_STANDARDIZED}.bed ${BIOBANK_FILTERED}.bed
+    cp ${BIOBANK_STANDARDIZED}.bed ${BIOBANK_FILTERED}.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
     cp ${BIOBANK_STANDARDIZED}.bim ${BIOBANK_FILTERED}.bim
     cp ${BIOBANK_STANDARDIZED}.fam ${BIOBANK_FILTERED}.fam
 
-    cp ${REFERENCE_STANDARDIZED}.bed ${REFERENCE_FILTERED}.bed
+    cp ${REFERENCE_STANDARDIZED}.bed ${REFERENCE_FILTERED}.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
     cp ${REFERENCE_STANDARDIZED}.bim ${REFERENCE_FILTERED}.bim
     cp ${REFERENCE_STANDARDIZED}.fam ${REFERENCE_FILTERED}.fam
 fi
@@ -846,15 +854,16 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
 
     PRUNE_IN_COUNT=$(wc -l < "${REFERENCE_PRUNE_PREFIX}.prune.in")
     print_success "SNPs retained after LD pruning: ${PRUNE_IN_COUNT}"
-
+    #modified by JC 28/01/2026
     if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
         print_status "Applying prune list to reference..."
         ${PLINK2} --bfile ${REFERENCE_INTERSECTED_PRE} \
             --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
             --make-bed \
+            --real-ref-alleles \
             --out ${TEMP_DIR}/reference_intersected
     fi
-
+    #modified by JC 28/01/2026
     if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
         print_status "Applying prune list to biobank..."
         ${PLINK2} --bfile ${BIOBANK_INTERSECTED_PRE} \
@@ -862,18 +871,19 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
             --memory ${MEMORY} \
             --threads ${THREADS} \
             --make-bed \
+            --real-ref-alleles \
             --out ${TEMP_DIR}/biobank_intersected
     fi
 else
     print_header "Skipping LD Pruning"
     # Copy pre-prune files as final intersected files
     if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
-        cp ${REFERENCE_INTERSECTED_PRE}.bed ${TEMP_DIR}/reference_intersected.bed
+        cp ${REFERENCE_INTERSECTED_PRE}.bed ${TEMP_DIR}/reference_intersected.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
         cp ${REFERENCE_INTERSECTED_PRE}.bim ${TEMP_DIR}/reference_intersected.bim
         cp ${REFERENCE_INTERSECTED_PRE}.fam ${TEMP_DIR}/reference_intersected.fam
     fi
     if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
-        cp ${BIOBANK_INTERSECTED_PRE}.bed ${TEMP_DIR}/biobank_intersected.bed
+        cp ${BIOBANK_INTERSECTED_PRE}.bed ${TEMP_DIR}/biobank_intersected.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
         cp ${BIOBANK_INTERSECTED_PRE}.bim ${TEMP_DIR}/biobank_intersected.bim
         cp ${BIOBANK_INTERSECTED_PRE}.fam ${TEMP_DIR}/biobank_intersected.fam
     fi
@@ -888,7 +898,7 @@ print_status "Creating final processed subsets..."
 
 # Create fit_subset (reference)
 if [[ ! -f "${OUTPUT_DIR}/fit_subset.bed" ]]; then
-    cp "${TEMP_DIR}/reference_intersected.bed" "${OUTPUT_DIR}/fit_subset.bed"
+    cp "${TEMP_DIR}/reference_intersected.bed" "${OUTPUT_DIR}/fit_subset.bed" #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
     cp "${TEMP_DIR}/reference_intersected.bim" "${OUTPUT_DIR}/fit_subset.bim"
     cp "${TEMP_DIR}/reference_intersected.fam" "${OUTPUT_DIR}/fit_subset.fam"
 else
@@ -897,7 +907,7 @@ fi
 
 # Create project_subset (biobank)
 if [[ ! -f "${OUTPUT_DIR}/project_subset.bed" ]]; then
-    cp "${TEMP_DIR}/biobank_intersected.bed" "${OUTPUT_DIR}/project_subset.bed"
+    cp "${TEMP_DIR}/biobank_intersected.bed" "${OUTPUT_DIR}/project_subset.bed" #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
     cp "${TEMP_DIR}/biobank_intersected.bim" "${OUTPUT_DIR}/project_subset.bim"
     cp "${TEMP_DIR}/biobank_intersected.fam" "${OUTPUT_DIR}/project_subset.fam"
 else
