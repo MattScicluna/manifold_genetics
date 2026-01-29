@@ -51,7 +51,8 @@ echo "  Google project: ${GOOGLE_PROJECT:-'Not set'}"
 echo "  CDR version: ${CDR_VERSION:-'Not set'}"
 echo ""
 echo "Filtering parameters:"
-echo "  MAF threshold: (skipped)"
+echo "  MAF threshold (reference): 0.01 (default)"
+echo "  MAF threshold (biobank): (skipped)"
 echo "  Geno threshold: ${GENO_THRESHOLD}"
 echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 echo ""
@@ -165,6 +166,7 @@ else
     echo "  Biobank: ${SHARED_AOU_DIR}/extractedChrAll"
     echo ""
 
+    # Note: --skip-biobank-maf applies MAF filter to reference but skips it for biobank
     bash "${SHARED_PREPROCESS}" \
         --reference-plink "${REF_DIR}/extractedChrAllUnpruned" \
         --biobank-plink "${SHARED_AOU_DIR}/extractedChrAll" \
@@ -176,7 +178,7 @@ else
         --ld-step "${LD_STEP}" \
         --ld-r2 "${LD_R2}" \
         --reference-has-chr-prefix \
-        --skip-maf
+        --skip-biobank-maf
 
     print_success "Shared preprocessing complete"
 fi
@@ -297,7 +299,8 @@ echo "  hgdp_labels.csv              (HGDP sample metadata)"
 echo "  aou_labels.csv               (AoU sample metadata)"
 echo ""
 echo "Filtering parameters used:"
-echo "  MAF threshold: (skipped)"
+echo "  MAF threshold (reference): 0.01 (default)"
+echo "  MAF threshold (biobank): (skipped)"
 echo "  Geno threshold: ${GENO_THRESHOLD}"
 echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 echo ""

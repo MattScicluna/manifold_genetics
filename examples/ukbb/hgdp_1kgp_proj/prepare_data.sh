@@ -82,6 +82,7 @@ echo ""
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
 # Call the shared script with skip flags (data already preprocessed, just do intersection)
+# Note: --skip-biobank-maf applies MAF filter to reference but skips it for biobank
 bash "${PROJECT_ROOT}/examples/_shared/preprocessing/preprocess_cross_projection.sh" \
     --reference-plink "$HGDP_PLINK" \
     --biobank-plink "$UKBB_PLINK" \
@@ -89,7 +90,7 @@ bash "${PROJECT_ROOT}/examples/_shared/preprocessing/preprocess_cross_projection
     --temp-dir "$TEMP_DIR" \
     --memory 100000 \
     --threads "$THREADS" \
-    --skip-wrayner --skip-giab --skip-hla --skip-ld-prune --skip-dedup --skip-maf
+    --skip-wrayner --skip-giab --skip-hla --skip-ld-prune --skip-dedup --skip-biobank-maf
 
 # ============================================================================
 # Step 3: Filter labels to match intersected samples
