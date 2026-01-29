@@ -695,7 +695,34 @@ else
     REFERENCE_STANDARDIZED="${REFERENCE_FILTERED}"
 
     print_success "Using filtered files as standardized (no WRayner)"
+
 fi
+
+# ============================================================================
+# Step 5.5: Standardize SNP IDs (always)
+# ============================================================================
+print_header "Standardizing SNP IDs"
+print_status "Standardizing SNP IDs to chr:pos:ref:alt format..."
+REF_STD_IDS="${TEMP_DIR}/reference_standardized_ids"
+BIO_STD_IDS="${TEMP_DIR}/biobank_standardized_ids"
+
+if [[ ! -f "${REF_STD_IDS}.bed" ]]; then
+    ${PLINK2} --bfile "${REFERENCE_STANDARDIZED}" \
+        --set-all-var-ids '@:#:$r:$a' \
+        --new-id-max-allele-len 100 \
+        --make-bed --out "${REF_STD_IDS}"
+fi
+
+if [[ ! -f "${BIO_STD_IDS}.bed" ]]; then
+    ${PLINK2} --bfile "${BIOBANK_STANDARDIZED}" \
+        --set-all-var-ids '@:#:$r:$a' \
+        --new-id-max-allele-len 100 \
+        --make-bed --out "${BIO_STD_IDS}"
+fi
+
+REFERENCE_STANDARDIZED="$REF_STD_IDS"
+BIOBANK_STANDARDIZED="$BIO_STD_IDS"
+print_success "SNP IDs standardized for intersection"
 
 # ============================================================================
 # Step 6: Find SNP Intersection and Check Allele Compatibility
