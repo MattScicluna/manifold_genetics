@@ -43,7 +43,7 @@ def read_lmiss(lmiss_path: Path) -> dict:
     """Read .lmiss file and return dict of SNP_ID -> missingness rate."""
     missingness = {}
     with open(lmiss_path, "r") as f:
-        header = f.readline()  # Skip header
+        f.readline()  # Skip header
         for line in f:
             parts = line.strip().split()
             if len(parts) >= 5:
@@ -57,7 +57,7 @@ def read_frq(frq_path: Path) -> dict:
     """Read .frq file and return dict of SNP_ID -> MAF."""
     maf = {}
     with open(frq_path, "r") as f:
-        header = f.readline()  # Skip header
+        f.readline()  # Skip header
         for line in f:
             parts = line.strip().split()
             if len(parts) >= 5:
