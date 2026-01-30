@@ -304,8 +304,12 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If download fails
         """
-        # PLINK2 latest stable release URL
-        url = "https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20231211.zip"
+        # PLINK2 release URLs (try most recent first, then fallback)
+        urls = [
+            "https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20260110.zip",
+            "https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_latest.zip",
+            "https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20231211.zip",
+        ]
         output_zip = self.download_dir / "plink2.zip"
         output_bin = self.download_dir / "plink2"
 
@@ -315,9 +319,20 @@ class ToolResolver:
             return str(output_bin)
 
         try:
-            # Download zip file
-            logger.info(f"Downloading PLINK2 from {url}...")
-            urllib.request.urlretrieve(url, output_zip)
+            # Download zip file (try URLs in order)
+            last_error = None
+            for url in urls:
+                try:
+                    logger.info(f"Downloading PLINK2 from {url}...")
+                    urllib.request.urlretrieve(url, output_zip)
+                    last_error = None
+                    break
+                except Exception as e:
+                    last_error = e
+                    continue
+
+            if last_error is not None:
+                raise last_error
 
             # Extract binary
             logger.info(f"Extracting to {self.download_dir}...")
@@ -340,6 +355,74 @@ class ToolResolver:
                 f"Failed to download PLINK2: {e}\n"
                 f"Please download manually from: https://www.cog-genomics.org/plink/2.0/"
             )
+
+    def _download_plink1(self) -> str:
+        """
+        Download PLINK v1.9 binary.
+
+        Returns:
+            Path to downloaded plink executable
+
+        Raises:
+            ToolNotFoundError: If download fails
+        """
+        url = "https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20231211.zip"
+        output_zip = self.download_dir / "plink1.zip"
+        output_bin = self.download_dir / "plink"
+
+        # Check if already downloaded
+        if output_bin.exists() and self._validate_executable(str(output_bin)):
+            logger.info(f"PLINK (v1.9) already downloaded: {output_bin}")
+            return str(output_bin)
+
+        try:
+            # Download zip file
+            logger.info(f"Downloading PLINK v1.9 from {url}...")
+            urllib.request.urlretrieve(url, output_zip)
+
+            # Extract binary
+            logger.info(f"Extracting to {self.download_dir}...")
+            import zipfile
+
+            with zipfile.ZipFile(output_zip, "r") as zip_ref:
+                zip_ref.extractall(self.download_dir)
+
+            # Make executable
+            output_bin.chmod(0o755)
+
+            # Clean up zip file and extra files
+            output_zip.unlink()
+            for extra in ["LICENSE", "prettify", "toy.ped", "toy.map", "toy.fam", "toy.bed", "toy.bim"]:
+                extra_path = self.download_dir / extra
+                if extra_path.exists():
+                    extra_path.unlink()
+
+            logger.info(f"PLINK v1.9 installed successfully: {output_bin}")
+            return str(output_bin)
+
+        except Exception as e:
+            raise ToolNotFoundError(
+                f"Failed to download PLINK v1.9: {e}\n"
+                f"Please download manually from: https://www.cog-genomics.org/plink/1.9/"
+            )
+
+    def install_tools(self, include_plink1: bool = True) -> dict:
+        """
+        Install external tools to the package bin/ directory.
+
+        Args:
+            include_plink1: If True, download PLINK v1.9 as well.
+
+        Returns:
+            Dictionary with keys: plink2, flashpca, and optionally plink1
+        """
+        tools = {
+            "plink2": self._download_plink2(),
+            "flashpca": self._download_flashpca(),
+        }
+        if include_plink1:
+            tools["plink1"] = self._download_plink1()
+        return tools
 
     def resolve_all(self) -> dict:
         """

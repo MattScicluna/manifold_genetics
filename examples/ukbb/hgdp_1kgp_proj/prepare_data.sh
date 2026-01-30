@@ -17,36 +17,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# ANSI colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Helper functions
-print_status() {
-    echo -e "${BLUE}==>${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}✗${NC} $1"
-}
+# Source common utilities
+source "${PROJECT_ROOT}/examples/_shared/preprocessing/common.sh"
 
 # Print header
-echo ""
-echo "========================================="
-echo "  UKBB-HGDP Cross-Projection Data Prep"
-echo "========================================="
-echo ""
+print_header "UKBB-HGDP Cross-Projection Data Prep"
 
 # Paths
 DATA_DIR="${SCRIPT_DIR}/data"
@@ -98,22 +73,24 @@ echo "  Fit labels: $FIT_LABELS"
 echo "  Project labels: $PROJECT_LABELS"
 
 # ============================================================================
-# Step 2: Call generic cross-projection prepare script
+# Step 2: Call shared preprocessing script (intersection only)
 # ============================================================================
-print_status "Calling generic cross-projection prepare script..."
+print_status "Calling shared preprocessing script..."
 echo ""
 
 # Determine threads from SLURM or default
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
-# Call the generic script (creates intersected PLINK files only)
-bash "${PROJECT_ROOT}/examples/generic/hgdp_1kgp_proj/prepare_data.sh" \
+# Call the shared script with skip flags (data already preprocessed, just do intersection)
+# Note: --skip-biobank-maf applies MAF filter to reference but skips it for biobank
+bash "${PROJECT_ROOT}/examples/_shared/preprocessing/preprocess_cross_projection.sh" \
     --reference-plink "$HGDP_PLINK" \
     --biobank-plink "$UKBB_PLINK" \
     --output-dir "$DATA_DIR" \
     --temp-dir "$TEMP_DIR" \
     --memory 100000 \
-    --threads "$THREADS"
+    --threads "$THREADS" \
+    --skip-wrayner --skip-biobank-maf
 
 # ============================================================================
 # Step 3: Filter labels to match intersected samples

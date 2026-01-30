@@ -61,6 +61,8 @@ class Pipeline:
         fit_colormap: Optional[Union[str, Path]] = None,
         project_colormap: Optional[Union[str, Path]] = None,
         admixture_backend: Optional[object] = None,
+        projection_plot_fit_column: Optional[str] = None,
+        projection_plot_transform_column: Optional[str] = None,
     ):
         """
         Initialize pipeline.
@@ -78,6 +80,8 @@ class Pipeline:
             project_colormap: Optional override colormap JSON for project dataset
             admixture_backend: Optional AdmixtureBackend instance for testing
                               (if None, uses neural-admixture via CLI)
+            projection_plot_fit_column: Column from fit colormap to use for projection plot
+            projection_plot_transform_column: Column from project colormap to use for projection plot
 
         Note:
             Must provide either (labels + colormap) OR (fit_labels + project_labels + fit_colormap + project_colormap)
@@ -123,6 +127,10 @@ class Pipeline:
 
         # Store admixture backend (for testing)
         self.admixture_backend = admixture_backend
+
+        # Store projection column settings
+        self.projection_plot_fit_column = projection_plot_fit_column
+        self.projection_plot_transform_column = projection_plot_transform_column
 
     def run(
         self,
@@ -462,21 +470,38 @@ class Pipeline:
             embedding_figures_dir = self.output_dir / "figures" / "embeddings"
             embedding_figures_dir.mkdir(parents=True, exist_ok=True)
 
-            figure_paths = visualize(
+            # Step 4.1: Generate FIT visualizations (for all columns in fit_colormap)
+            if "fit_embedding_file" in results and self.fit_labels and self.fit_colormap:
+                logger.info("Creating fit embedding visualizations...")
+                fit_figure_paths = visualize(
+                    embedding=results["fit_embedding_file"],
+                    labels=self.fit_labels,
+                    colormap=self.fit_colormap,
+                    output_dir=embedding_figures_dir,
+                    output_prefix=embedding,
+                    dataset_prefix="fit_",
+                )
+                results["fit_embedding_figures"] = fit_figure_paths
+                logger.info(f"Created {len(fit_figure_paths)} fit embedding figures")
+
+            # Step 4.2: Generate TRANSFORM visualizations (for all columns in project_colormap)
+            logger.info("Creating transform embedding visualizations...")
+            transform_figure_paths = visualize(
                 embedding=embedding_file,
                 labels=self.project_labels,
                 colormap=self.project_colormap,
                 output_dir=embedding_figures_dir,
                 output_prefix=embedding,
+                dataset_prefix="transform_",
             )
+            results["embedding_figures"] = transform_figure_paths
+            logger.info(f"Created {len(transform_figure_paths)} transform embedding figures")
 
-            results["embedding_figures"] = figure_paths
-
-            # Step 4.1: Projection Plot (fit + project together) if cross-projection mode
-            if "fit_embedding_file" in results and self.fit_plink_prefix and self.transform_plink_prefix:
+            # Step 4.3: Projection Plot (fit + project together) if cross-projection mode
+            if "fit_embedding_file" in results and self.projection_plot_fit_column and self.projection_plot_transform_column:
                 logger.info("Creating projection plot (fit + project together)...")
 
-                projection_plot_path = embedding_figures_dir / f"{embedding}_projection.png"
+                projection_plot_path = embedding_figures_dir / f"{embedding}_projection_fit_{self.projection_plot_fit_column}_transform_{self.projection_plot_transform_column}.png"
 
                 try:
                     plot_projection(
@@ -487,6 +512,8 @@ class Pipeline:
                         fit_colormap=self.fit_colormap,
                         project_colormap=self.project_colormap,
                         output_path=projection_plot_path,
+                        fit_label_column=self.projection_plot_fit_column,
+                        project_label_column=self.projection_plot_transform_column,
                     )
 
                     results["projection_plot"] = projection_plot_path

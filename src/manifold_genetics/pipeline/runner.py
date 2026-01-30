@@ -46,6 +46,8 @@ def run_pipeline(
     # Visualization parameters
     admix_group_column: Optional[str] = None,
     admix_within_group_order: Optional[str] = 'chron',
+    projection_plot_fit_column: Optional[str] = None,
+    projection_plot_transform_column: Optional[str] = None,
     # Skip flags
     skip_pca: bool = False,
     skip_admixture: bool = False,
@@ -87,6 +89,8 @@ def run_pipeline(
         embedding_input: Which dataset to embed - 'fit', 'project', or 'both' (default: 'both')
         admix_group_column: Column for grouping in admixture barplots (None = use first colormap key)
         admix_within_group_order: Method for ordering samples within groups ('chron', 'tree', or None)
+        projection_plot_fit_column: Column from fit colormap to use for projection plot
+        projection_plot_transform_column: Column from project colormap to use for projection plot
         skip_pca: Skip PCA step
         skip_admixture: Skip admixture step
         skip_embedding: Skip embedding step
@@ -182,6 +186,8 @@ def run_pipeline(
         fit_colormap=fit_colormap,
         project_colormap=project_colormap,
         admixture_backend=admixture_backend,
+        projection_plot_fit_column=projection_plot_fit_column,
+        projection_plot_transform_column=projection_plot_transform_column,
     )
 
     # Run pipeline with all parameters

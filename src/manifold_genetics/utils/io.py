@@ -15,6 +15,20 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
+def _append_extension(path: Union[str, Path], ext: str) -> Path:
+    """
+    Append an extension to a path without stripping existing suffixes.
+
+    Args:
+        path: Base path (may already include dots in the name)
+        ext: Extension including leading dot (e.g., ".bed")
+    """
+    path_str = str(path)
+    if path_str.endswith(ext):
+        return Path(path_str)
+    return Path(path_str + ext)
+
+
 def validate_plink_files(plink_prefix: Union[str, Path]) -> Path:
     """
     Validate that required PLINK files exist.
@@ -34,7 +48,8 @@ def validate_plink_files(plink_prefix: Union[str, Path]) -> Path:
     missing = []
 
     for ext in required_extensions:
-        file_path = plink_prefix.with_suffix(ext)
+        # Avoid Path.with_suffix so prefixes like ".noHLA.unrelated" are preserved
+        file_path = _append_extension(plink_prefix, ext)
         if not file_path.exists():
             missing.append(str(file_path))
 
@@ -183,7 +198,7 @@ def get_sample_ids_from_plink(plink_prefix: Union[str, Path]) -> list:
         List of sample IDs (IID column from .fam file)
     """
     plink_prefix = validate_plink_files(plink_prefix)
-    fam_path = plink_prefix.with_suffix(".fam")
+    fam_path = _append_extension(plink_prefix, ".fam")
 
     fam_df = read_fam_file(fam_path)
     return fam_df["IID"].tolist()
