@@ -354,6 +354,7 @@ def visualize(
     colormap: Union[Dict, str, Path],
     output_dir: Optional[Union[str, Path]] = None,
     output_prefix: str = "embedding",
+    dataset_prefix: str = "",
 ) -> List[Path]:
     """
     Create all standard visualization plots.
@@ -366,6 +367,7 @@ def visualize(
         colormap: Dict or path to colormap JSON
         output_dir: Directory to save plots (default: current directory)
         output_prefix: Prefix for output filenames
+        dataset_prefix: Prefix for dataset type (e.g., "fit_" or "transform_")
 
     Returns:
         List of paths to saved figures
@@ -386,7 +388,7 @@ def visualize(
     # Generate plots for each label column
     output_paths = []
     for label_col in colormap_dict.keys():
-        output_path = output_dir / f"{output_prefix}_by_{label_col}.png"
+        output_path = output_dir / f"{dataset_prefix}{output_prefix}_by_{label_col}.png"
 
         plot_embedding(
             embedding=embedding,
@@ -670,6 +672,8 @@ def plot_projection(
     fit_colormap: Union[Dict, str, Path],
     project_colormap: Union[Dict, str, Path],
     output_path: Union[str, Path],
+    fit_label_column: str,
+    project_label_column: str,
     title: Optional[str] = None,
     figsize: tuple = (6, 4),
     point_size: float = 4.0,
@@ -682,6 +686,9 @@ def plot_projection(
     """
     Plot fit and projection embeddings together with different marker shapes.
 
+    Allows different label columns for fit and project datasets - they don't
+    need to match. Each dataset is colored by its own colormap.
+
     Args:
         fit_embedding: DataFrame or path to fit embedding CSV (sample_id, dim_1, dim_2)
         project_embedding: DataFrame or path to project embedding CSV
@@ -690,6 +697,8 @@ def plot_projection(
         fit_colormap: Dict or path to fit colormap JSON
         project_colormap: Dict or path to project colormap JSON
         output_path: Path to save figure
+        fit_label_column: Label column from fit colormap to use for coloring fit data
+        project_label_column: Label column from project colormap to use for coloring project data
         title: Optional plot title
         figsize: Figure size (width, height)
         point_size: Size of scatter plot points
@@ -745,6 +754,18 @@ def plot_projection(
     else:
         project_cmap_dict = project_colormap
 
+    # Validate columns exist in colormaps
+    if fit_label_column not in fit_cmap_dict:
+        raise ValueError(
+            f"Fit column '{fit_label_column}' not in fit colormap. "
+            f"Available: {list(fit_cmap_dict.keys())}"
+        )
+    if project_label_column not in project_cmap_dict:
+        raise ValueError(
+            f"Project column '{project_label_column}' not in project colormap. "
+            f"Available: {list(project_cmap_dict.keys())}"
+        )
+
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -752,154 +773,137 @@ def plot_projection(
     fit_merged = fit_emb_df.merge(fit_labels_df, on='sample_id', how='inner')
     project_merged = project_emb_df.merge(project_labels_df, on='sample_id', how='inner')
 
-    # Find common label columns
-    common_columns = [col for col in fit_cmap_dict.keys() if col in project_cmap_dict.keys()]
+    # Get color dictionaries for the specified columns
+    fit_color_dict = fit_cmap_dict[fit_label_column]
+    project_color_dict = project_cmap_dict[project_label_column]
 
-    if not common_columns:
-        raise ValueError(
-            "No common label columns found between fit and project colormaps. "
-            f"Fit columns: {list(fit_cmap_dict.keys())}, "
-            f"Project columns: {list(project_cmap_dict.keys())}"
-        )
+    # Create single figure
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    # Create figure with subplots for each common column
-    fig, axes = plt.subplots(
-        1, len(common_columns), figsize=(figsize[0] * len(common_columns), figsize[1])
-    )
-    if len(common_columns) == 1:
-        axes = [axes]
+    # Get all unique labels from both datasets
+    fit_labels_set = set()
+    project_labels_set = set()
+    if fit_label_column in fit_merged.columns:
+        fit_labels_set.update(fit_merged[fit_label_column].dropna().unique())
+    if project_label_column in project_merged.columns:
+        project_labels_set.update(project_merged[project_label_column].dropna().unique())
 
-    # Plot for each common label column
-    for ax, label_col in zip(axes, common_columns):
-        fit_color_dict = fit_cmap_dict[label_col]
-        project_color_dict = project_cmap_dict[label_col]
+    # LAYER 1: Plot missing data in lightgray for both datasets
+    # Fit missing data
+    if fit_label_column in fit_merged.columns:
+        fit_missing_mask = fit_merged[fit_label_column].isna()
+        if fit_missing_mask.sum() > 0:
+            ax.scatter(
+                fit_merged.loc[fit_missing_mask, "dim_1"],
+                fit_merged.loc[fit_missing_mask, "dim_2"],
+                marker=fit_marker,
+                s=point_size,
+                facecolors='none',
+                edgecolors='lightgray',
+                linewidths=linewidth,
+                alpha=alpha * 0.5,
+                rasterized=True,
+                zorder=1,
+            )
 
-        # Get all unique labels from both datasets
-        all_labels = set()
-        if label_col in fit_merged.columns:
-            all_labels.update(fit_merged[label_col].dropna().unique())
-        if label_col in project_merged.columns:
-            all_labels.update(project_merged[label_col].dropna().unique())
+    # Project missing data
+    if project_label_column in project_merged.columns:
+        project_missing_mask = project_merged[project_label_column].isna()
+        if project_missing_mask.sum() > 0:
+            ax.scatter(
+                project_merged.loc[project_missing_mask, "dim_1"],
+                project_merged.loc[project_missing_mask, "dim_2"],
+                marker=project_marker,
+                s=point_size,
+                facecolors='none',
+                edgecolors='lightgray',
+                linewidths=linewidth,
+                alpha=alpha * 0.5,
+                rasterized=True,
+                zorder=1,
+            )
 
-        # LAYER 1: Plot missing data in lightgray for both datasets
-        # Fit missing data
-        if label_col in fit_merged.columns:
-            fit_missing_mask = fit_merged[label_col].isna()
-            if fit_missing_mask.sum() > 0:
+    # LAYER 2: Plot colored groups in REVERSE order
+    # Plot fit data groups
+    fit_color_groups = [g for g in fit_color_dict.keys() if g in fit_labels_set]
+    for label in reversed(fit_color_groups):
+        if fit_label_column in fit_merged.columns:
+            fit_mask = fit_merged[fit_label_column] == label
+            if fit_mask.sum() > 0:
+                fit_color = fit_color_dict[label]
                 ax.scatter(
-                    fit_merged.loc[fit_missing_mask, "dim_1"],
-                    fit_merged.loc[fit_missing_mask, "dim_2"],
+                    fit_merged.loc[fit_mask, "dim_1"],
+                    fit_merged.loc[fit_mask, "dim_2"],
                     marker=fit_marker,
                     s=point_size,
                     facecolors='none',
-                    edgecolors='lightgray',
+                    edgecolors=fit_color,
                     linewidths=linewidth,
-                    alpha=alpha * 0.5,
+                    alpha=alpha,
                     rasterized=True,
-                    zorder=1,
+                    zorder=2,
                 )
 
-        # Project missing data
-        if label_col in project_merged.columns:
-            project_missing_mask = project_merged[label_col].isna()
-            if project_missing_mask.sum() > 0:
+    # Plot project data groups
+    project_color_groups = [g for g in project_color_dict.keys() if g in project_labels_set]
+    for label in reversed(project_color_groups):
+        if project_label_column in project_merged.columns:
+            project_mask = project_merged[project_label_column] == label
+            if project_mask.sum() > 0:
+                project_color = project_color_dict[label]
                 ax.scatter(
-                    project_merged.loc[project_missing_mask, "dim_1"],
-                    project_merged.loc[project_missing_mask, "dim_2"],
+                    project_merged.loc[project_mask, "dim_1"],
+                    project_merged.loc[project_mask, "dim_2"],
                     marker=project_marker,
                     s=point_size,
                     facecolors='none',
-                    edgecolors='lightgray',
+                    edgecolors=project_color,
                     linewidths=linewidth,
-                    alpha=alpha * 0.5,
+                    alpha=alpha,
                     rasterized=True,
-                    zorder=1,
+                    zorder=2,
                 )
 
-        # LAYER 2: Plot colored groups in REVERSE order
-        # Collect all color groups from both colormaps
-        all_color_groups = set()
-        all_color_groups.update(fit_color_dict.keys())
-        all_color_groups.update(project_color_dict.keys())
+    # Create legend with two sections: fit and project
+    if show_legend:
+        legend_elements = []
 
-        # Filter to groups present in data
-        color_groups = [g for g in all_color_groups if g in all_labels]
+        # Add fit legend entries (if not too many)
+        if len(fit_color_groups) <= 25:
+            for label in fit_color_groups:
+                color = fit_color_dict[label]
+                legend_elements.append(Patch(facecolor=color, label=f"▲ {label}"))
 
-        for label in reversed(color_groups):
-            # Plot fit data if label exists in fit colormap and data
-            if label in fit_color_dict and label_col in fit_merged.columns:
-                fit_mask = fit_merged[label_col] == label
-                if fit_mask.sum() > 0:
-                    fit_color = fit_color_dict[label]
-                    ax.scatter(
-                        fit_merged.loc[fit_mask, "dim_1"],
-                        fit_merged.loc[fit_mask, "dim_2"],
-                        marker=fit_marker,
-                        s=point_size,
-                        facecolors='none',
-                        edgecolors=fit_color,
-                        linewidths=linewidth,
-                        alpha=alpha,
-                        rasterized=True,
-                        zorder=2,
-                    )
+        # Add project legend entries (if not too many)
+        if len(project_color_groups) <= 25:
+            for label in project_color_groups:
+                color = project_color_dict[label]
+                legend_elements.append(Patch(facecolor=color, label=f"● {label}"))
 
-            # Plot project data if label exists in project colormap and data
-            if label in project_color_dict and label_col in project_merged.columns:
-                project_mask = project_merged[label_col] == label
-                if project_mask.sum() > 0:
-                    project_color = project_color_dict[label]
-                    ax.scatter(
-                        project_merged.loc[project_mask, "dim_1"],
-                        project_merged.loc[project_mask, "dim_2"],
-                        marker=project_marker,
-                        s=point_size,
-                        facecolors='none',
-                        edgecolors=project_color,
-                        linewidths=linewidth,
-                        alpha=alpha,
-                        rasterized=True,
-                        zorder=2,
-                    )
+        # Add "Unknown" if there's missing data
+        has_missing = (
+            (fit_label_column in fit_merged.columns and fit_merged[fit_label_column].isna().any()) or
+            (project_label_column in project_merged.columns and project_merged[project_label_column].isna().any())
+        )
+        if has_missing:
+            legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
 
-        # Create legend with patches for colors
-        if show_legend and len(color_groups) <= 50:
-            legend_elements = []
-
-            # Add patches for each group (use fit colormap preferentially)
-            for label in color_groups:
-                if label in fit_color_dict:
-                    color = fit_color_dict[label]
-                elif label in project_color_dict:
-                    color = project_color_dict[label]
-                else:
-                    color = '#D3D3D3'
-
-                legend_elements.append(Patch(facecolor=color, label=label))
-
-            # Add "Unknown" if there's missing data
-            has_missing = (
-                (label_col in fit_merged.columns and fit_merged[label_col].isna().any()) or
-                (label_col in project_merged.columns and project_merged[label_col].isna().any())
-            )
-            if has_missing:
-                legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
-
+        if legend_elements:
             ax.legend(
                 handles=legend_elements,
-                fontsize=8,
+                fontsize=7,
                 framealpha=0.9,
                 loc='center left',
                 bbox_to_anchor=(1.02, 0.5),
-                title=f"{label_col}\n▲ = fit, ● = project"
+                title=f"▲ fit: {fit_label_column}\n● transform: {project_label_column}"
             )
 
-        # Remove ticks, tick labels, axis labels, and titles
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_xlabel("")
-        ax.set_ylabel("")
-        ax.set_title("")
+    # Remove ticks, tick labels, axis labels, and titles
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_title("")
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")

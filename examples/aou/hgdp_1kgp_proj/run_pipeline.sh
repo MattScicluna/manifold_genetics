@@ -65,6 +65,8 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --k-max 10 \
     --embedding "phate" \
     --admixture-group-column "race" \
+    --projection-plot-fit-column "Genetic_region_merged" \
+    --projection-plot-transform-column "race_ethnicity" \
     --threads "$CLUSTER_CPUS" \
     --embed-batch-size 60000 \
     ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \

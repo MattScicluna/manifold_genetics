@@ -424,6 +424,8 @@ def cmd_plot_projection(args):
         fit_colormap=args.fit_colormap,
         project_colormap=args.project_colormap,
         output_path=args.output,
+        fit_label_column=args.fit_column,
+        project_label_column=args.project_column,
         point_size=args.point_size,
         alpha=args.alpha,
         linewidth=args.linewidth,
@@ -472,6 +474,10 @@ def cmd_pipeline(args):
     fit_colormap = args.fit_colormap if hasattr(args, "fit_colormap") and args.fit_colormap else None
     project_colormap = args.project_colormap if hasattr(args, "project_colormap") and args.project_colormap else None
 
+    # Handle projection column args
+    projection_plot_fit_column = getattr(args, 'projection_plot_fit_column', None)
+    projection_plot_transform_column = getattr(args, 'projection_plot_transform_column', None)
+
     # Use the canonical run_pipeline function
     results = run_pipeline(
         fit_plink=args.fit_plink,
@@ -496,6 +502,8 @@ def cmd_pipeline(args):
         embedding_input=args.embedding_input,
         admix_group_column=args.admixture_group_column,
         admix_within_group_order=None if args.admixture_within_group_order == "none" else args.admixture_within_group_order,
+        projection_plot_fit_column=projection_plot_fit_column,
+        projection_plot_transform_column=projection_plot_transform_column,
         skip_pca=args.skip_pca,
         skip_admixture=args.skip_admixture,
         skip_embedding=args.skip_embedding,
@@ -685,6 +693,8 @@ def main():
     plot_proj_parser.add_argument("--project-labels", required=True, help="Project labels CSV file")
     plot_proj_parser.add_argument("--fit-colormap", required=True, help="Fit colormap JSON file")
     plot_proj_parser.add_argument("--project-colormap", required=True, help="Project colormap JSON file")
+    plot_proj_parser.add_argument("--fit-column", required=True, help="Column from fit colormap to use for coloring")
+    plot_proj_parser.add_argument("--project-column", required=True, help="Column from project colormap to use for coloring")
     plot_proj_parser.add_argument("--output", required=True, help="Output figure path")
     plot_proj_parser.add_argument("--point-size", type=float, default=4.0, help="Size of scatter points")
     plot_proj_parser.add_argument("--alpha", type=float, default=0.6, help="Transparency of points")
@@ -815,6 +825,14 @@ def main():
         choices=["chron", "tree", "none"],
         default="chron",
         help="Method for ordering samples within groups in admixture barplots: 'chron' (sort by components), 'tree' (hierarchical clustering), 'none' (original order)",
+    )
+    pipeline_parser.add_argument(
+        "--projection-plot-fit-column",
+        help="Column from fit colormap to use for projection plot (e.g., Genetic_region_merged)",
+    )
+    pipeline_parser.add_argument(
+        "--projection-plot-transform-column",
+        help="Column from project colormap to use for projection plot (e.g., race_ethnicity)",
     )
     pipeline_parser.add_argument("--skip-metrics", action="store_true", help="Skip metrics")
     pipeline_parser.add_argument("--verbose", action="store_true", help="Verbose output")
