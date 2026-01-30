@@ -331,19 +331,19 @@ if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
     echo "    SNPs after indel removal: $NO_INDEL_SNPS"
 
     # Step 2: Apply quality filters
-    BIOBANK_FILTER_CMD="${PLINK2} --bfile ${BIOBANK_PLINK}"
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --real-ref-alleles" #added by JC 28/01/2026
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --extract ${TEMP_DIR}/biobank_snps_no_indels.txt"
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --geno ${GENO_THRESHOLD}"
+    BIOBANK_FILTER_CMD=("${PLINK2}" --bfile "${BIOBANK_PLINK}")
+    BIOBANK_FILTER_CMD+=("--real-ref-alleles") #added by JC 28/01/2026
+    BIOBANK_FILTER_CMD+=("--extract" "${TEMP_DIR}/biobank_snps_no_indels.txt")
+    BIOBANK_FILTER_CMD+=("--geno" "${GENO_THRESHOLD}")
     if [[ "$SKIP_BIOBANK_MAF_EFFECTIVE" != "true" ]]; then
-        BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --maf ${MAF_THRESHOLD}"
+        BIOBANK_FILTER_CMD+=("--maf" "${MAF_THRESHOLD}")
     fi
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --output-chr chrM" #this is unnecessary as it's a line that will only override chr26 to chrM if you would have it in your set.
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --memory ${MEMORY}"
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --threads ${THREADS}"
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --make-bed"
-    BIOBANK_FILTER_CMD="$BIOBANK_FILTER_CMD --out ${BIOBANK_FILTERED}"
-    eval $BIOBANK_FILTER_CMD
+    BIOBANK_FILTER_CMD+=("--output-chr" "chrM") #this is unnecessary as it's a line that will only override chr26 to chrM if you would have it in your set.
+    BIOBANK_FILTER_CMD+=("--memory" "${MEMORY}")
+    BIOBANK_FILTER_CMD+=("--threads" "${THREADS}")
+    BIOBANK_FILTER_CMD+=("--make-bed")
+    BIOBANK_FILTER_CMD+=("--out" "${BIOBANK_FILTERED}")
+    "${BIOBANK_FILTER_CMD[@]}"
 
     BIOBANK_FILTERED_SNPS=$(get_snp_count "$BIOBANK_FILTERED")
     print_success "Biobank SNPs after filtering: ${BIOBANK_FILTERED_SNPS}"
