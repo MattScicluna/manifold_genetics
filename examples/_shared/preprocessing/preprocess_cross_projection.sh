@@ -598,8 +598,8 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
         # Create temporary PLINK files without "chr" prefix (WRayner expects numeric chromosomes)
         echo "    Creating temporary PLINK files without chr prefix for WRayner..."
         sed 's/^chr//' "${BIOBANK_FILTERED}.bim" > "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bim"
-        cp "${BIOBANK_FILTERED}.bed" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bed" #could you create a symlink here to save space instead?
-        cp "${BIOBANK_FILTERED}.fam" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.fam" #could you create a symlink here to save space instead?
+        ln -sf "${BIOBANK_FILTERED}.bed" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bed"
+        ln -sf "${BIOBANK_FILTERED}.fam" "${BIOBANK_WRAYNER_DIR}/biobank_nochr.fam"
 
         # Compute allele frequencies
         #modified by JC 28/01/2026
