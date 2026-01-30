@@ -178,7 +178,8 @@ else
         --ld-step "${LD_STEP}" \
         --ld-r2 "${LD_R2}" \
         --reference-has-chr-prefix \
-        --skip-biobank-maf
+        --skip-biobank-maf \
+        --cleanup
 
     print_success "Shared preprocessing complete"
 fi
@@ -188,44 +189,44 @@ fi
 # =============================================================================
 print_header "Step 14: Labels and Colormaps"
 
-# Create HGDP labels
-print_status "Creating HGDP labels..."
+# Create fit labels (HGDP+1KGP reference)
+print_status "Creating fit_labels.csv (HGDP+1KGP)..."
 
-if [[ -f "${DATA_DIR}/hgdp_labels.csv" ]]; then
-    print_success "HGDP labels already exist"
-    HGDP_LABEL_COUNT=$(wc -l < "${DATA_DIR}/hgdp_labels.csv")
-    echo "  Existing labels: $((HGDP_LABEL_COUNT - 1)) samples"
+if [[ -f "${DATA_DIR}/fit_labels.csv" ]]; then
+    print_success "fit_labels.csv already exists"
+    FIT_LABEL_COUNT=$(wc -l < "${DATA_DIR}/fit_labels.csv")
+    echo "  Existing labels: $((FIT_LABEL_COUNT - 1)) samples"
 else
     python3 << EOF
 import pandas as pd
 
-print("Creating HGDP labels from .fam file...")
+print("Creating fit labels from .fam file...")
 fam = pd.read_csv("${DATA_DIR}/fit_subset.fam", sep=r'\s+', header=None,
                   names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
 
 # Create labels DataFrame with sample_id and Population
-hgdp_labels = pd.DataFrame({
+fit_labels = pd.DataFrame({
     'sample_id': fam['IID'].astype(str),
     'Population': fam['FID'].astype(str)
 })
 
 # Clean up population names: strip "forReference" prefix
-hgdp_labels['Population'] = hgdp_labels['Population'].str.replace('^forReference', '', regex=True)
+fit_labels['Population'] = fit_labels['Population'].str.replace('^forReference', '', regex=True)
 
 # Save labels
-hgdp_labels.to_csv("${DATA_DIR}/hgdp_labels.csv", index=False)
-print(f"  Saved HGDP labels: {len(hgdp_labels)} samples")
-print(f"  Unique populations: {hgdp_labels['Population'].nunique()}")
+fit_labels.to_csv("${DATA_DIR}/fit_labels.csv", index=False)
+print(f"  Saved fit_labels.csv: {len(fit_labels)} samples")
+print(f"  Unique populations: {fit_labels['Population'].nunique()}")
 EOF
 fi
 
-# Create AoU labels
-print_status "Creating AoU labels..."
+# Create project labels (AoU)
+print_status "Creating project_labels.csv (AoU)..."
 
-if [[ -f "${DATA_DIR}/aou_labels.csv" ]]; then
-    print_success "AoU labels already exist"
-    AOU_LABEL_COUNT=$(wc -l < "${DATA_DIR}/aou_labels.csv")
-    echo "  Existing labels: $((AOU_LABEL_COUNT - 1)) samples"
+if [[ -f "${DATA_DIR}/project_labels.csv" ]]; then
+    print_success "project_labels.csv already exists"
+    PROJECT_LABEL_COUNT=$(wc -l < "${DATA_DIR}/project_labels.csv")
+    echo "  Existing labels: $((PROJECT_LABEL_COUNT - 1)) samples"
 else
     AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
 
@@ -246,26 +247,26 @@ print(f"  Available in intersected data: {len(available_samples)}")
 
 # Filter metadata to only include samples we have
 aou_metadata['sample_id'] = aou_metadata['person_id'].astype(str)
-aou_labels = aou_metadata[aou_metadata['sample_id'].isin(available_samples)].copy()
+project_labels = aou_metadata[aou_metadata['sample_id'].isin(available_samples)].copy()
 
 # Select relevant columns
 columns_to_keep = ['sample_id']
-if 'race' in aou_labels.columns:
+if 'race' in project_labels.columns:
     columns_to_keep.append('race')
-if 'ethnicity' in aou_labels.columns:
+if 'ethnicity' in project_labels.columns:
     columns_to_keep.append('ethnicity')
-if 'race_ethnicity' in aou_labels.columns:
+if 'race_ethnicity' in project_labels.columns:
     columns_to_keep.append('race_ethnicity')
 
-aou_labels = aou_labels[columns_to_keep]
+project_labels = project_labels[columns_to_keep]
 
 # Save labels
-aou_labels.to_csv("${DATA_DIR}/aou_labels.csv", index=False)
-print(f"  Saved AoU labels: {len(aou_labels)} samples")
+project_labels.to_csv("${DATA_DIR}/project_labels.csv", index=False)
+print(f"  Saved project_labels.csv: {len(project_labels)} samples")
 print(f"  Columns: {', '.join(columns_to_keep)}")
 
-if len(aou_labels) < len(available_samples):
-    missing = len(available_samples) - len(aou_labels)
+if len(project_labels) < len(available_samples):
+    missing = len(available_samples) - len(project_labels)
     print(f"  Warning: {missing} samples in intersected data have no metadata")
 EOF
     else
@@ -295,8 +296,8 @@ FINAL_SNPS=$(get_snp_count "${DATA_DIR}/fit_subset")
 echo "Generated files in ${DATA_DIR}:"
 echo "  fit_subset.{bed,bim,fam}     (HGDP+1KGP: $FIT_SAMPLES samples, $FINAL_SNPS SNPs)"
 echo "  project_subset.{bed,bim,fam} (AoU: $PROJECT_SAMPLES samples, $FINAL_SNPS SNPs)"
-echo "  hgdp_labels.csv              (HGDP sample metadata)"
-echo "  aou_labels.csv               (AoU sample metadata)"
+echo "  fit_labels.csv               (HGDP+1KGP sample metadata)"
+echo "  project_labels.csv           (AoU sample metadata)"
 echo ""
 echo "Filtering parameters used:"
 echo "  MAF threshold (reference): 0.01 (default)"

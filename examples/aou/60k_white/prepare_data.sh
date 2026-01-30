@@ -1,14 +1,19 @@
 #!/bin/bash
 #
-# Prepare AoU 60K White + Non-White Subset Data
+# AoU 60K White + Non-White Subset Data Preparation
+#
+# This wrapper script:
+# 1. Reads sample IDs from intersected AoU data (from hgdp_1kgp_proj)
+# 2. Creates fit_samples.txt with 60K White + All Non-White samples
+# 3. Calls generic subset script to create PLINK subsets
+# 4. Creates fit_labels.csv and project_labels.csv
 #
 # Strategy:
-# 1. Fit Subset: Random 60K White + ALL Non-White samples.
-# 2. Project Subset: The entire dataset (intersected with HGDP).
+# - Fit Subset: Random 60K White + ALL Non-White samples
+# - Project Subset: The entire intersected dataset
 #
-# Optimization:
-# - Performs sample selection in Python to avoid creating intermediate PLINK files.
-# - Directly extracts the final fit subset from the source.
+# Usage:
+#   bash examples/aou/60k_white/prepare_data.sh
 #
 
 set -e
@@ -27,7 +32,6 @@ GOOGLE_PROJECT="${GOOGLE_PROJECT:-}"
 CDR_VERSION="${WORKSPACE_CDR:-}"
 
 # Shared AoU data directories
-SHARED_AOU_DIR="${SCRIPT_DIR}/../shared/data/AllofUs_V8"
 SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
 
 # Use intersected AoU data from hgdp_1kgp_proj
@@ -51,7 +55,9 @@ print_subheader "Step 1: Check for Intersected AoU Data"
 
 if [[ ! -f "${INTERSECTED_AOU}.bed" ]]; then
     print_error "Intersected AoU data not found!"
-    echo "  Please run the hgdp_1kgp_proj pipeline first."
+    echo "  Expected: ${INTERSECTED_AOU}.bed"
+    echo "  Please run the hgdp_1kgp_proj pipeline first:"
+    echo "    bash examples/aou/hgdp_1kgp_proj/prepare_data.sh"
     exit 1
 fi
 
@@ -66,19 +72,27 @@ echo ""
 # =============================================================================
 # STEP 2: Define Fit Subset (Python Selection)
 # =============================================================================
-print_subheader "Step 2: Define Fit Subset List"
+print_subheader "Step 2: Create Fit Sample List"
 
 AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
 
 if [[ ! -f "$AOU_METADATA" ]]; then
-    echo "  ✗ AoU metadata not found!"
+    print_error "AoU metadata not found: $AOU_METADATA"
+    echo "  Please run the hgdp_1kgp_proj data download first."
     exit 1
 fi
 
-echo "  Selecting samples for fit subset..."
-echo "  Target: 60,000 White/European + All Other ancestries"
+FIT_SAMPLES_FILE="${DATA_DIR}/fit_samples.txt"
 
-python3 << EOF
+if [[ -f "$FIT_SAMPLES_FILE" ]]; then
+    print_success "Fit samples list already exists"
+    FIT_SAMPLES_COUNT=$(wc -l < "$FIT_SAMPLES_FILE")
+    echo "    Existing samples: $FIT_SAMPLES_COUNT"
+else
+    echo "  Selecting samples for fit subset..."
+    echo "  Target: 60,000 White/European + All Other ancestries"
+
+    python3 << EOF
 import pandas as pd
 import numpy as np
 
@@ -107,7 +121,7 @@ elif 'race' in metadata.columns:
     white_mask = metadata['race'].str.contains('White', case=False, na=False) | \
                  metadata['race'].str.contains('European', case=False, na=False)
 else:
-    print("  ✗ Could not find race/ethnicity column in metadata!")
+    print("  Error: Could not find race/ethnicity column in metadata!")
     exit(1)
 
 white_samples = metadata[white_mask]
@@ -129,68 +143,41 @@ fit_samples = pd.concat([white_fit, other_samples])
 print(f"    Final Fit Subset size: {len(fit_samples)} (White: {len(white_fit)}, Other: {len(other_samples)})")
 
 # Write ID list for PLINK (FID IID)
-with open("${DATA_DIR}/fit_samples.txt", 'w') as f:
+with open("${FIT_SAMPLES_FILE}", 'w') as f:
     for sample_id in fit_samples['sample_id']:
         if sample_id in iid_to_fid:
             f.write(f"{iid_to_fid[sample_id]}\t{sample_id}\n")
 
-print(f"  ✓ Saved fit sample list to ${DATA_DIR}/fit_samples.txt")
+print(f"  Saved fit sample list: ${FIT_SAMPLES_FILE}")
 EOF
-
-# =============================================================================
-# STEP 3: Create Fit Subset (PLINK Extraction)
-# =============================================================================
-print_subheader "Step 3: Create Fit Subset (PLINK)"
-
-# Find plink2
-print_status "Looking for plink2..."
-if ! find_plink2 "$PROJECT_ROOT"; then
-    exit 1
 fi
 
-if [[ ! -f "${DATA_DIR}/fit_subset.bed" ]]; then
-    print_status "Extracting fit subset from intersected data..."
-    ${PLINK2} --bfile ${INTERSECTED_AOU} \
-        --keep ${DATA_DIR}/fit_samples.txt \
-        --memory 100000 \
-        --make-bed \
-        --out ${DATA_DIR}/fit_subset
-else
-    print_success "Fit subset already exists"
-fi
+# =============================================================================
+# STEP 3: Call Generic Subset Script
+# =============================================================================
+print_subheader "Step 3: Create PLINK Subsets"
 
-FIT_SAMPLES=$(get_sample_count "${DATA_DIR}/fit_subset")
-print_success "Fit subset created: $FIT_SAMPLES samples"
-echo ""
+# Note: project_samples not provided means use all samples from PLINK (entire dataset)
+bash "${PROJECT_ROOT}/examples/generic/subset/prepare_data.sh" \
+    --plink "$INTERSECTED_AOU" \
+    --fit-samples "$FIT_SAMPLES_FILE" \
+    --output-dir "$DATA_DIR" \
+    --memory 100000 \
+    --threads "$CPU_CORES"
 
 # =============================================================================
-# STEP 4: Create Project Subset (Entire Dataset)
+# STEP 4: Create Labels
 # =============================================================================
-print_subheader "Step 4: Create Project Subset (Entire Dataset)"
-
-# For the project step, we project the ENTIRE dataset (including those used in fit).
-# We simply copy the intersected dataset to the expected project_subset path.
-
-if [[ ! -f "${DATA_DIR}/project_subset.bed" ]]; then
-    print_status "Copying intersected data to project subset..."
-    cp "${INTERSECTED_AOU}.bed" "${DATA_DIR}/project_subset.bed"
-    cp "${INTERSECTED_AOU}.bim" "${DATA_DIR}/project_subset.bim"
-    cp "${INTERSECTED_AOU}.fam" "${DATA_DIR}/project_subset.fam"
-else
-    print_success "Project subset already exists"
-fi
-
-PROJECT_SAMPLES=$(get_sample_count "${DATA_DIR}/project_subset")
-print_success "Project subset created: $PROJECT_SAMPLES samples"
-echo ""
-
-# =============================================================================
-# STEP 5: Create Labels
-# =============================================================================
-print_subheader "Step 5: Create Labels"
+print_subheader "Step 4: Create Label Files"
 
 # Create labels for both subsets
 for subset in "fit" "project"; do
+    LABEL_FILE="${DATA_DIR}/${subset}_labels.csv"
+    if [[ -f "$LABEL_FILE" ]]; then
+        print_success "${subset}_labels.csv already exists"
+        continue
+    fi
+
     echo "  Creating ${subset} subset labels..."
     python3 << EOF
 import pandas as pd
@@ -198,21 +185,38 @@ import pandas as pd
 metadata = pd.read_csv("${AOU_METADATA}", sep='\t', low_memory=False)
 metadata['sample_id'] = metadata['person_id'].astype(str)
 
-fam = pd.read_csv("${DATA_DIR}/${subset}_subset.fam", sep=r'\s+', header=None, names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
+fam = pd.read_csv("${DATA_DIR}/${subset}_subset.fam", sep=r'\s+', header=None,
+                  names=['FID', 'IID', 'PID', 'MID', 'Sex', 'Phenotype'])
 subset_samples = set(fam['IID'].astype(str))
 
 labels = metadata[metadata['sample_id'].isin(subset_samples)].copy()
 columns = ['sample_id']
 for col in ['race_ethnicity', 'sex_at_birth', 'age']:
-    if col in labels.columns: columns.append(col)
+    if col in labels.columns:
+        columns.append(col)
 
-labels[columns].to_csv("${DATA_DIR}/${subset}_labels.csv", index=False)
+labels[columns].to_csv("${LABEL_FILE}", index=False)
+print(f"    Created {len(labels)} labels with columns: {', '.join(columns)}")
 EOF
 done
 
 print_success "Labels created"
 
+# =============================================================================
+# Summary
+# =============================================================================
+FIT_SAMPLES=$(get_sample_count "${DATA_DIR}/fit_subset")
+PROJECT_SAMPLES=$(get_sample_count "${DATA_DIR}/project_subset")
+FINAL_SNPS=$(get_snp_count "${DATA_DIR}/fit_subset")
+
 print_header "Data Preparation Complete!"
-echo "  Fit Subset: 60K White + All Non-White ($FIT_SAMPLES samples)"
-echo "  Project Subset: Full Dataset ($PROJECT_SAMPLES samples)"
+
+echo "Generated files in ${DATA_DIR}:"
+echo "  fit_subset.{bed,bim,fam}     (60K White + Non-White: $FIT_SAMPLES samples, $FINAL_SNPS SNPs)"
+echo "  project_subset.{bed,bim,fam} (Full dataset: $PROJECT_SAMPLES samples, $FINAL_SNPS SNPs)"
+echo "  fit_labels.csv               (Fit sample metadata)"
+echo "  project_labels.csv           (Project sample metadata)"
+echo ""
+echo "Next step: Run the subsample pipeline"
+echo "  bash run_pipeline.sh"
 echo ""

@@ -64,6 +64,9 @@ SKIP_DEDUP=false
 SKIP_MAF=false
 SKIP_BIOBANK_MAF=false
 
+# Space-saving mode
+CLEANUP=false
+
 # Reference-specific options
 REFERENCE_HAS_CHR_PREFIX=false
 
@@ -148,6 +151,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BIOBANK_MAF=true
             shift
             ;;
+        --cleanup)
+            CLEANUP=true
+            shift
+            ;;
         --reference-has-chr-prefix)
             REFERENCE_HAS_CHR_PREFIX=true
             shift
@@ -185,6 +192,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-dedup              Skip deduplication of reference"
             echo "  --skip-maf                Skip MAF filtering (both reference and biobank)"
             echo "  --skip-biobank-maf        Skip MAF filtering for biobank only (apply to reference)"
+            echo ""
+            echo "Space-saving options:"
+            echo "  --cleanup                 Delete intermediate files as they become unnecessary"
+            echo "                            (recommended for large biobank datasets)"
             echo ""
             echo "Reference-specific options:"
             echo "  --reference-has-chr-prefix   Reference already has 'chr' prefix in chromosomes"
@@ -254,6 +265,7 @@ echo "  GIAB exclusion: $([ "$SKIP_GIAB" == "true" ] && echo "no" || echo "yes")
 echo "  HLA exclusion: $([ "$SKIP_HLA" == "true" ] && echo "no" || echo "yes")"
 echo "  WRayner harmonization: $([ "$SKIP_WRAYNER" == "true" ] && echo "no" || echo "yes")"
 echo "  LD pruning: $([ "$SKIP_LD_PRUNE" == "true" ] && echo "no" || echo "yes")"
+echo "  Cleanup intermediates: $([ "$CLEANUP" == "true" ] && echo "yes" || echo "no")"
 echo ""
 
 # ============================================================================
@@ -667,6 +679,13 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
         echo "    Harmonized biobank SNPs: ${BIOBANK_HARMONIZED_SNPS}"
     fi
 
+    # Cleanup: remove biobank_filtered now that we have harmonized version
+    if [[ "$CLEANUP" == "true" ]] && [[ -f "${BIOBANK_FILTERED}.bed" ]]; then
+        print_status "Cleanup: removing biobank_filtered intermediate files..."
+        rm -f "${BIOBANK_FILTERED}.bed" "${BIOBANK_FILTERED}.bim" "${BIOBANK_FILTERED}.fam"
+        rm -rf "${BIOBANK_WRAYNER_DIR}"
+    fi
+
     # Update variables for downstream steps
     BIOBANK_STANDARDIZED="${BIOBANK_HARMONIZED}"
     #REFERENCE_STANDARDIZED="${REFERENCE_HARMONIZED}"
@@ -723,6 +742,19 @@ fi
 REFERENCE_STANDARDIZED="$REF_STD_IDS"
 BIOBANK_STANDARDIZED="$BIO_STD_IDS"
 print_success "SNP IDs standardized for intersection"
+
+# Cleanup: remove pre-standardized biobank files
+if [[ "$CLEANUP" == "true" ]]; then
+    if [[ -f "${BIOBANK_HARMONIZED}.bed" ]]; then
+        print_status "Cleanup: removing biobank_harmonized intermediate files..."
+        rm -f "${BIOBANK_HARMONIZED}.bed" "${BIOBANK_HARMONIZED}.bim" "${BIOBANK_HARMONIZED}.fam"
+    fi
+    # Also clean filtered if WRayner was skipped
+    if [[ -f "${BIOBANK_FILTERED}.bed" ]]; then
+        print_status "Cleanup: removing biobank_filtered intermediate files..."
+        rm -f "${BIOBANK_FILTERED}.bed" "${BIOBANK_FILTERED}.bim" "${BIOBANK_FILTERED}.fam"
+    fi
+fi
 
 # ============================================================================
 # Step 6: Find SNP Intersection and Check Allele Compatibility
@@ -846,6 +878,12 @@ fi
 
 print_success "Intersected datasets created (pre-LD pruning)"
 
+# Cleanup: remove standardized biobank files now that we have intersected version
+if [[ "$CLEANUP" == "true" ]] && [[ -f "${BIOBANK_STANDARDIZED}.bed" ]]; then
+    print_status "Cleanup: removing biobank_standardized intermediate files..."
+    rm -f "${BIOBANK_STANDARDIZED}.bed" "${BIOBANK_STANDARDIZED}.bim" "${BIOBANK_STANDARDIZED}.fam"
+fi
+
 # ============================================================================
 # Step 7: LD Pruning (optional)
 # ============================================================================
@@ -890,6 +928,12 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
             --real-ref-alleles \
             --out ${TEMP_DIR}/biobank_intersected
     fi
+
+    # Cleanup: remove pre-prune biobank files
+    if [[ "$CLEANUP" == "true" ]] && [[ -f "${BIOBANK_INTERSECTED_PRE}.bed" ]]; then
+        print_status "Cleanup: removing biobank_intersected_pre_prune intermediate files..."
+        rm -f "${BIOBANK_INTERSECTED_PRE}.bed" "${BIOBANK_INTERSECTED_PRE}.bim" "${BIOBANK_INTERSECTED_PRE}.fam"
+    fi
 else
     print_header "Skipping LD Pruning"
     # Copy pre-prune files as final intersected files
@@ -928,6 +972,12 @@ if [[ ! -f "${OUTPUT_DIR}/project_subset.bed" ]]; then
     cp "${TEMP_DIR}/biobank_intersected.fam" "${OUTPUT_DIR}/project_subset.fam"
 else
     print_warning "project_subset already exists, skipping"
+fi
+
+# Cleanup: remove final intermediate biobank files
+if [[ "$CLEANUP" == "true" ]] && [[ -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+    print_status "Cleanup: removing biobank_intersected intermediate files..."
+    rm -f "${TEMP_DIR}/biobank_intersected.bed" "${TEMP_DIR}/biobank_intersected.bim" "${TEMP_DIR}/biobank_intersected.fam"
 fi
 
 # Get final counts
@@ -974,6 +1024,15 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
     echo "  [✓] LD pruning (${LD_WINDOW}kb, r²=${LD_R2})"
 fi
 echo "  [✓] Final intersected datasets created"
+if [[ "$CLEANUP" == "true" ]]; then
+    echo "  [✓] Intermediate biobank files cleaned up"
+fi
 echo ""
-echo "Intermediate files in ${TEMP_DIR}/ can be deleted to save space."
+if [[ "$CLEANUP" != "true" ]]; then
+    echo "Intermediate files in ${TEMP_DIR}/ can be deleted to save space."
+    echo "TIP: Use --cleanup flag to automatically remove intermediate files during processing."
+else
+    echo "Intermediate biobank files were cleaned up during processing."
+    echo "Reference intermediate files remain in ${TEMP_DIR}/ (smaller, can be deleted manually)."
+fi
 echo ""
