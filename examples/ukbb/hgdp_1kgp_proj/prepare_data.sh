@@ -135,9 +135,22 @@ if sample_id_col != 'sample_id':
     fit_labels_source = fit_labels_source.rename(columns={sample_id_col: 'sample_id'})
 
 fit_labels_source['sample_id'] = fit_labels_source['sample_id'].astype(str)
-fit_labels = fit_labels_source[fit_labels_source['sample_id'].isin(fit_samples)].copy()
+fit_labels_filtered = fit_labels_source[fit_labels_source['sample_id'].isin(fit_samples)].copy()
+
+# Only keep label columns: sample_id, Population, Genetic_region_merged
+label_cols = ['sample_id', 'Population', 'Genetic_region_merged']
+fit_labels = fit_labels_filtered[label_cols].copy()
 fit_labels.to_csv('${DATA_DIR}/fit_labels.csv', index=False)
-print(f"  ✓ Created fit_labels.csv: {len(fit_labels)} samples, {len(fit_labels.columns)} columns")
+print(f"  ✓ Created fit_labels.csv: {len(fit_labels)} samples, columns: {label_cols}")
+
+# Create geographic file with latitude/longitude for future analysis
+if 'latitude' in fit_labels_filtered.columns and 'longitude' in fit_labels_filtered.columns:
+    geo_cols = ['sample_id', 'latitude', 'longitude']
+    fit_geo = fit_labels_filtered[geo_cols].copy()
+    fit_geo.to_csv('${DATA_DIR}/fit_geographic.csv', index=False)
+    print(f"  ✓ Created fit_geographic.csv: {len(fit_geo)} samples with coordinates")
+else:
+    print("  ⚠ No latitude/longitude columns found, skipping fit_geographic.csv")
 
 # Filter project labels (UKBB)
 print("  Creating project_labels.csv from source...")
