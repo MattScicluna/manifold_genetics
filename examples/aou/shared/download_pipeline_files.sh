@@ -24,6 +24,10 @@ fi
 
 GCS_BASE="${WORKSPACE_BUCKET}/manifold_genetics/examples/aou"
 
+# gsutil options for faster downloads:
+# -m: parallel downloads
+GSUTIL_OPTS="-m"
+
 download_experiment() {
     local exp_name="$1"
     local exp_dir="$AOU_DIR/$exp_name"
@@ -37,53 +41,32 @@ download_experiment() {
     mkdir -p "$exp_dir/outputs/pca"
     mkdir -p "$exp_dir/outputs/admixture"
 
-    # Data files
-    echo "Downloading data files..."
-    for file in fit_labels.csv project_labels.csv; do
-        if gsutil -q stat "$GCS_BASE/$exp_name/data/$file" 2>/dev/null; then
-            gsutil cp "$GCS_BASE/$exp_name/data/$file" "$exp_dir/data/$file"
-            echo "  Downloaded: data/$file"
-        else
-            echo "  Skipped (not found): data/$file"
-        fi
-    done
+    echo "Using parallel downloads (-m)"
+    echo ""
 
-    # Plink files (fit_subset and project_subset)
-    echo "Downloading plink files..."
-    for prefix in fit_subset project_subset; do
-        for ext in bed bim fam; do
-            if gsutil -q stat "$GCS_BASE/$exp_name/data/${prefix}.${ext}" 2>/dev/null; then
-                gsutil cp "$GCS_BASE/$exp_name/data/${prefix}.${ext}" "$exp_dir/data/${prefix}.${ext}"
-                echo "  Downloaded: data/${prefix}.${ext}"
-            else
-                echo "  Skipped (not found): data/${prefix}.${ext}"
-            fi
-        done
-    done
+    # Download data/ directory
+    echo "Downloading data/ directory..."
+    if gsutil -q stat "$GCS_BASE/$exp_name/data/*" 2>/dev/null; then
+        gsutil $GSUTIL_OPTS rsync -r "$GCS_BASE/$exp_name/data/" "$exp_dir/data/"
+    else
+        echo "  No data files found in GCS"
+    fi
 
-    # PCA outputs
-    echo "Downloading PCA outputs..."
-    for file in fit_pca_20.csv transform_pca_20.csv; do
-        if gsutil -q stat "$GCS_BASE/$exp_name/outputs/pca/$file" 2>/dev/null; then
-            gsutil cp "$GCS_BASE/$exp_name/outputs/pca/$file" "$exp_dir/outputs/pca/$file"
-            echo "  Downloaded: outputs/pca/$file"
-        else
-            echo "  Skipped (not found): outputs/pca/$file"
-        fi
-    done
+    # Download outputs/pca/ directory
+    echo "Downloading outputs/pca/ directory..."
+    if gsutil -q stat "$GCS_BASE/$exp_name/outputs/pca/*" 2>/dev/null; then
+        gsutil $GSUTIL_OPTS rsync -r "$GCS_BASE/$exp_name/outputs/pca/" "$exp_dir/outputs/pca/"
+    else
+        echo "  No PCA files found in GCS"
+    fi
 
-    # Admixture outputs
-    echo "Downloading admixture outputs..."
-    for k in 2 3 4 5 6 7 8 9 10; do
-        for prefix in fit transform; do
-            if gsutil -q stat "$GCS_BASE/$exp_name/outputs/admixture/${prefix}.${k}.csv" 2>/dev/null; then
-                gsutil cp "$GCS_BASE/$exp_name/outputs/admixture/${prefix}.${k}.csv" "$exp_dir/outputs/admixture/${prefix}.${k}.csv"
-                echo "  Downloaded: outputs/admixture/${prefix}.${k}.csv"
-            else
-                echo "  Skipped (not found): outputs/admixture/${prefix}.${k}.csv"
-            fi
-        done
-    done
+    # Download outputs/admixture/ directory
+    echo "Downloading outputs/admixture/ directory..."
+    if gsutil -q stat "$GCS_BASE/$exp_name/outputs/admixture/*" 2>/dev/null; then
+        gsutil $GSUTIL_OPTS rsync -r "$GCS_BASE/$exp_name/outputs/admixture/" "$exp_dir/outputs/admixture/"
+    else
+        echo "  No admixture files found in GCS"
+    fi
 
     echo ""
     echo "Done downloading $exp_name"
@@ -101,6 +84,7 @@ echo "==================================="
 echo "GCS source: $GCS_BASE"
 echo "Experiments: ${EXPERIMENTS[*]}"
 echo "Local destination: $AOU_DIR"
+echo "Using parallel downloads (-m)"
 echo ""
 
 for exp in "${EXPERIMENTS[@]}"; do
