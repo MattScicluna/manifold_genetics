@@ -81,10 +81,10 @@ upload_experiment() {
     # Upload all files in parallel, preserving directory structure
     if [ ${#files_to_upload[@]} -gt 0 ]; then
         # Use rsync for efficient parallel upload with directory structure preservation
-        # Upload data/ directory
+        # Upload data/ directory (excluding temp/)
         if [ -d "$exp_dir/data" ]; then
-            echo "Uploading data/ directory..."
-            gsutil $GSUTIL_OPTS rsync -r "$exp_dir/data/" "$GCS_BASE/$exp_name/data/"
+            echo "Uploading data/ directory (excluding temp/)..."
+            gsutil $GSUTIL_OPTS rsync -r -x "temp/.*" "$exp_dir/data/" "$GCS_BASE/$exp_name/data/"
         fi
 
         # Upload outputs/pca/ directory
