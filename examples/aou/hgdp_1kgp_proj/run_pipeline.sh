@@ -30,7 +30,7 @@ FIT_PLINK="${FIT_PLINK:-${DATA_DIR}/fit_subset}"
 PROJECT_PLINK="${PROJECT_PLINK:-${DATA_DIR}/project_subset}"
 FIT_LABELS="${FIT_LABELS:-${DATA_DIR}/fit_labels.csv}"
 PROJECT_LABELS="${PROJECT_LABELS:-${DATA_DIR}/project_labels.csv}"
-FIT_COLORMAP="${FIT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp.json}"
+FIT_COLORMAP="${FIT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/hgdp_1kgp_aou_aligned.json}"
 PROJECT_COLORMAP="${PROJECT_COLORMAP:-${PROJECT_ROOT}/examples/colormaps/aou.json}"
 # ------------------------------------
 

@@ -139,3 +139,14 @@ docs/
 examples/hgdp_1kgp/run_pipeline_batch.sh
 examples/hgdp_1kgp/package_data_for_dropbox.sh
 examples/_shared/submit_batch.sh
+
+# Binary tools and data
+bin/
+data/
+logs/
+examples/_shared/tools/
+
+# Example outputs
+examples/hgdp_1kgp/outputs/
+examples/ukbb/*/outputs/
+examples/aou/*/outputs/
