@@ -218,6 +218,10 @@ fit_labels.to_csv("${DATA_DIR}/fit_labels.csv", index=False)
 print(f"  Saved fit_labels.csv: {len(fit_labels)} samples")
 print(f"  Unique populations: {fit_labels['Population'].nunique()}")
 EOF
+
+    # Add Genetic_region_merged column
+    print_status "Adding Genetic_region_merged column to fit_labels.csv..."
+    python3 "${SCRIPT_DIR}/../shared/add_genetic_region.py" "${DATA_DIR}/fit_labels.csv"
 fi
 
 # Create project labels (AoU)
