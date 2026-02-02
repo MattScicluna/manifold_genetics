@@ -97,12 +97,21 @@ copy_experiment() {
         done
     done
 
-    # Copy colormap from examples/colormaps/
-    if [ -f "$COLORMAP_DIR/aou.json" ]; then
-        echo "Copying colormap..."
-        cp -v "$COLORMAP_DIR/aou.json" "$dest_dir/data/"
-    else
-        echo "Warning: Colormap not found at $COLORMAP_DIR/aou.json"
+    # Copy colormaps from examples/colormaps/
+    echo "Copying colormaps..."
+    # AoU colormaps (aou.json used for test set and 60k_white)
+    for cmap in aou.json aou_original.json; do
+        if [ -f "$COLORMAP_DIR/$cmap" ]; then
+            cp -v "$COLORMAP_DIR/$cmap" "$dest_dir/data/"
+        fi
+    done
+    # HGDP+1KGP aligned colormaps (used for train set in hgdp_1kgp_proj)
+    if [ "$src_name" = "hgdp_1kgp_proj" ]; then
+        for cmap in hgdp_1kgp_aou_aligned.json hgdp_1kgp_aou_aligned_original.json; do
+            if [ -f "$COLORMAP_DIR/$cmap" ]; then
+                cp -v "$COLORMAP_DIR/$cmap" "$dest_dir/data/"
+            fi
+        done
     fi
 
     echo ""
