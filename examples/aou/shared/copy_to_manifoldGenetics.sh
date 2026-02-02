@@ -17,6 +17,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_AOU_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+COLORMAP_DIR="$(cd "$SCRIPT_DIR/../../colormaps" && pwd)"
 
 # Find manifoldGenetics directory (sibling to manifold_genetics)
 MANIFOLD_GENETICS_ROOT="$(cd "$SOURCE_AOU_DIR/../../.." && pwd)"
@@ -96,10 +97,12 @@ copy_experiment() {
         done
     done
 
-    # Copy colormap if it exists
-    if [ -f "$src_dir/data/aou.json" ]; then
+    # Copy colormap from examples/colormaps/
+    if [ -f "$COLORMAP_DIR/aou.json" ]; then
         echo "Copying colormap..."
-        cp -v "$src_dir/data/aou.json" "$dest_dir/data/"
+        cp -v "$COLORMAP_DIR/aou.json" "$dest_dir/data/"
+    else
+        echo "Warning: Colormap not found at $COLORMAP_DIR/aou.json"
     fi
 
     echo ""
