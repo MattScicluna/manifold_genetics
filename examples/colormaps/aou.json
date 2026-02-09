@@ -1,12 +1,12 @@
 {
   "race_ethnicity": {
-    "Asian": "#0000FF",
-    "Black or African American": "#008000",
-    "Native Hawaiian or Other Pacific Islander": "#FFFF00",
-    "Middle Eastern or North African": "#808080",
-    "Hispanic or Latino": "#FF0000",
-    "White": "#800080",
-    "More than one population": "#26867d",
-    "No information": "#e8e8e8"
+    "Black or African American": "#3FA34D",
+    "Middle Eastern or North African": "#9E9E9E",
+    "White": "#9B59B6",
+    "Hispanic or Latino": "#FF5A5F",
+    "Asian": "#4C6FFF",
+    "Native Hawaiian or Other Pacific Islander": "#FFD84D",
+    "More than one population": "#3BA99C",
+    "No information": "#E5E5E5"
   }
 }
