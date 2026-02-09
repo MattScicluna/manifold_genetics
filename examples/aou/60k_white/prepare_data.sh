@@ -78,7 +78,12 @@ AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
 
 if [[ ! -f "$AOU_METADATA" ]]; then
     print_error "AoU metadata not found: $AOU_METADATA"
-    echo "  Please run the hgdp_1kgp_proj data download first."
+    echo ""
+    echo "  This file is created by the AoU data download script."
+    echo "  Ensure WORKSPACE_CDR is set and re-run:"
+    echo ""
+    echo "    bash ${PROJECT_ROOT}/examples/aou/shared/download_aou_data.sh"
+    echo ""
     exit 1
 fi
 

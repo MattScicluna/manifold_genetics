@@ -1,15 +1,15 @@
 #!/bin/bash
 #
-# AoU 10K White + 10K Black + 10K Hispanic Subset Data Preparation
+# AoU 10K White + 10K Black + 10K Hispanic + All Other Data Preparation
 #
 # This wrapper script:
 # 1. Reads sample IDs from intersected AoU data (from hgdp_1kgp_proj)
-# 2. Creates fit_samples.txt with 10K White + 10K Black + 10K Hispanic samples
+# 2. Creates fit_samples.txt with 10K White + 10K Black + 10K Hispanic + all remaining
 # 3. Calls generic subset script to create PLINK subsets
 # 4. Creates fit_labels.csv and project_labels.csv
 #
 # Strategy:
-# - Fit Subset: 10K White + 10K Black/African American + 10K Hispanic/Latino
+# - Fit Subset: 10K White + 10K Black/African American + 10K Hispanic/Latino + All Other
 # - Project Subset: The entire intersected dataset
 #
 # Usage:
@@ -95,7 +95,7 @@ if [[ -f "$FIT_SAMPLES_FILE" ]]; then
     echo "    Existing samples: $FIT_SAMPLES_COUNT"
 else
     echo "  Selecting samples for fit subset..."
-    echo "  Target: 10,000 White + 10,000 Black/African American + 10,000 Hispanic/Latino"
+    echo "  Target: 10,000 White + 10,000 Black/African American + 10,000 Hispanic/Latino + All Other"
 
     python3 "${SCRIPT_DIR}/../shared/select_samples.py" \
         --metadata "$AOU_METADATA" \
@@ -104,6 +104,7 @@ else
         --group "White|European:10000" \
         --group "Black or African American:10000" \
         --group "Hispanic or Latino:10000" \
+        --include-rest \
         --seed 42
 fi
 
@@ -167,7 +168,7 @@ FINAL_SNPS=$(get_snp_count "${DATA_DIR}/fit_subset")
 print_header "Data Preparation Complete!"
 
 echo "Generated files in ${DATA_DIR}:"
-echo "  fit_subset.{bed,bim,fam}     (10K W + 10K B + 10K H: $FIT_SAMPLES samples, $FINAL_SNPS SNPs)"
+echo "  fit_subset.{bed,bim,fam}     (10K W + 10K B + 10K H + Other: $FIT_SAMPLES samples, $FINAL_SNPS SNPs)"
 echo "  project_subset.{bed,bim,fam} (Full dataset: $PROJECT_SAMPLES samples, $FINAL_SNPS SNPs)"
 echo "  fit_labels.csv               (Fit sample metadata)"
 echo "  project_labels.csv           (Project sample metadata)"
