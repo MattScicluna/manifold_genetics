@@ -83,9 +83,11 @@ def main():
     # Select samples from each group
     selected = []
     selected_ids = set()
+    matched_ids = set()  # all samples matching any group pattern
 
     for pattern, target_count in groups:
         mask = metadata[race_col].str.contains(pattern, case=False, na=False)
+        matched_ids.update(metadata[mask]['sample_id'])
         # Exclude already-selected samples to prevent overlap between groups
         mask = mask & ~metadata['sample_id'].isin(selected_ids)
         group_samples = metadata[mask]
@@ -100,14 +102,17 @@ def main():
         selected.append(group_selected)
         selected_ids.update(group_selected['sample_id'])
 
-    # Optionally include all remaining samples
+    # Optionally include all samples not matched by any group pattern
     if args.include_rest:
-        rest = metadata[~metadata['sample_id'].isin(selected_ids)]
-        print(f"    Other (all remaining): {len(rest)}")
+        rest = metadata[~metadata['sample_id'].isin(matched_ids)]
+        print(f"    Other (unmatched groups): {len(rest)}")
         selected.append(rest)
 
     fit_samples = pd.concat(selected)
     print(f"    Final fit subset size: {len(fit_samples)}")
+    print(f"\n    Fit subset breakdown by {race_col}:")
+    for group, count in fit_samples[race_col].value_counts().items():
+        print(f"      {group}: {count}")
 
     # Write FID/IID pairs for PLINK extraction
     with open(args.output, 'w') as f:
