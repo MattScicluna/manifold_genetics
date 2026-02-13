@@ -12,8 +12,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import to_hex
 from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.optimize import linear_sum_assignment
 
 from ..utils.io import read_colormap, read_embedding_csv, read_labels_csv
 
@@ -472,85 +474,220 @@ def plot_admixture_bar_grid(
             - 'chron': Sort by dominant component (highest mean) for clear gradients
             - 'tree': Hierarchical clustering using Ward's method
             - None: Keep original order within groups
+
+    Notes:
+        Component colors are always aligned across K values using sequential
+        Hungarian matching on component similarity, so stable ancestry
+        components keep the same color between K levels.
     """
     if isinstance(labels, (str, Path)):
         labels_df = read_labels_csv(labels)
     else:
         labels_df = labels
+    if labels_df.index.name == "sample_id":
+        labels_df = labels_df.reset_index()
 
     admixture = _load_admixture_csv(q_prefix, k_values)
     if not admixture:
         raise ValueError("No admixture CSVs found for requested K values.")
 
     k_values = [k for k in k_values if k in admixture]
-    n_rows = len(k_values)
-    fig, axes = plt.subplots(n_rows, 1, figsize=(12, 3 * n_rows), sharex=False)
-    if n_rows == 1:
-        axes = [axes]
+    if not k_values:
+        raise ValueError("No valid K values remained after loading admixture CSVs.")
 
-    for ax, k in zip(axes, k_values):
+    # Derive ordering once: explicit > colormap (matching group_column) > optional sort.
+    derived_order = list(group_order) if group_order is not None else None
+    if derived_order is None and colormap is not None:
+        cmap_dict = read_colormap(colormap) if isinstance(colormap, (str, Path)) else colormap
+        for key, entry in cmap_dict.items():
+            if key.lower() == group_column.lower():
+                derived_order = list(entry.keys())
+                break
+
+    prepared_by_k: Dict[int, pd.DataFrame] = {}
+    comp_cols_by_k: Dict[int, List[str]] = {}
+    component_values_by_k: Dict[int, pd.DataFrame] = {}
+
+    # Preprocess each K once (merge, grouping order, within-group order).
+    for k in k_values:
         df = admixture[k].merge(labels_df, on="sample_id", how="inner")
         if group_column not in df.columns:
             raise ValueError(f"Group column '{group_column}' not found in merged data for K={k}.")
 
-        # Optional subsample per group
+        # Optional subsample per group (kept deterministic).
         if subsample_per_group:
             parts = []
-            for _, sub in df.groupby(group_column):
+            for _, sub in df.groupby(group_column, sort=False, dropna=False):
                 if len(sub) > subsample_per_group:
                     sub = sub.sample(n=subsample_per_group, random_state=42)
                 parts.append(sub)
-            df = pd.concat(parts, axis=0)
-
-        # Derive ordering: explicit > colormap (matching group_column) > optional sort
-        derived_order = group_order
-        if derived_order is None and colormap is not None:
-            cmap_dict = read_colormap(colormap) if isinstance(colormap, (str, Path)) else colormap
-            for key, entry in cmap_dict.items():
-                if key.lower() == group_column.lower():
-                    derived_order = list(entry.keys())
-                    break
+            df = pd.concat(parts, axis=0, ignore_index=True)
 
         if derived_order:
-            # Keep only groups present in data, preserve specified order
-            order = [g for g in derived_order if g in set(df[group_column])]
+            present_groups = set(df[group_column])
+            order = [g for g in derived_order if g in present_groups]
+            missing_groups = [g for g in df[group_column].dropna().unique().tolist() if g not in order]
+            order.extend(missing_groups)
             cat = pd.Categorical(df[group_column], categories=order, ordered=True)
             df[group_column] = cat
             df = df.sort_values(group_column)
         elif sort_groups:
             df = df.sort_values(group_column)
 
-        # Apply within-group ordering for smooth gradient effect
         comp_cols = _get_component_columns(df, k)
-        if within_group_order == 'chron':
-            # Sort by dominant component within each group for clearer gradients
+        if not comp_cols:
+            raise ValueError(f"No component columns found for K={k}.")
+
+        # Apply within-group ordering for smooth gradient effect.
+        if within_group_order == "chron":
             sorted_groups = []
-            for group_val, group_df in df.groupby(group_column, sort=False):
-                # Find dominant component (highest mean) for this group
+            for _, group_df in df.groupby(group_column, sort=False, observed=False, dropna=False):
                 component_means = group_df[comp_cols].mean()
                 dominant_comp = component_means.idxmax()
-                # Sort by dominant component (descending) for smooth gradient
                 sorted_group = group_df.sort_values(dominant_comp, ascending=False)
                 sorted_groups.append(sorted_group)
-            df = pd.concat(sorted_groups, axis=0)
-        elif within_group_order == 'tree':
-            # Hierarchical clustering within each group
+            df = pd.concat(sorted_groups, axis=0, ignore_index=True)
+        elif within_group_order == "tree":
             sorted_groups = []
-            for group_val, group_df in df.groupby(group_column, sort=False):
+            for _, group_df in df.groupby(group_column, sort=False, observed=False, dropna=False):
                 if len(group_df) > 1:
                     data = group_df[comp_cols].to_numpy()
-                    linkage_matrix = linkage(data, method='ward')
+                    linkage_matrix = linkage(data, method="ward")
                     order = leaves_list(linkage_matrix)
                     sorted_group = group_df.iloc[order]
                 else:
                     sorted_group = group_df
                 sorted_groups.append(sorted_group)
-            df = pd.concat(sorted_groups, axis=0)
-        # else: keep original order within groups
-        if colors and len(colors) >= len(comp_cols):
-            df[comp_cols].plot(kind="bar", stacked=True, ax=ax, width=1.0, edgecolor="none", color=colors[: len(comp_cols)])
-        else:
-            df[comp_cols].plot(kind="bar", stacked=True, ax=ax, width=1.0, edgecolor="none")
+            df = pd.concat(sorted_groups, axis=0, ignore_index=True)
+
+        prepared_by_k[k] = df
+        comp_cols_by_k[k] = comp_cols
+        component_values_by_k[k] = df[["sample_id", *comp_cols]].drop_duplicates("sample_id").set_index("sample_id")
+
+    # Build an alignment sample set that is shared across all K values.
+    common_sample_ids = set(component_values_by_k[k_values[0]].index)
+    for k in k_values[1:]:
+        common_sample_ids &= set(component_values_by_k[k].index)
+    if not common_sample_ids:
+        raise ValueError("No shared sample_id values found across K values for component alignment.")
+
+    alignment_sample_ids = list(common_sample_ids)
+    alignment_max_samples = 12000
+    if len(alignment_sample_ids) > alignment_max_samples:
+        # Stratified sample by group to keep large cohorts tractable while preserving structure.
+        ref_df = prepared_by_k[k_values[0]][["sample_id", group_column]].drop_duplicates("sample_id")
+        ref_df = ref_df[ref_df["sample_id"].isin(common_sample_ids)]
+
+        sampled_parts: List[pd.Series] = []
+        total = len(ref_df)
+        for _, group_df in ref_df.groupby(group_column, dropna=False):
+            target_n = max(1, int(round((len(group_df) / total) * alignment_max_samples)))
+            target_n = min(target_n, len(group_df))
+            sampled_parts.append(group_df.sample(n=target_n, random_state=42)["sample_id"])
+
+        sampled_ids = pd.concat(sampled_parts, axis=0).drop_duplicates().tolist()
+        if len(sampled_ids) > alignment_max_samples:
+            sampled_ids = (
+                pd.Series(sampled_ids).sample(n=alignment_max_samples, random_state=42).tolist()
+            )
+        elif len(sampled_ids) < alignment_max_samples:
+            sampled_set = set(sampled_ids)
+            remaining_ids = [sid for sid in alignment_sample_ids if sid not in sampled_set]
+            need = min(alignment_max_samples - len(sampled_ids), len(remaining_ids))
+            if need > 0:
+                sampled_ids.extend(pd.Series(remaining_ids).sample(n=need, random_state=42).tolist())
+
+        alignment_sample_ids = sampled_ids
+        logger.info(
+            "Admixture alignment subsampling: using %d / %d shared samples.",
+            len(alignment_sample_ids),
+            len(common_sample_ids),
+        )
+    else:
+        logger.info(
+            "Admixture alignment: using all %d shared samples.",
+            len(alignment_sample_ids),
+        )
+
+    # Build aligned matrices in the same sample order for similarity matching.
+    aligned_matrix_by_k: Dict[int, np.ndarray] = {}
+    for k in k_values:
+        aligned_matrix_by_k[k] = component_values_by_k[k].loc[alignment_sample_ids, comp_cols_by_k[k]].to_numpy()
+
+    # Create a reusable palette. Start from user colors if provided, then extend deterministically.
+    if colors:
+        palette = list(colors)
+    else:
+        palette = [to_hex(c) for c in plt.get_cmap("tab20").colors]
+
+    max_needed_colors = max(len(cols) for cols in comp_cols_by_k.values())
+    if len(palette) < max_needed_colors:
+        extra = plt.get_cmap("hsv")(np.linspace(0, 1, max_needed_colors - len(palette), endpoint=False))
+        palette.extend(to_hex(c) for c in extra)
+
+    # Track component lineage across Ks via Hungarian matching.
+    lineages_by_k: Dict[int, Dict[str, int]] = {}
+    first_k = k_values[0]
+    lineages_by_k[first_k] = {col: idx for idx, col in enumerate(comp_cols_by_k[first_k])}
+    next_lineage = len(lineages_by_k[first_k])
+
+    for prev_k, curr_k in zip(k_values[:-1], k_values[1:]):
+        prev_cols = comp_cols_by_k[prev_k]
+        curr_cols = comp_cols_by_k[curr_k]
+        prev_mat = aligned_matrix_by_k[prev_k]
+        curr_mat = aligned_matrix_by_k[curr_k]
+
+        # Pearson correlation between components (clipped to non-negative for matching).
+        prev_center = prev_mat - prev_mat.mean(axis=0, keepdims=True)
+        curr_center = curr_mat - curr_mat.mean(axis=0, keepdims=True)
+        prev_norm = np.linalg.norm(prev_center, axis=0)
+        curr_norm = np.linalg.norm(curr_center, axis=0)
+        denom = np.outer(prev_norm, curr_norm)
+        similarity = np.divide(
+            prev_center.T @ curr_center,
+            denom,
+            out=np.zeros((len(prev_cols), len(curr_cols))),
+            where=denom > 0,
+        )
+        similarity = np.nan_to_num(similarity, nan=0.0, posinf=0.0, neginf=0.0)
+        similarity = np.clip(similarity, a_min=0.0, a_max=None)
+
+        row_ind, col_ind = linear_sum_assignment(-similarity)
+        curr_lineages: Dict[str, int] = {}
+        for prev_idx, curr_idx in zip(row_ind, col_ind):
+            curr_lineages[curr_cols[curr_idx]] = lineages_by_k[prev_k][prev_cols[prev_idx]]
+
+        # Any unmatched current components are genuinely new lineages.
+        for col in curr_cols:
+            if col not in curr_lineages:
+                curr_lineages[col] = next_lineage
+                next_lineage += 1
+
+        lineages_by_k[curr_k] = curr_lineages
+
+    if len(palette) < next_lineage:
+        extra = plt.get_cmap("hsv")(np.linspace(0, 1, next_lineage - len(palette), endpoint=False))
+        palette.extend(to_hex(c) for c in extra)
+
+    lineage_colors = {idx: palette[idx] for idx in range(next_lineage)}
+
+    n_rows = len(k_values)
+    fig, axes = plt.subplots(n_rows, 1, figsize=(12, 3 * n_rows), sharex=False)
+    if n_rows == 1:
+        axes = [axes]
+
+    for ax, k in zip(axes, k_values):
+        df = prepared_by_k[k]
+        comp_cols = comp_cols_by_k[k]
+        component_colors = [lineage_colors[lineages_by_k[k][col]] for col in comp_cols]
+        df[comp_cols].plot(
+            kind="bar",
+            stacked=True,
+            ax=ax,
+            width=1.0,
+            edgecolor="none",
+            color=component_colors,
+        )
 
         # Remove ticks/legend; add group separators
         ax.set_xticks([])

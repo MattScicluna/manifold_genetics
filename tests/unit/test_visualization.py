@@ -1,9 +1,12 @@
 """Tests for visualization functions."""
 
 import pytest
+import numpy as np
+import pandas as pd
+import pandas.plotting._core as plotting_core
 from pathlib import Path
 
-from manifold_genetics.visualization import visualize, plot_embedding
+from manifold_genetics.visualization import visualize, plot_embedding, plot_admixture_bar_grid
 
 
 class TestVisualization:
@@ -64,3 +67,74 @@ class TestVisualization:
         )
 
         assert output_file.exists()
+
+    def test_admixture_bar_grid_aligns_component_colors_across_k(self, monkeypatch, temp_dir):
+        """Stable components should keep their color even if component columns permute."""
+        rng = np.random.default_rng(42)
+        n_samples = 120
+        sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
+        groups = np.where(np.arange(n_samples) < n_samples // 2, "PopA", "PopB")
+
+        # Build a stable A/B ancestry axis with group structure.
+        a = np.where(
+            groups == "PopA",
+            rng.uniform(0.75, 0.95, n_samples),
+            rng.uniform(0.05, 0.25, n_samples),
+        )
+        b = 1.0 - a
+        c = rng.uniform(0.0, 0.08, n_samples)  # New component introduced at K=3.
+
+        q_prefix = temp_dir / "admixture" / "transform"
+        q_prefix.parent.mkdir(parents=True, exist_ok=True)
+
+        k2 = pd.DataFrame(
+            {
+                "sample_id": sample_ids,
+                "component_1": a,
+                "component_2": b,
+            }
+        )
+        # Permute columns so the stable A component moves from comp_1 -> comp_3.
+        k3 = pd.DataFrame(
+            {
+                "sample_id": sample_ids,
+                "component_1": c,
+                "component_2": b * (1.0 - c),
+                "component_3": a * (1.0 - c),
+            }
+        )
+
+        k2.to_csv(f"{q_prefix}.2.csv", index=False)
+        k3.to_csv(f"{q_prefix}.3.csv", index=False)
+        labels = pd.DataFrame({"sample_id": sample_ids, "Population": groups})
+
+        recorded_colors = []
+        original_call = plotting_core.PlotAccessor.__call__
+
+        def wrapped_plot_call(self, *args, **kwargs):
+            if kwargs.get("kind") == "bar" and kwargs.get("stacked"):
+                recorded_colors.append(list(kwargs.get("color", [])))
+            return original_call(self, *args, **kwargs)
+
+        monkeypatch.setattr(plotting_core.PlotAccessor, "__call__", wrapped_plot_call)
+
+        output_file = temp_dir / "admixture.png"
+        plot_admixture_bar_grid(
+            q_prefix=q_prefix,
+            labels=labels,
+            group_column="Population",
+            k_values=[2, 3],
+            output_path=output_file,
+            within_group_order=None,
+        )
+
+        assert output_file.exists()
+        assert len(recorded_colors) == 2
+
+        k2_colors, k3_colors = recorded_colors
+        # Stable A: K2 component_1 matches K3 component_3.
+        assert k2_colors[0] == k3_colors[2]
+        # Stable B: K2 component_2 matches K3 component_2.
+        assert k2_colors[1] == k3_colors[1]
+        # New component should get a distinct color.
+        assert k3_colors[0] not in {k3_colors[1], k3_colors[2]}
