@@ -41,6 +41,7 @@ class PHATE(EmbeddingBase):
         gamma: float = 1.0,
         n_pca: Optional[int] = 100,
         n_landmark: Optional[int] = 2000,
+        random_landmarking: bool = False,
         random_state: Optional[int] = 42,
         n_jobs: int = -1,
         mds_solver: str = "sgd",
@@ -57,6 +58,7 @@ class PHATE(EmbeddingBase):
             gamma: Informational distance parameter
             n_pca: Number of PCs to compute before PHATE (None to skip)
             n_landmark: Number of landmarks for efficiency
+            random_landmarking: Use random landmark selection instead of spectral clustering
             random_state: Random seed
             n_jobs: Number of parallel jobs (-1 for all cores)
             mds_solver: MDS solver ('sgd' or 'smacof')
@@ -70,6 +72,7 @@ class PHATE(EmbeddingBase):
         self.gamma = gamma
         self.n_pca = n_pca
         self.n_landmark = n_landmark
+        self.random_landmarking = random_landmarking
         self.n_jobs = n_jobs
         self.mds_solver = mds_solver
         self.embed_batch_size = embed_batch_size
@@ -83,6 +86,7 @@ class PHATE(EmbeddingBase):
             gamma=gamma,
             n_pca=n_pca,
             n_landmark=n_landmark,
+            random_landmarking=random_landmarking,
             random_state=random_state,
             n_jobs=n_jobs,
             mds_solver=mds_solver,

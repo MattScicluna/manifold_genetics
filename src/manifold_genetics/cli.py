@@ -269,6 +269,7 @@ def cmd_embed(args):
             "knn": args.knn,
             "t": t_param,
             "n_landmark": n_landmark,
+            "random_landmarking": args.random_landmarking,
             "embed_batch_size": getattr(args, "embed_batch_size", None),
         }
         model = PHATE(n_components=2, **embed_params)
