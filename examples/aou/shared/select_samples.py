@@ -25,6 +25,8 @@ Examples:
 """
 
 import argparse
+import sys
+
 import pandas as pd
 
 
@@ -85,7 +87,7 @@ def main():
         race_col = 'race'
     else:
         print("  Error: Could not find race/ethnicity column in metadata!")
-        exit(1)
+        sys.exit(1)
 
     print(f"    Using column: {race_col}")
     print(f"    Total available samples: {len(metadata)}")
@@ -133,7 +135,7 @@ def main():
         example_missing = ", ".join(str(sid) for sid in missing_ids[:10])
         print(f"    Example missing IDs (up to 10): {example_missing}")
         print("    Check that person_id / sample_id values match the .fam IID column.")
-        exit(1)
+        sys.exit(1)
 
     with open(args.output, 'w') as f:
         for sample_id in fit_samples['sample_id']:
