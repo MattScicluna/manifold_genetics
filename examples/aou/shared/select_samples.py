@@ -114,10 +114,20 @@ def main():
         print(f"      {group}: {count}")
 
     # Write FID/IID pairs for PLINK extraction
+    # First, ensure all selected sample IDs have a corresponding FID entry.
+    selected_sample_ids = set(fit_samples['sample_id'])
+    missing_ids = [sid for sid in selected_sample_ids if sid not in iid_to_fid]
+    if missing_ids:
+        print(f"  Error: {len(missing_ids)} selected sample IDs not found in FID/IID mapping.")
+        example_missing = ", ".join(str(sid) for sid in missing_ids[:10])
+        print(f"    Example missing IDs (up to 10): {example_missing}")
+        print("    Check that person_id / sample_id values match the .fam IID column.")
+        exit(1)
+
     with open(args.output, 'w') as f:
         for sample_id in fit_samples['sample_id']:
-            if sample_id in iid_to_fid:
-                f.write(f"{iid_to_fid[sample_id]}\t{sample_id}\n")
+            # At this point all sample_ids are expected to be present in iid_to_fid
+            f.write(f"{iid_to_fid[sample_id]}\t{sample_id}\n")
 
     print(f"  Saved fit sample list: {args.output}")
 
