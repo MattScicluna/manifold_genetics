@@ -26,6 +26,16 @@ from .pipeline import Pipeline, run_pipeline
 from .metrics import compute_geographic_preservation, compute_admixture_preservation
 from .utils.io import read_colormap
 from .utils.tools import ToolResolver
+from .utils.validation import (
+    validate_admixture_csv,
+    validate_colormap_json,
+    validate_embedding_csv,
+    validate_geographic_csv,
+    validate_label_column,
+    validate_labels_colormap_match,
+    validate_labels_csv,
+    validate_sample_id_overlap,
+)
 
 
 def setup_logging(verbose: bool = False):
@@ -162,6 +172,12 @@ def cmd_plot_admixture(args):
     group_col = args.group_column
     k_values = _resolve_k_values(args.k_min, args.k_max, args.ks, q_prefix=q_prefix)
 
+    # Validate inputs
+    validate_admixture_csv(str(q_prefix), k_values)
+    validate_labels_csv(labels)
+    validate_colormap_json(args.colormap)
+    validate_label_column(group_col, labels, args.colormap)
+
     output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture.png"
 
     group_order = None
@@ -198,6 +214,12 @@ def cmd_plot_admixture_embedding(args):
     q_prefix = Path(args.q_prefix)
     embedding = args.embedding
     k_values = _resolve_k_values(args.k_min, args.k_max, args.ks, q_prefix=q_prefix)
+
+    # Validate inputs
+    validate_embedding_csv(embedding)
+    validate_admixture_csv(str(q_prefix), k_values)
+    first_q = f"{q_prefix}.{k_values[0]}.csv"
+    validate_sample_id_overlap(embedding, first_q, "embedding", "admixture")
     output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture_embedding.png"
 
     plot_admixture_embedding_grid(
@@ -232,6 +254,12 @@ def cmd_embed(args):
 
     fit_input = args.fit_input or args.input
     project_input = args.project_input or fit_input
+
+    # Validate inputs (after resolving fit/project)
+    if fit_input is not None:
+        validate_embedding_csv(fit_input)
+    if project_input is not None and project_input != fit_input:
+        validate_embedding_csv(project_input)
 
     if fit_input is None:
         raise ValueError("Please provide --input or --fit-input for embedding fit.")
@@ -310,6 +338,11 @@ def cmd_metrics_geographic(args):
     """Compute geographic preservation metrics."""
     setup_logging(args.verbose)
 
+    # Validate inputs
+    validate_embedding_csv(args.embedding)
+    validate_geographic_csv(args.geographic, args.longitude_col, args.latitude_col)
+    validate_sample_id_overlap(args.embedding, args.geographic, "embedding", "geographic coordinates")
+
     result = compute_geographic_preservation(
         embedding=args.embedding,
         geographic_coords=args.geographic,
@@ -333,14 +366,18 @@ def cmd_metrics_admixture(args):
     setup_logging(args.verbose)
 
     admixture_prefix = Path(args.admixture_output)
+    k_values = list(range(args.k_min, args.k_max + 1))
+
+    # Validate inputs
+    validate_embedding_csv(args.embedding)
+    validate_admixture_csv(str(admixture_prefix), k_values)
+    first_q = f"{admixture_prefix}.{args.k_min}.csv"
+    validate_sample_id_overlap(args.embedding, first_q, "embedding", "admixture")
 
     # Build Q files dict from prefix: {k: path/to/prefix.k.csv}
     q_files = {}
-    for k in range(args.k_min, args.k_max + 1):
-        q_file = Path(f"{admixture_prefix}.{k}.csv")
-        if not q_file.exists():
-            raise FileNotFoundError(f"Admixture file not found: {q_file}")
-        q_files[k] = q_file
+    for k in k_values:
+        q_files[k] = Path(f"{admixture_prefix}.{k}.csv")
 
     if not q_files:
         raise ValueError(f"No admixture files found for K={args.k_min} to {args.k_max}")
@@ -365,6 +402,13 @@ def cmd_plot(args):
     """Run visualization command."""
     setup_logging(args.verbose)
 
+    # Validate inputs
+    validate_embedding_csv(args.input)
+    validate_labels_csv(args.labels)
+    validate_colormap_json(args.colormap)
+    validate_labels_colormap_match(args.labels, args.colormap)
+    validate_sample_id_overlap(args.input, args.labels, "embedding", "labels")
+
     output_dir = Path(args.output).parent if args.output else Path.cwd()
     output_prefix = Path(args.output).stem if args.output else "embedding"
 
@@ -385,6 +429,13 @@ def cmd_plot(args):
 def cmd_plot_pca(args):
     """Run PCA visualization command."""
     setup_logging(args.verbose)
+
+    # Validate inputs
+    validate_embedding_csv(args.input)
+    validate_labels_csv(args.labels)
+    validate_colormap_json(args.colormap)
+    validate_labels_colormap_match(args.labels, args.colormap)
+    validate_sample_id_overlap(args.input, args.labels, "PCA coordinates", "labels")
 
     output_dir = Path(args.output) if args.output else Path.cwd()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -417,6 +468,20 @@ def cmd_plot_projection(args):
     """Run projection plot command."""
     setup_logging(args.verbose)
 
+    # Validate inputs
+    validate_embedding_csv(args.fit_embedding)
+    validate_embedding_csv(args.project_embedding)
+    validate_labels_csv(args.fit_labels)
+    validate_labels_csv(args.project_labels)
+    validate_colormap_json(args.fit_colormap)
+    validate_colormap_json(args.project_colormap)
+    validate_label_column(args.fit_column, args.fit_labels, args.fit_colormap)
+    validate_label_column(args.project_column, args.project_labels, args.project_colormap)
+    validate_sample_id_overlap(args.fit_embedding, args.fit_labels, "fit embedding", "fit labels")
+    validate_sample_id_overlap(
+        args.project_embedding, args.project_labels, "project embedding", "project labels"
+    )
+
     figure_path = plot_projection(
         fit_embedding=args.fit_embedding,
         project_embedding=args.project_embedding,
@@ -439,6 +504,57 @@ def cmd_plot_projection(args):
 def cmd_pipeline(args):
     """Run full pipeline command."""
     setup_logging(args.verbose)
+
+    # Validate inputs that are provided
+    if args.labels:
+        validate_labels_csv(args.labels)
+    if args.colormap:
+        validate_colormap_json(args.colormap)
+    if args.labels and args.colormap:
+        validate_labels_colormap_match(args.labels, args.colormap)
+
+    fit_labels = getattr(args, "fit_labels", None)
+    project_labels = getattr(args, "project_labels", None)
+    fit_colormap = getattr(args, "fit_colormap", None)
+    project_colormap = getattr(args, "project_colormap", None)
+
+    if fit_labels:
+        validate_labels_csv(fit_labels)
+    if project_labels:
+        validate_labels_csv(project_labels)
+    if fit_colormap:
+        validate_colormap_json(fit_colormap)
+    if project_colormap:
+        validate_colormap_json(project_colormap)
+    if fit_labels and fit_colormap:
+        validate_labels_colormap_match(fit_labels, fit_colormap)
+    if project_labels and project_colormap:
+        validate_labels_colormap_match(project_labels, project_colormap)
+
+    # Validate specific columns when provided
+    admix_group_col = getattr(args, "admixture_group_column", None)
+    proj_fit_col = getattr(args, "projection_plot_fit_column", None)
+    proj_transform_col = getattr(args, "projection_plot_transform_column", None)
+
+    if admix_group_col:
+        # admixture group column uses shared labels/colormap or fit variants
+        admix_labels = fit_labels or args.labels
+        admix_cmap = fit_colormap or args.colormap
+        if admix_labels and admix_cmap:
+            validate_label_column(admix_group_col, admix_labels, admix_cmap)
+    if proj_fit_col and (fit_labels or args.labels) and (fit_colormap or args.colormap):
+        validate_label_column(
+            proj_fit_col, fit_labels or args.labels, fit_colormap or args.colormap
+        )
+    if proj_transform_col and (project_labels or args.labels) and (project_colormap or args.colormap):
+        validate_label_column(
+            proj_transform_col,
+            project_labels or args.labels,
+            project_colormap or args.colormap,
+        )
+
+    if hasattr(args, "geographic") and args.geographic:
+        validate_geographic_csv(args.geographic)
 
     # Parse embedding parameters
     embedding_params = {}
