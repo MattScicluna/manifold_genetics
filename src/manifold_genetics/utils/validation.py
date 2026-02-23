@@ -279,14 +279,48 @@ def validate_geographic_csv(
 # ---------------------------------------------------------------------------
 
 
-def validate_labels_colormap_match(
+def _check_label_values_have_colors(
+    labels_path: Path,
+    colormap: dict,
+    columns: List[str],
+) -> None:
+    """Error if any label values in the data lack a color in the colormap.
+
+    Args:
+        labels_path: Path to labels CSV (read to get actual values).
+        colormap: Parsed colormap dict.
+        columns: Column names to check (must exist in both labels and colormap).
+    """
+    labels_df = pd.read_csv(labels_path)
+    for col in columns:
+        if col not in labels_df.columns or col not in colormap:
+            continue
+        color_dict = colormap[col]
+        data_values = set(labels_df[col].dropna().astype(str).unique())
+        cmap_values = set(str(k) for k in color_dict.keys())
+        missing = sorted(data_values - cmap_values)
+        if missing:
+            raise ValidationError(
+                f"Label values in column '{col}' have no color in colormap.\n\n"
+                f"  Labels file: {labels_path}\n"
+                f"  Values missing from colormap: {missing}\n"
+                f"  Values defined in colormap: {sorted(cmap_values)}\n\n"
+                f"  Add these values to the colormap JSON under the '{col}' key."
+            )
+
+
+def validate_label_column(
+    label_column: str,
     labels_path: Union[str, Path],
     colormap_path: Union[str, Path],
 ) -> None:
-    """Validate that colormap columns match labels CSV columns.
+    """Validate a specific label column against labels CSV and colormap.
 
-    Raises ValidationError if a colormap key is not found in labels columns.
-    Logs a warning if label values in the data are missing from the colormap.
+    Use this when a CLI command targets a single column (e.g. --group-column,
+    --fit-column). Errors if:
+        - The column is missing from the labels CSV
+        - The column is missing from the colormap
+        - Any label values in the data lack a color in the colormap
     """
     labels_path = Path(labels_path)
     colormap_path = Path(colormap_path)
@@ -296,32 +330,72 @@ def validate_labels_colormap_match(
     with open(colormap_path) as f:
         colormap = json.load(f)
 
+    # Column must be in labels
+    if label_column not in label_columns:
+        suggestions = _fuzzy_match(label_column, label_columns)
+        msg = (
+            f"Label column '{label_column}' not found in labels CSV.\n\n"
+            f"  Labels file: {labels_path}\n"
+            f"  Columns found: {label_columns}"
+        )
+        if suggestions:
+            msg += f"\n\n  Did you mean: '{suggestions[0]}'?"
+        raise ValidationError(msg)
+
+    # Column must be in colormap
+    if label_column not in colormap:
+        suggestions = _fuzzy_match(label_column, list(colormap.keys()))
+        msg = (
+            f"Label column '{label_column}' not found in colormap.\n\n"
+            f"  Colormap file: {colormap_path}\n"
+            f"  Colormap columns: {list(colormap.keys())}"
+        )
+        if suggestions:
+            msg += f"\n\n  Did you mean: '{suggestions[0]}'?"
+        raise ValidationError(msg)
+
+    # Every label value must have a color
+    _check_label_values_have_colors(labels_path, colormap, [label_column])
+
+
+def validate_labels_colormap_match(
+    labels_path: Union[str, Path],
+    colormap_path: Union[str, Path],
+) -> None:
+    """Validate all colormap columns against a labels CSV.
+
+    Use this when a CLI command iterates over ALL colormap keys to produce
+    one figure per key (e.g. ``plot``, ``plot-pca``).
+
+    - Warns if a colormap column is not in the labels CSV (won't crash, just
+      skipped).
+    - Errors if any label values in shared columns lack a color in the
+      colormap.
+    """
+    labels_path = Path(labels_path)
+    colormap_path = Path(colormap_path)
+
+    label_columns = _read_csv_columns(labels_path)
+
+    with open(colormap_path) as f:
+        colormap = json.load(f)
+
+    shared_columns = []
     for cmap_col in colormap:
         if cmap_col not in label_columns:
             suggestions = _fuzzy_match(cmap_col, label_columns)
             msg = (
-                f"Colormap column '{cmap_col}' not found in labels CSV.\n\n"
-                f"  Labels file: {labels_path}\n"
-                f"  Labels columns: {label_columns}\n"
-                f"  Colormap columns: {list(colormap.keys())}"
+                f"Colormap column '{cmap_col}' not found in labels CSV. "
+                f"Labels columns: {label_columns}."
             )
             if suggestions:
-                msg += f"\n\n  Did you mean: '{suggestions[0]}'?"
-            raise ValidationError(msg)
+                msg += f" Did you mean: '{suggestions[0]}'?"
+            logger.warning(msg)
+        else:
+            shared_columns.append(cmap_col)
 
-    # Warn about label values in data that are missing from colormap
-    labels_df = pd.read_csv(labels_path)
-    for cmap_col, color_dict in colormap.items():
-        if cmap_col in labels_df.columns:
-            data_values = set(labels_df[cmap_col].dropna().unique())
-            cmap_values = set(color_dict.keys())
-            missing = data_values - cmap_values
-            if missing:
-                logger.warning(
-                    f"Label values in data not found in colormap for column '{cmap_col}': "
-                    f"{sorted(str(v) for v in missing)}. "
-                    f"These samples will appear in default gray."
-                )
+    # For columns present in both, every label value must have a color
+    _check_label_values_have_colors(labels_path, colormap, shared_columns)
 
 
 def validate_sample_id_overlap(

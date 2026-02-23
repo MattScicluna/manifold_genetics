@@ -31,6 +31,7 @@ from .utils.validation import (
     validate_colormap_json,
     validate_embedding_csv,
     validate_geographic_csv,
+    validate_label_column,
     validate_labels_colormap_match,
     validate_labels_csv,
     validate_sample_id_overlap,
@@ -175,7 +176,7 @@ def cmd_plot_admixture(args):
     validate_admixture_csv(str(q_prefix), k_values)
     validate_labels_csv(labels)
     validate_colormap_json(args.colormap)
-    validate_labels_colormap_match(labels, args.colormap)
+    validate_label_column(group_col, labels, args.colormap)
 
     output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture.png"
 
@@ -474,8 +475,8 @@ def cmd_plot_projection(args):
     validate_labels_csv(args.project_labels)
     validate_colormap_json(args.fit_colormap)
     validate_colormap_json(args.project_colormap)
-    validate_labels_colormap_match(args.fit_labels, args.fit_colormap)
-    validate_labels_colormap_match(args.project_labels, args.project_colormap)
+    validate_label_column(args.fit_column, args.fit_labels, args.fit_colormap)
+    validate_label_column(args.project_column, args.project_labels, args.project_colormap)
     validate_sample_id_overlap(args.fit_embedding, args.fit_labels, "fit embedding", "fit labels")
     validate_sample_id_overlap(
         args.project_embedding, args.project_labels, "project embedding", "project labels"
@@ -511,18 +512,47 @@ def cmd_pipeline(args):
         validate_colormap_json(args.colormap)
     if args.labels and args.colormap:
         validate_labels_colormap_match(args.labels, args.colormap)
-    if hasattr(args, "fit_labels") and args.fit_labels:
-        validate_labels_csv(args.fit_labels)
-    if hasattr(args, "project_labels") and args.project_labels:
-        validate_labels_csv(args.project_labels)
-    if hasattr(args, "fit_colormap") and args.fit_colormap:
-        validate_colormap_json(args.fit_colormap)
-    if hasattr(args, "project_colormap") and args.project_colormap:
-        validate_colormap_json(args.project_colormap)
-    if hasattr(args, "fit_labels") and args.fit_labels and hasattr(args, "fit_colormap") and args.fit_colormap:
-        validate_labels_colormap_match(args.fit_labels, args.fit_colormap)
-    if hasattr(args, "project_labels") and args.project_labels and hasattr(args, "project_colormap") and args.project_colormap:
-        validate_labels_colormap_match(args.project_labels, args.project_colormap)
+
+    fit_labels = getattr(args, "fit_labels", None)
+    project_labels = getattr(args, "project_labels", None)
+    fit_colormap = getattr(args, "fit_colormap", None)
+    project_colormap = getattr(args, "project_colormap", None)
+
+    if fit_labels:
+        validate_labels_csv(fit_labels)
+    if project_labels:
+        validate_labels_csv(project_labels)
+    if fit_colormap:
+        validate_colormap_json(fit_colormap)
+    if project_colormap:
+        validate_colormap_json(project_colormap)
+    if fit_labels and fit_colormap:
+        validate_labels_colormap_match(fit_labels, fit_colormap)
+    if project_labels and project_colormap:
+        validate_labels_colormap_match(project_labels, project_colormap)
+
+    # Validate specific columns when provided
+    admix_group_col = getattr(args, "admixture_group_column", None)
+    proj_fit_col = getattr(args, "projection_plot_fit_column", None)
+    proj_transform_col = getattr(args, "projection_plot_transform_column", None)
+
+    if admix_group_col:
+        # admixture group column uses shared labels/colormap or fit variants
+        admix_labels = fit_labels or args.labels
+        admix_cmap = fit_colormap or args.colormap
+        if admix_labels and admix_cmap:
+            validate_label_column(admix_group_col, admix_labels, admix_cmap)
+    if proj_fit_col and (fit_labels or args.labels) and (fit_colormap or args.colormap):
+        validate_label_column(
+            proj_fit_col, fit_labels or args.labels, fit_colormap or args.colormap
+        )
+    if proj_transform_col and (project_labels or args.labels) and (project_colormap or args.colormap):
+        validate_label_column(
+            proj_transform_col,
+            project_labels or args.labels,
+            project_colormap or args.colormap,
+        )
+
     if hasattr(args, "geographic") and args.geographic:
         validate_geographic_csv(args.geographic)
 
