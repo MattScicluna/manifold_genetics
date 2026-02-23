@@ -20,28 +20,26 @@ SOURCE_AOU_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 COLORMAP_DIR="$(cd "$SCRIPT_DIR/../../colormaps" && pwd)"
 
 # Find manifoldGenetics directory (sibling to manifold_genetics)
-MANIFOLD_GENETICS_ROOT="$(cd "$SOURCE_AOU_DIR/../../.." && pwd)"
-if [ -d "$MANIFOLD_GENETICS_ROOT/manifoldGenetics" ]; then
-    DEST_BASE="$MANIFOLD_GENETICS_ROOT/manifoldGenetics/data/aou"
-else
-    # Try common AoU workspace layout
-    WORKSPACE_ROOT="${HOME}/workspaces/phaterepresentationsforvisualizationofgeneticdata"
-    if [ -d "$WORKSPACE_ROOT/manifoldGenetics" ]; then
-        DEST_BASE="$WORKSPACE_ROOT/manifoldGenetics/data/aou"
+if [ -z "${DEST_BASE:-}" ]; then
+    MANIFOLD_GENETICS_ROOT="$(cd "$SOURCE_AOU_DIR/../../.." && pwd)"
+    if [ -d "$MANIFOLD_GENETICS_ROOT/manifoldGenetics" ]; then
+        DEST_BASE="$MANIFOLD_GENETICS_ROOT/manifoldGenetics/data/aou"
     else
-        echo "Error: Cannot find manifoldGenetics directory"
-        echo "Searched:"
-        echo "  - $MANIFOLD_GENETICS_ROOT/manifoldGenetics"
-        echo "  - $WORKSPACE_ROOT/manifoldGenetics"
-        echo ""
-        echo "Set DEST_BASE manually: DEST_BASE=/path/to/manifoldGenetics/data/aou ./copy_to_manifoldGenetics.sh"
-        exit 1
+        # Try common AoU workspace layout
+        WORKSPACE_ROOT="${HOME}/workspaces/phaterepresentationsforvisualizationofgeneticdata"
+        if [ -d "$WORKSPACE_ROOT/manifoldGenetics" ]; then
+            DEST_BASE="$WORKSPACE_ROOT/manifoldGenetics/data/aou"
+        else
+            echo "Error: Cannot find manifoldGenetics directory"
+            echo "Searched:"
+            echo "  - $MANIFOLD_GENETICS_ROOT/manifoldGenetics"
+            echo "  - $WORKSPACE_ROOT/manifoldGenetics"
+            echo ""
+            echo "Set DEST_BASE manually: DEST_BASE=/path/to/manifoldGenetics/data/aou ./copy_to_manifoldGenetics.sh"
+            exit 1
+        fi
     fi
 fi
-
-# Allow override via environment variable
-DEST_BASE="${DEST_BASE:-$DEST_BASE}"
-
 # Mapping: source directory name -> destination directory name
 # Note: manifoldGenetics configs expect 60K_white (uppercase K)
 declare -A DIR_MAPPING=(
