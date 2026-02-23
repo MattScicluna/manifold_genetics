@@ -25,6 +25,8 @@ Examples:
 """
 
 import argparse
+import sys
+
 import pandas as pd
 
 
@@ -85,7 +87,7 @@ def main():
         race_col = 'race'
     else:
         print("  Error: Could not find race/ethnicity column in metadata!")
-        exit(1)
+        sys.exit(1)
 
     print(f"    Using column: {race_col}")
     print(f"    Total available samples: {len(metadata)}")
