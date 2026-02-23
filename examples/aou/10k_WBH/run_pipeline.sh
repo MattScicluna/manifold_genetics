@@ -1,10 +1,11 @@
 #!/bin/bash
 #
-# AoU 10K WBH (White/Black/Hispanic) Subset Pipeline
+# AoU 10K WBH (White/Black/Hispanic–enriched) Subset Pipeline
 #
-# This script configures and runs the pipeline on a balanced subsample of the
-# All of Us (AoU) cohort: 10K White + 10K Black + 10K Hispanic.
-#
+# This script configures and runs the pipeline on an AoU (All of Us) subset
+# enriched for 10K White + 10K Black + 10K Hispanic participants. Depending on
+# how the data are prepared (e.g., using --include-rest in prepare_data.sh),
+# additional ancestries may also be present in the fit subset.
 # This script is a minimal wrapper that calls the shared pipeline runner
 # with the appropriate mode.
 #
