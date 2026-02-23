@@ -51,8 +51,19 @@ def main():
     # Parse group specifications
     groups = []
     for g in args.group:
-        pattern, count = g.rsplit(":", 1)
-        groups.append((pattern, int(count)))
+        try:
+            pattern, count_str = g.rsplit(":", 1)
+        except ValueError:
+            parser.error(f"Invalid --group value '{g}': expected format PATTERN:COUNT (e.g. 'White|European:60000')")
+        if not pattern:
+            parser.error(f"Invalid --group value '{g}': pattern part before ':' must be non-empty")
+        try:
+            count = int(count_str)
+        except ValueError:
+            parser.error(f"Invalid --group value '{g}': count '{count_str}' is not a valid integer")
+        if count <= 0:
+            parser.error(f"Invalid --group value '{g}': count must be a positive integer")
+        groups.append((pattern, count))
 
     # Read metadata
     metadata = pd.read_csv(args.metadata, sep='\t', low_memory=False)
