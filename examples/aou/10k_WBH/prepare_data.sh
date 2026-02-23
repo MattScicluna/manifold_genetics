@@ -1,19 +1,19 @@
 #!/bin/bash
 #
-# AoU 60K White + Non-White Subset Data Preparation
+# AoU 10K White + 10K Black + 10K Hispanic + All Other Data Preparation
 #
 # This wrapper script:
 # 1. Reads sample IDs from intersected AoU data (from hgdp_1kgp_proj)
-# 2. Creates fit_samples.txt with 60K White + All Non-White samples
+# 2. Creates fit_samples.txt with 10K White + 10K Black + 10K Hispanic + all remaining
 # 3. Calls generic subset script to create PLINK subsets
 # 4. Creates fit_labels.csv and project_labels.csv
 #
 # Strategy:
-# - Fit Subset: Random 60K White + ALL Non-White samples
+# - Fit Subset: 10K White + 10K Black/African American + 10K Hispanic/Latino + All Other
 # - Project Subset: The entire intersected dataset
 #
 # Usage:
-#   bash examples/aou/60k_white/prepare_data.sh
+#   bash examples/aou/10k_WBH/prepare_data.sh
 #
 
 set -e
@@ -37,7 +37,7 @@ SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
 # Use intersected AoU data from hgdp_1kgp_proj
 INTERSECTED_AOU="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
-print_header "AoU 60K White + Non-White Data Preparation"
+print_header "AoU 10K White + 10K Black + 10K Hispanic Data Preparation"
 
 echo "Configuration:"
 echo "  CPU cores: ${CPU_CORES}"
@@ -70,7 +70,7 @@ echo "    SNPs: $COMMON_SNPS"
 echo ""
 
 # =============================================================================
-# STEP 2: Define Fit Subset (Python Selection)
+# STEP 2: Define Fit Subset (Shared Selection Script)
 # =============================================================================
 print_subheader "Step 2: Create Fit Sample List"
 
@@ -95,13 +95,15 @@ if [[ -f "$FIT_SAMPLES_FILE" ]]; then
     echo "    Existing samples: $FIT_SAMPLES_COUNT"
 else
     echo "  Selecting samples for fit subset..."
-    echo "  Target: 60,000 White/European + All Other ancestries"
+    echo "  Target: 10,000 White + 10,000 Black/African American + 10,000 Hispanic/Latino + All Other"
 
     python3 "${SCRIPT_DIR}/../shared/select_samples.py" \
         --metadata "$AOU_METADATA" \
         --fam "${INTERSECTED_AOU}.fam" \
         --output "$FIT_SAMPLES_FILE" \
-        --group "White|European:60000" \
+        --group "White|European:10000" \
+        --group "Black or African American:10000" \
+        --group "Hispanic or Latino:10000" \
         --include-rest \
         --seed 42
 fi
@@ -166,7 +168,7 @@ FINAL_SNPS=$(get_snp_count "${DATA_DIR}/fit_subset")
 print_header "Data Preparation Complete!"
 
 echo "Generated files in ${DATA_DIR}:"
-echo "  fit_subset.{bed,bim,fam}     (60K White + Non-White: $FIT_SAMPLES samples, $FINAL_SNPS SNPs)"
+echo "  fit_subset.{bed,bim,fam}     (10K W + 10K B + 10K H + Other: $FIT_SAMPLES samples, $FINAL_SNPS SNPs)"
 echo "  project_subset.{bed,bim,fam} (Full dataset: $PROJECT_SAMPLES samples, $FINAL_SNPS SNPs)"
 echo "  fit_labels.csv               (Fit sample metadata)"
 echo "  project_labels.csv           (Project sample metadata)"
