@@ -4,6 +4,7 @@ Visualization functions for genetic embeddings and admixture.
 Provides publication-ready plots with customizable colormaps.
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Union
@@ -12,7 +13,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import to_hex
+from matplotlib.colors import LinearSegmentedColormap, to_hex
 from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.optimize import linear_sum_assignment
@@ -455,6 +456,7 @@ def plot_admixture_bar_grid(
     group_order: Optional[Sequence[str]] = None,
     colormap: Optional[Union[Dict, str, Path]] = None,
     within_group_order: Optional[str] = 'chron',
+    component_colors_output: Optional[Union[str, Path]] = None,
 ) -> Path:
     """
     Plot stacked admixture barplots for multiple K values (one row per K).
@@ -671,6 +673,17 @@ def plot_admixture_bar_grid(
 
     lineage_colors = {idx: palette[idx] for idx in range(next_lineage)}
 
+    component_colors_dict = {
+        k: {col: lineage_colors[lineages_by_k[k][col]] for col in comp_cols_by_k[k]}
+        for k in k_values
+    }
+    if component_colors_output is not None:
+        out = Path(component_colors_output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with open(out, "w") as f:
+            json.dump({str(k): v for k, v in component_colors_dict.items()}, f, indent=2)
+        logger.info(f"Saved component colors: {out}")
+
     n_rows = len(k_values)
     fig, axes = plt.subplots(n_rows, 1, figsize=(12, 3 * n_rows), sharex=False)
     if n_rows == 1:
@@ -732,12 +745,19 @@ def plot_admixture_embedding_grid(
     pc_x: int = 1,
     pc_y: int = 2,
     subsample: Optional[int] = None,
+    component_colormap: Optional[Union[Dict, str, Path]] = None,
 ) -> Path:
     """
     Plot embedding colored by admixture components in a grid.
 
     One row per K, columns = max(Ks). Each cell is a component heatmap (seismic 0-1).
+    When component_colormap is provided (path to JSON exported by plot_admixture_bar_grid),
+    each subplot uses a white-to-component-color gradient matching the bar chart.
     """
+    if isinstance(component_colormap, (str, Path)):
+        with open(component_colormap) as f:
+            component_colormap = json.load(f)
+
     if isinstance(embedding, (str, Path)):
         emb_df = read_embedding_csv(embedding)
     else:
@@ -776,11 +796,18 @@ def plot_admixture_embedding_grid(
                 ax.axis("off")
                 continue
             comp_col = f"component_{comp_idx}"
+            if component_colormap is not None:
+                color = component_colormap[str(k)][comp_col]
+                cmap = LinearSegmentedColormap.from_list(
+                    f"comp_{k}_{comp_idx}", ["white", color], N=256
+                )
+            else:
+                cmap = "seismic"
             scatter = ax.scatter(
                 merged[pc_x_col],
                 merged[pc_y_col],
                 c=merged[comp_col],
-                cmap="seismic",
+                cmap=cmap,
                 s=3,
                 alpha=0.6,
                 vmin=0,

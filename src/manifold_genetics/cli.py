@@ -202,6 +202,7 @@ def cmd_plot_admixture(args):
         group_order=group_order,
         colormap=args.colormap,
         within_group_order=within_group_order,
+        component_colors_output=getattr(args, "component_colors_output", None),
     )
     print(f"Admixture bar plot written to: {output_path}")
     return 0
@@ -230,6 +231,7 @@ def cmd_plot_admixture_embedding(args):
         pc_x=args.pc_x,
         pc_y=args.pc_y,
         subsample=args.subsample,
+        component_colormap=getattr(args, "component_colormap", None),
     )
     print(f"Admixture-embedding plot written to: {output_path}")
     return 0
@@ -729,6 +731,10 @@ def main():
     plot_admix_parser.add_argument("--subsample-per-group", type=int, help="Subsample each group to N samples (optional)")
     plot_admix_parser.add_argument("--within-group-order", choices=["chron", "tree", "none"], default="chron", help="Method for ordering samples within groups: 'chron' (sort by components), 'tree' (hierarchical clustering), 'none' (original order)")
     plot_admix_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture.png)")
+    plot_admix_parser.add_argument(
+        "--component-colors-output",
+        help="Optional path to save component colors JSON (for use with plot-admixture-embedding).",
+    )
     plot_admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_admix_parser.set_defaults(func=cmd_plot_admixture)
 
@@ -743,6 +749,11 @@ def main():
     plot_admix_emb_parser.add_argument("--pc-y", type=int, default=2, help="PC for y-axis (default: 2)")
     plot_admix_emb_parser.add_argument("--subsample", type=int, help="Optional subsample size for plotting")
     plot_admix_emb_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture_embedding.png)")
+    plot_admix_emb_parser.add_argument(
+        "--component-colormap",
+        help="Path to component colors JSON exported by plot-admixture. When provided, each "
+             "component subplot uses a white-to-component-color gradient matching the bar chart.",
+    )
     plot_admix_emb_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_admix_emb_parser.set_defaults(func=cmd_plot_admixture_embedding)
 
