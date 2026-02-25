@@ -23,6 +23,7 @@ def compute_admixture_preservation(
     q_files: Dict[int, Union[str, Path]],
     k_value: Optional[int] = None,
     num_samples: int = 50000,
+    subsample: Optional[int] = None,
 ) -> dict:
     """
     Compute preservation of admixture distances in genetic embedding.
@@ -36,6 +37,8 @@ def compute_admixture_preservation(
         q_files: Dictionary mapping K values to Q file paths
         k_value: Specific K value to use (None = use all K values)
         num_samples: Maximum number of pairwise distances to sample
+        subsample: If set, randomly subsample individuals to this count before
+            computing distances. Applied consistently across all K values.
 
     Returns:
         Dictionary with results for each K:
@@ -57,12 +60,20 @@ def compute_admixture_preservation(
     # Get embedding coordinates and sample IDs
     embedding_cols = [col for col in embedding_df.columns if col.startswith("dim_")]
     embedding_coords = embedding_df[embedding_cols].values
-    
+
     # Get sample IDs (either from sample_id column or index)
     if "sample_id" in embedding_df.columns:
         sample_ids = embedding_df["sample_id"].tolist()
     else:
         sample_ids = embedding_df.index.tolist()
+
+    # Subsample individuals (consistent across all K values).
+    if subsample is not None and len(sample_ids) > subsample:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(sample_ids), subsample, replace=False)
+        sample_ids = [sample_ids[i] for i in idx]
+        embedding_coords = embedding_coords[idx]
+        logger.info(f"Subsampled individuals to {subsample} (from {len(embedding_df)})")
 
     # Process each K value
     results = {}
