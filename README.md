@@ -2,6 +2,11 @@
 
 A lightweight, batteries-included Python package for genetic analysis with dimensionality reduction and visualization.
 
+<p align="center">
+  <img src="assets/ukbb_phate.png" width="30%" alt="UKBB PHATE embedding coloured by self-described ancestry"/>
+  <img src="assets/aou_phate.png" width="30%" alt="All of Us PHATE embedding coloured by ancestry"/>
+</p>
+
 ## Features
 
 - **PCA**: FlashPCA wrapper for fast principal component analysis
@@ -188,20 +193,26 @@ uv run manifold-genetics plot \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/phate.png
 
 # Admixture barplots (stacked bars per K)
+# Use --component-colors-output to save the component colour assignments to JSON.
+# This lets plot-admixture-embedding use the same colours as the bar chart.
 uv run manifold-genetics plot-admixture \
     --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --group-column Genetic_region_merged \
     --colormap examples/colormaps/hgdp_1kgp.json \
     --k-min 2 --k-max 5 \
-    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_bars.png
+    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_bars.png \
+    --component-colors-output examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
-# Admixture embedding grid (seismic colormap per component)
+# Admixture embedding grid — coloured by admixture component proportion.
+# Pass --component-colormap (exported by plot-admixture above) so each component
+# subplot uses a white-to-component-colour gradient that matches the bar chart.
 uv run manifold-genetics plot-admixture-embedding \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
     --k-min 2 --k-max 5 \
-    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png
+    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png \
+    --component-colormap examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
 # 5) Metrics (optional, standalone)
 uv run manifold-genetics metrics-geographic \
@@ -212,10 +223,11 @@ uv run manifold-genetics metrics-geographic \
 
 uv run manifold-genetics metrics-admixture \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --q-dir examples/hgdp_1kgp/outputs/admixture \
+    --admixture-output examples/hgdp_1kgp/outputs/admixture/transform \
     --output examples/hgdp_1kgp/outputs/metrics/admixture.json \
     --k-min 2 --k-max 5 \
     --num-dists-sampled 50000
+    # --subsample 5000  # recommended for large biobanks (AoU, UKBB); not needed here (~4K samples)
 ```
 
 ## Data Formats
