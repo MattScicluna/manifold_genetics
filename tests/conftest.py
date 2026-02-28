@@ -112,7 +112,7 @@ def colormap_json(temp_dir, colormap_data):
 
 
 @pytest.fixture
-def numeric_pca_data(temp_dir):
+def numeric_pca_data():
     """PCA dataset with integer (numeric) sample_ids, mimicking FlashPCA IID behavior."""
     np.random.seed(42)
     n_samples, n_pcs = 50, 10
