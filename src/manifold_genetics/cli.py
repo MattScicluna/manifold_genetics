@@ -389,6 +389,7 @@ def cmd_metrics_admixture(args):
         q_files=q_files,
         k_value=args.k_value,
         num_samples=args.num_dists_sampled,
+        subsample=args.subsample,
     )
 
     output_path = Path(args.output)
@@ -864,6 +865,7 @@ def main():
     admix_metrics_parser.add_argument("--k-max", type=int, required=True, help="Maximum K to include")
     admix_metrics_parser.add_argument("--k-value", type=int, help="Compute only a single K")
     admix_metrics_parser.add_argument("--num-dists-sampled", type=int, default=50000, help="Max pairwise distances to sample")
+    admix_metrics_parser.add_argument("--subsample", type=int, default=None, help="Subsample individuals to this count before computing distances (applied consistently across all K values). Useful for large datasets.")
     admix_metrics_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_metrics_parser.set_defaults(func=cmd_metrics_admixture)
 
