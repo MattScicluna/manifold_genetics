@@ -153,6 +153,30 @@ class TestAdmixturePreservation:
         assert len(result) == 3  # K=2,3,4
         assert all(isinstance(metrics, dict) for metrics in result.values())
 
+    def test_admixture_preservation_with_numeric_sample_ids(self, temp_dir):
+        """compute_admixture_preservation must not fail when Q files have int sample_ids."""
+        np.random.seed(42)
+        n_samples = 50
+        # Embedding with string-form integer sample_ids (as read_embedding_csv produces)
+        embedding_df = pd.DataFrame(np.random.randn(n_samples, 2), columns=["dim_1", "dim_2"])
+        embedding_df.insert(0, "sample_id", [str(i) for i in range(n_samples)])
+        embedding_file = temp_dir / "embedding.csv"
+        embedding_df.to_csv(embedding_file, index=False)
+
+        # Q file written with raw int64 sample_ids (pre-fix scenario)
+        q_data = np.random.dirichlet([1, 1], n_samples)
+        q_df = pd.DataFrame(q_data, columns=["component_1", "component_2"])
+        q_df.insert(0, "sample_id", np.arange(n_samples, dtype=np.int64))
+        q_file = temp_dir / "admix.2.csv"
+        q_df.to_csv(q_file, index=False)
+
+        result = compute_admixture_preservation(
+            embedding=embedding_file,
+            q_files={2: q_file},
+        )
+        assert 2 in result
+        assert result[2]["n_samples"] == n_samples
+
 
 class TestMetricsIntegration:
     """Integration tests for metrics with realistic scenarios."""

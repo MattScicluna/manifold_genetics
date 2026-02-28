@@ -18,7 +18,7 @@ from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.optimize import linear_sum_assignment
 
-from ..utils.io import read_colormap, read_embedding_csv, read_labels_csv
+from ..utils.io import read_admixture_csv, read_colormap, read_embedding_csv, read_labels_csv
 
 matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
@@ -427,9 +427,10 @@ def _load_admixture_csv(
         if not path.exists():
             logger.warning(f"Admixture file not found for K={k}: {path}")
             continue
-        df = pd.read_csv(path)
-        if "sample_id" not in df.columns:
-            logger.warning(f"K={k}: sample_id column missing in {path}, skipping")
+        try:
+            df = read_admixture_csv(path)
+        except ValueError as e:
+            logger.warning(f"K={k}: {e}, skipping")
             continue
         admixture[k] = df
     return admixture

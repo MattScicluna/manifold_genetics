@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from manifold_genetics.utils.io import (
+    read_admixture_csv,
     read_embedding_csv,
     write_embedding_csv,
     read_labels_csv,
@@ -63,6 +64,15 @@ class TestEmbeddingIO:
         pd.testing.assert_frame_equal(small_pca_data, df, check_dtype=False)
 
 
+    def test_read_embedding_csv_coerces_numeric_sample_id_to_str(self, numeric_pca_csv):
+        """read_embedding_csv must coerce int sample_ids to str dtype."""
+        df = read_embedding_csv(numeric_pca_csv)
+        assert 'sample_id' in df.columns
+        assert pd.api.types.is_string_dtype(df['sample_id']), (
+            f"Expected str dtype for sample_id, got {df['sample_id'].dtype}"
+        )
+
+
 class TestLabelsIO:
     """Tests for labels CSV I/O."""
 
@@ -81,6 +91,49 @@ class TestLabelsIO:
         # Index should be sample IDs
         assert df.index[0] == "SAMPLE_000"
         assert len(df.index) == 50
+
+    def test_read_labels_csv_coerces_numeric_sample_id_to_str(self, numeric_labels_csv):
+        """read_labels_csv must coerce int sample_ids to str index dtype."""
+        df = read_labels_csv(numeric_labels_csv)
+        assert pd.api.types.is_string_dtype(df.index), (
+            f"Expected str dtype for index, got {df.index.dtype}"
+        )
+        assert df.index[0] == "0"
+
+
+class TestAdmixtureIO:
+    """Tests for admixture CSV I/O."""
+
+    def test_read_admixture_csv_basic(self, temp_dir):
+        """read_admixture_csv returns DataFrame with sample_id column and component columns."""
+        df = pd.DataFrame({
+            "sample_id": [f"SAMPLE_{i:03d}" for i in range(20)],
+            "component_1": np.random.dirichlet([1, 1], 20)[:, 0],
+            "component_2": np.random.dirichlet([1, 1], 20)[:, 1],
+        })
+        path = temp_dir / "admix.2.csv"
+        df.to_csv(path, index=False)
+
+        result = read_admixture_csv(path)
+        assert "sample_id" in result.columns
+        assert "component_1" in result.columns
+        assert pd.api.types.is_string_dtype(result["sample_id"])
+
+    def test_read_admixture_csv_coerces_numeric_sample_id_to_str(self, temp_dir):
+        """read_admixture_csv must coerce int sample_ids to str dtype."""
+        df = pd.DataFrame({
+            "sample_id": np.arange(20, dtype=np.int64),
+            "component_1": np.random.rand(20),
+            "component_2": np.random.rand(20),
+        })
+        path = temp_dir / "admix_numeric.2.csv"
+        df.to_csv(path, index=False)
+
+        result = read_admixture_csv(path)
+        assert pd.api.types.is_string_dtype(result["sample_id"]), (
+            f"Expected str dtype, got {result['sample_id'].dtype}"
+        )
+        assert result["sample_id"].iloc[0] == "0"
 
 
 class TestColormapIO:

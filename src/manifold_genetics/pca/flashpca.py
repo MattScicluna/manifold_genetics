@@ -361,8 +361,9 @@ class PCA:
         # Read FlashPCA output with header
         df = pd.read_csv(pc_file, sep=r"\s+")
 
-        # Get sample IDs from PLINK files (IID column)
-        sample_ids = df['IID'].values
+        # Get sample IDs from PLINK files (IID column); coerce to str to
+        # avoid int64/object dtype mismatch when merging with label DataFrames.
+        sample_ids = df['IID'].astype(str).values
 
         # Extract PC columns (skip FID and IID)
         pc_cols = [col for col in df.columns if col.startswith("PC")]

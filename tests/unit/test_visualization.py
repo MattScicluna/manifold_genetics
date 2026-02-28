@@ -6,7 +6,7 @@ import pandas as pd
 import pandas.plotting._core as plotting_core
 from pathlib import Path
 
-from manifold_genetics.visualization import visualize, plot_embedding, plot_admixture_bar_grid
+from manifold_genetics.visualization import visualize, plot_embedding, plot_admixture_bar_grid, plot_pca_pairs
 
 
 class TestVisualization:
@@ -66,6 +66,50 @@ class TestVisualization:
             output_path=output_file
         )
 
+        assert output_file.exists()
+
+    def test_plot_pca_pairs_with_numeric_sample_ids(
+        self, numeric_pca_csv, numeric_labels_csv, colormap_json, temp_dir
+    ):
+        """plot_pca_pairs must not raise a merge error when PCA CSV has int sample_ids."""
+        output_file = temp_dir / "pca_pairs_numeric.png"
+        result = plot_pca_pairs(
+            pca_coords=numeric_pca_csv,
+            labels=numeric_labels_csv,
+            colormap=colormap_json,
+            output_path=output_file,
+            label_column="Population",
+        )
+        assert output_file.exists()
+        assert result == output_file
+
+    def test_plot_admixture_bar_grid_with_numeric_sample_ids(self, temp_dir):
+        """plot_admixture_bar_grid must not fail when admixture CSVs have int sample_ids."""
+        np.random.seed(42)
+        n_samples = 50
+        int_ids = np.arange(n_samples, dtype=np.int64)
+        str_ids = [str(i) for i in int_ids]
+
+        q_prefix = temp_dir / "admixture" / "transform"
+        q_prefix.parent.mkdir(parents=True, exist_ok=True)
+
+        for k in [2, 3]:
+            q_data = np.random.dirichlet(np.ones(k), n_samples)
+            df = pd.DataFrame(q_data, columns=[f"component_{i+1}" for i in range(k)])
+            df.insert(0, "sample_id", int_ids)  # int64, mimicking pre-fix CSVs
+            df.to_csv(f"{q_prefix}.{k}.csv", index=False)
+
+        labels = pd.DataFrame({"sample_id": str_ids, "Population": ["PopA"] * 25 + ["PopB"] * 25})
+
+        output_file = temp_dir / "admixture_numeric.png"
+        plot_admixture_bar_grid(
+            q_prefix=q_prefix,
+            labels=labels,
+            group_column="Population",
+            k_values=[2, 3],
+            output_path=output_file,
+            within_group_order=None,
+        )
         assert output_file.exists()
 
     def test_admixture_bar_grid_aligns_component_colors_across_k(self, monkeypatch, temp_dir):
