@@ -13,7 +13,7 @@ import pandas as pd
 from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr
 
-from ..utils.io import read_embedding_csv
+from ..utils.io import read_admixture_csv, read_embedding_csv
 
 logger = logging.getLogger(__name__)
 
@@ -145,14 +145,12 @@ def _load_q_matrix(q_path: Union[str, Path]) -> pd.DataFrame:
 
     # Try to load as CSV first (new format)
     try:
-        df = pd.read_csv(q_path)
-        if "sample_id" in df.columns:
-            # New format with sample_id
-            df = df.set_index("sample_id")
-            # Keep only component columns
-            component_cols = [col for col in df.columns if col.startswith("component_")]
-            return df[component_cols]
-    except:
+        df = read_admixture_csv(q_path)
+        # New format with sample_id (already str-coerced by read_admixture_csv)
+        df = df.set_index("sample_id")
+        component_cols = [col for col in df.columns if col.startswith("component_")]
+        return df[component_cols]
+    except (ValueError, FileNotFoundError):
         pass
         
     # Fallback: load as space-separated file (old format)

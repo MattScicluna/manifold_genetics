@@ -43,6 +43,16 @@ def _read_sample_ids(path: Path) -> List[str]:
     return df["sample_id"].astype(str).tolist()
 
 
+def _check_sample_id_dtype(path: Path) -> None:
+    """Warn if sample_id column is not string dtype."""
+    df = pd.read_csv(path, usecols=["sample_id"], nrows=5)
+    if "sample_id" in df.columns and not pd.api.types.is_string_dtype(df["sample_id"]):
+        logger.warning(
+            f"'sample_id' column in {path} is {df['sample_id'].dtype}, not string. "
+            "This may cause merge failures. Values will be coerced to string during loading."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Per-file validators
 # ---------------------------------------------------------------------------
@@ -90,6 +100,8 @@ def validate_embedding_csv(path: Union[str, Path]) -> None:
             f"  These columns must contain numeric values."
         )
 
+    _check_sample_id_dtype(path)
+
 
 def validate_labels_csv(path: Union[str, Path]) -> None:
     """Validate a labels CSV has the expected format.
@@ -111,6 +123,8 @@ def validate_labels_csv(path: Union[str, Path]) -> None:
             f"  Columns found: {columns}\n\n"
             f"  The first column should be 'sample_id' containing unique sample identifiers."
         )
+
+    _check_sample_id_dtype(path)
 
 
 def validate_colormap_json(path: Union[str, Path]) -> None:

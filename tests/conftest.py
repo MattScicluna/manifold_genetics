@@ -111,6 +111,47 @@ def colormap_json(temp_dir, colormap_data):
     return colormap_file
 
 
+@pytest.fixture
+def numeric_pca_data():
+    """PCA dataset with integer (numeric) sample_ids, mimicking FlashPCA IID behavior."""
+    np.random.seed(42)
+    n_samples, n_pcs = 50, 10
+    df = pd.DataFrame(
+        np.random.randn(n_samples, n_pcs),
+        columns=[f"dim_{i+1}" for i in range(n_pcs)],
+    )
+    df.insert(0, 'sample_id', np.arange(n_samples, dtype=np.int64))
+    return df
+
+
+@pytest.fixture
+def numeric_pca_csv(temp_dir, numeric_pca_data):
+    """PCA CSV file with integer sample_ids."""
+    pca_file = temp_dir / "numeric_pca.csv"
+    numeric_pca_data.to_csv(pca_file, index=False)
+    return pca_file
+
+
+@pytest.fixture
+def numeric_labels_data():
+    """Labels for 50 samples using integer sample_ids (stored as strings in CSV)."""
+    np.random.seed(42)
+    n_samples = 50
+    return pd.DataFrame({
+        "sample_id": [str(i) for i in range(n_samples)],
+        "Population": np.random.choice(["PopA", "PopB", "PopC"], n_samples),
+        "Region": np.random.choice(["North", "South"], n_samples),
+    })
+
+
+@pytest.fixture
+def numeric_labels_csv(temp_dir, numeric_labels_data):
+    """Labels CSV file with string-form integer sample_ids."""
+    labels_file = temp_dir / "numeric_labels.csv"
+    numeric_labels_data.to_csv(labels_file, index=False)
+    return labels_file
+
+
 def _create_plink_files(temp_dir: Path, prefix_name: str):
     """Helper function to create minimal dummy PLINK files.
 

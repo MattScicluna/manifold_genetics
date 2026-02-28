@@ -18,7 +18,7 @@ from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.optimize import linear_sum_assignment
 
-from ..utils.io import read_colormap, read_embedding_csv, read_labels_csv
+from ..utils.io import read_admixture_csv, read_colormap, read_embedding_csv, read_labels_csv
 
 matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
@@ -427,9 +427,10 @@ def _load_admixture_csv(
         if not path.exists():
             logger.warning(f"Admixture file not found for K={k}: {path}")
             continue
-        df = pd.read_csv(path)
-        if "sample_id" not in df.columns:
-            logger.warning(f"K={k}: sample_id column missing in {path}, skipping")
+        try:
+            df = read_admixture_csv(path)
+        except ValueError as e:
+            logger.warning(f"K={k}: {e}, skipping")
             continue
         admixture[k] = df
     return admixture
@@ -620,7 +621,7 @@ def plot_admixture_bar_grid(
     if colors:
         palette = list(colors)
     else:
-        palette = [to_hex(c) for c in plt.get_cmap("tab20").colors]
+        palette = [to_hex(c) for c in plt.get_cmap("tab10").colors]
 
     max_needed_colors = max(len(cols) for cols in comp_cols_by_k.values())
     if len(palette) < max_needed_colors:
@@ -674,7 +675,10 @@ def plot_admixture_bar_grid(
     lineage_colors = {idx: palette[idx] for idx in range(next_lineage)}
 
     component_colors_dict = {
-        k: {col: lineage_colors[lineages_by_k[k][col]] for col in comp_cols_by_k[k]}
+        k: {
+            col: {"color": lineage_colors[lineages_by_k[k][col]], "lineage": lineages_by_k[k][col]}
+            for col in comp_cols_by_k[k]
+        }
         for k in k_values
     }
     if component_colors_output is not None:
@@ -789,20 +793,29 @@ def plot_admixture_embedding_grid(
             merged = merged.sample(n=subsample, random_state=42)
 
         comp_cols = _get_component_columns(merged, k)
+
+        # When colormap provided, sort components by lineage so same ancestry stays in same column
+        if component_colormap is not None:
+            k_cmap = component_colormap[str(k)]
+            sorted_comp_cols = sorted(k_cmap.keys(), key=lambda c: k_cmap[c]["lineage"])
+        else:
+            sorted_comp_cols = None
+
         for col_idx in range(n_cols):
             ax = axes[row_idx, col_idx]
-            comp_idx = col_idx + 1
-            if comp_idx > k:
+            if col_idx >= k:
                 ax.axis("off")
                 continue
-            comp_col = f"component_{comp_idx}"
-            if component_colormap is not None:
-                color = component_colormap[str(k)][comp_col]
-                cmap = LinearSegmentedColormap.from_list(
-                    f"comp_{k}_{comp_idx}", ["white", color], N=256
-                )
+            if sorted_comp_cols is not None:
+                comp_col = sorted_comp_cols[col_idx]
+                color = k_cmap[comp_col]["color"]
+                lineage_idx = k_cmap[comp_col]["lineage"]
+                cmap = LinearSegmentedColormap.from_list(f"lin_{lineage_idx}", ["white", color], N=256)
+                title = f"K={k} • Comp {lineage_idx + 1}"
             else:
+                comp_col = f"component_{col_idx + 1}"
                 cmap = "seismic"
+                title = f"K={k} • Comp {col_idx + 1}"
             scatter = ax.scatter(
                 merged[pc_x_col],
                 merged[pc_y_col],
@@ -815,7 +828,7 @@ def plot_admixture_embedding_grid(
             )
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_title(f"K={k} • Comp {comp_idx}", fontsize=10)
+            ax.set_title(title, fontsize=10)
 
             # Add a colorbar on the last column for each row
             if col_idx == n_cols - 1:

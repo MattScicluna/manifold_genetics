@@ -87,6 +87,10 @@ def read_embedding_csv(file_path: Union[str, Path]) -> pd.DataFrame:
     if not dim_cols:
         raise ValueError(f"CSV must have 'dim_' columns. Found: {list(df.columns)}")
 
+    # Coerce sample_id to str to prevent int64/object merge failures.
+    if 'sample_id' in df.columns:
+        df['sample_id'] = df['sample_id'].astype(str)
+
     return df
 
 
@@ -129,6 +133,36 @@ def write_embedding_csv(
     return output_path
 
 
+def read_admixture_csv(file_path: Union[str, Path]) -> pd.DataFrame:
+    """
+    Read admixture CSV file.
+
+    Expected format:
+    - Columns: sample_id, component_1, component_2, ..., component_K
+
+    Args:
+        file_path: Path to admixture CSV file
+
+    Returns:
+        DataFrame with sample_id as str column and component columns
+    """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Admixture file not found: {file_path}")
+
+    df = pd.read_csv(file_path)
+
+    if "sample_id" not in df.columns:
+        raise ValueError(
+            f"Admixture CSV missing 'sample_id' column. Found: {list(df.columns)}"
+        )
+
+    # Coerce sample_id to str to prevent int64/object merge failures.
+    df['sample_id'] = df['sample_id'].astype(str)
+
+    return df
+
+
 def read_labels_csv(file_path: Union[str, Path]) -> pd.DataFrame:
     """
     Read labels/metadata CSV file.
@@ -149,7 +183,7 @@ def read_labels_csv(file_path: Union[str, Path]) -> pd.DataFrame:
 
     df = pd.read_csv(file_path)
 
-    # Set sample_id as index if present
+    # Set sample_id as index if present; coerce to str to prevent merge failures.
     if "sample_id" in df.columns:
         df = df.set_index("sample_id")
     else:
@@ -157,6 +191,8 @@ def read_labels_csv(file_path: Union[str, Path]) -> pd.DataFrame:
             f"No 'sample_id' column found in {file_path}. Using first column as index."
         )
         df = df.set_index(df.columns[0])
+
+    df.index = df.index.astype(str)
 
     return df
 
@@ -201,7 +237,7 @@ def get_sample_ids_from_plink(plink_prefix: Union[str, Path]) -> list:
     fam_path = _append_extension(plink_prefix, ".fam")
 
     fam_df = read_fam_file(fam_path)
-    return fam_df["IID"].tolist()
+    return fam_df["IID"].astype(str).tolist()
 
 
 def read_sample_indices(indices_path: Union[str, Path]) -> list:
