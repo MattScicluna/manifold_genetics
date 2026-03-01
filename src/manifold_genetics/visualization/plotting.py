@@ -841,6 +841,253 @@ def plot_admixture_embedding_grid(
     return output_path
 
 
+def plot_knn_composition(
+    fit_embedding: Union[pd.DataFrame, str, Path],
+    project_embedding: Union[pd.DataFrame, str, Path],
+    fit_labels: Union[pd.DataFrame, str, Path],
+    project_labels: Union[pd.DataFrame, str, Path],
+    fit_colormap: Union[Dict, str, Path],
+    fit_label_column: str,
+    project_label_column: str,
+    output_path: Union[str, Path],
+    project_label_subset: Optional[List[str]] = None,
+    k: int = 10,
+    sort_by_dominant: bool = True,
+    subsample_per_group: Optional[int] = None,
+    project_name: str = "Project",
+) -> Path:
+    """
+    Plot KNN label composition as stacked bar charts, one panel per project label group.
+
+    For each project individual, finds k nearest neighbors in the fit embedding and shows
+    the distribution of fit labels among those neighbors as a stacked bar.
+
+    Args:
+        fit_embedding: DataFrame or path to fit embedding CSV (sample_id, dim_1, ...)
+        project_embedding: DataFrame or path to project embedding CSV
+        fit_labels: DataFrame or path to fit labels CSV
+        project_labels: DataFrame or path to project labels CSV
+        fit_colormap: Dict or path to colormap JSON (must contain fit_label_column key)
+        fit_label_column: Column in fit_labels for fine-grained labels (e.g. "Population")
+        project_label_column: Column in project_labels for coarse groups (e.g. "ancestry")
+        output_path: Path to save figure
+        project_label_subset: Subset of project labels to include as panels (default: all)
+        k: Number of nearest neighbors
+        sort_by_dominant: If True, sort bars within each panel by dominant label then count
+        subsample_per_group: If set, randomly subsample each panel to this many individuals
+        project_name: Name for project dataset, used in panel titles
+
+    Returns:
+        Path to saved figure
+    """
+    from collections import Counter
+    from sklearn.neighbors import NearestNeighbors
+
+    # Step 1 — Load data
+    if isinstance(fit_embedding, (str, Path)):
+        fit_emb_df = read_embedding_csv(fit_embedding)
+    else:
+        fit_emb_df = fit_embedding
+
+    if isinstance(project_embedding, (str, Path)):
+        proj_emb_df = read_embedding_csv(project_embedding)
+    else:
+        proj_emb_df = project_embedding
+
+    if isinstance(fit_labels, (str, Path)):
+        fit_labels_df = read_labels_csv(fit_labels)
+    else:
+        fit_labels_df = fit_labels
+    if fit_labels_df.index.name == 'sample_id':
+        fit_labels_df = fit_labels_df.reset_index()
+
+    if isinstance(project_labels, (str, Path)):
+        proj_labels_df = read_labels_csv(project_labels)
+    else:
+        proj_labels_df = project_labels
+    if proj_labels_df.index.name == 'sample_id':
+        proj_labels_df = proj_labels_df.reset_index()
+
+    if isinstance(fit_colormap, (str, Path)):
+        cmap_full = read_colormap(fit_colormap)
+    else:
+        cmap_full = fit_colormap
+
+    if fit_label_column not in cmap_full:
+        raise ValueError(
+            f"fit_label_column '{fit_label_column}' not found in colormap. "
+            f"Available keys: {list(cmap_full.keys())}"
+        )
+    fit_color_dict: Dict[str, str] = cmap_full[fit_label_column]
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Step 2 — Align fit labels to fit embedding
+    fit_emb_df = fit_emb_df.copy()
+    fit_emb_df['sample_id'] = fit_emb_df['sample_id'].astype(str)
+    fit_labels_df = fit_labels_df.copy()
+    fit_labels_df['sample_id'] = fit_labels_df['sample_id'].astype(str)
+
+    fit_merged = fit_emb_df.merge(fit_labels_df[['sample_id', fit_label_column]], on='sample_id', how='inner')
+    dim_cols = [c for c in fit_merged.columns if c.startswith('dim_')]
+    fit_coords = fit_merged[dim_cols].to_numpy()
+    aligned_fit_labels = fit_merged[fit_label_column].to_numpy()
+
+    # Step 3 — Align project labels to project embedding
+    proj_emb_df = proj_emb_df.copy()
+    proj_emb_df['sample_id'] = proj_emb_df['sample_id'].astype(str)
+    proj_labels_df = proj_labels_df.copy()
+    proj_labels_df['sample_id'] = proj_labels_df['sample_id'].astype(str)
+
+    proj_merged = proj_emb_df.merge(
+        proj_labels_df[['sample_id', project_label_column]], on='sample_id', how='inner'
+    )
+    proj_dim_cols = [c for c in proj_merged.columns if c.startswith('dim_')]
+    proj_coords = proj_merged[proj_dim_cols].to_numpy()
+    proj_sample_ids = proj_merged['sample_id'].to_numpy()
+    proj_group_labels = proj_merged[project_label_column].to_numpy()
+
+    # Step 3 — KNN index
+    knn = NearestNeighbors(n_neighbors=k, metric='euclidean', algorithm='auto')
+    knn.fit(fit_coords)
+    indices = knn.kneighbors(proj_coords, return_distance=False)  # (N_proj, k)
+
+    # Step 4 — Build per-individual label count vectors
+    all_fit_labels = sorted(set(aligned_fit_labels))
+    rows = []
+    for i in range(len(proj_sample_ids)):
+        neighbor_labels = aligned_fit_labels[indices[i]]
+        counter = Counter(neighbor_labels)
+        rows.append({lbl: counter.get(lbl, 0) for lbl in all_fit_labels})
+
+    count_df = pd.DataFrame(rows, index=proj_sample_ids)
+    count_df.index.name = 'sample_id'
+    count_df[project_label_column] = proj_group_labels
+
+    # Order columns by total count across all project individuals (most frequent first)
+    col_totals = count_df[all_fit_labels].sum(axis=0).sort_values(ascending=False)
+    ordered_labels = list(col_totals.index)
+    color_list = [fit_color_dict.get(col, '#888888') for col in ordered_labels]
+
+    # Step 5 — Panel loop
+    if project_label_subset is None:
+        project_label_subset = sorted(count_df[project_label_column].dropna().unique())
+
+    n_panels = len(project_label_subset)
+    if n_panels == 0:
+        raise ValueError("No project labels found to plot.")
+
+    fig, axes = plt.subplots(n_panels, 1, figsize=(14, 3 * n_panels))
+    if n_panels == 1:
+        axes = [axes]
+
+    for ax, panel_label in zip(axes, project_label_subset):
+        panel_mask = count_df[project_label_column] == panel_label
+        panel_df = count_df[panel_mask].copy()
+
+        # Subsample
+        if subsample_per_group is not None and len(panel_df) > subsample_per_group:
+            panel_df = panel_df.sample(n=subsample_per_group, random_state=42)
+
+        # Sort: treat same-color labels as one group for ordering purposes (e.g. CEU+GBR
+        # share a color → their neighbor counts are summed). Groups ordered by frequency
+        # (most samples with that dominant color first), then by combined color-group count
+        # desc (purest first), then sample_id for ties.
+        if sort_by_dominant and len(panel_df) > 0:
+            counts = panel_df[ordered_labels]
+
+            # Build color → [labels] mapping using only labels present in this embedding
+            from collections import defaultdict
+            color_to_labels: Dict[str, List[str]] = defaultdict(list)
+            for label in ordered_labels:
+                color_to_labels[fit_color_dict.get(label, '#888888')].append(label)
+
+            # Per-sample sum of neighbor counts for each color group
+            color_count_df = pd.DataFrame(
+                {color: counts[lbls].sum(axis=1) for color, lbls in color_to_labels.items()},
+                index=panel_df.index,
+            )
+
+            panel_df['_dom_color'] = color_count_df.idxmax(axis=1)
+            panel_df['_dom_color_count'] = color_count_df.max(axis=1)
+
+            # Rank colors by how many samples have that color as dominant (most = rank 0)
+            dom_color_freq = panel_df['_dom_color'].value_counts()
+            dom_color_rank = {c: r for r, c in enumerate(dom_color_freq.index)}
+            panel_df['_dom_color_rank'] = panel_df['_dom_color'].map(dom_color_rank)
+
+            panel_df = (
+                panel_df.reset_index()
+                .sort_values(
+                    ['_dom_color_rank', '_dom_color_count', 'sample_id'],
+                    ascending=[True, False, True],
+                )
+                .set_index('sample_id')
+                .drop(columns=['_dom_color', '_dom_color_count', '_dom_color_rank'])
+            )
+
+        n = len(panel_df)
+        plot_data = panel_df[ordered_labels].reset_index(drop=True)
+
+        # Only include labels present in this panel for the legend
+        present_cols = [col for col in ordered_labels if plot_data[col].sum() > 0]
+
+        plot_data.plot(
+            kind='bar',
+            stacked=True,
+            ax=ax,
+            width=1.0,
+            edgecolor='none',
+            color=color_list,
+            legend=False,
+        )
+        ax.set_ylim(0, k)
+
+        present_set = set(present_cols)
+        # Legend follows colormap key order; bars stay frequency-ordered (separate concern)
+        legend_patches = [
+            Patch(facecolor=fit_color_dict[col], label=col)
+            for col in fit_color_dict
+            if col in present_set
+        ]
+        # Append any present labels not in the colormap at the end
+        in_cmap = set(fit_color_dict)
+        legend_patches += [
+            Patch(facecolor='#888888', label=col)
+            for col in ordered_labels
+            if col in present_set and col not in in_cmap
+        ]
+        n_legend = len(legend_patches)
+        if n_legend <= 15:
+            ncol = 1
+        elif n_legend <= 30:
+            ncol = 2
+        elif n_legend <= 45:
+            ncol = 3
+        else:
+            ncol = 4
+        ax.legend(
+            handles=legend_patches,
+            fontsize=7,
+            framealpha=0.9,
+            loc='center left',
+            bbox_to_anchor=(1.02, 0.5),
+            ncol=ncol,
+        )
+        ax.set_title(f"{project_name}: {panel_label} ({n} individuals)", fontsize=10)
+        ax.set_xticks([])
+        ax.set_xticklabels([])
+        ax.set_ylabel(f"Neighbor count (K={k})")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    logger.info(f"Saved KNN composition plot: {output_path}")
+    return output_path
+
+
 def plot_projection(
     fit_embedding: Union[pd.DataFrame, str, Path],
     project_embedding: Union[pd.DataFrame, str, Path],

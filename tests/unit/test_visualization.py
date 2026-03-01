@@ -6,7 +6,7 @@ import pandas as pd
 import pandas.plotting._core as plotting_core
 from pathlib import Path
 
-from manifold_genetics.visualization import visualize, plot_embedding, plot_admixture_bar_grid, plot_pca_pairs
+from manifold_genetics.visualization import visualize, plot_embedding, plot_admixture_bar_grid, plot_pca_pairs, plot_knn_composition
 
 
 class TestVisualization:
@@ -182,3 +182,39 @@ class TestVisualization:
         assert k2_colors[1] == k3_colors[1]
         # New component should get a distinct color.
         assert k3_colors[0] not in {k3_colors[1], k3_colors[2]}
+
+    def test_plot_knn_composition_basic(self, temp_dir):
+        """plot_knn_composition runs without error on small synthetic data."""
+        import json
+        rng = np.random.default_rng(42)
+        n_fit, n_proj, d = 60, 30, 2
+        fit_label_arr = np.where(np.arange(n_fit) < 30, 'PopA', 'PopB')
+        proj_label_arr = np.where(np.arange(n_proj) < 15, 'GroupX', 'GroupY')
+
+        fit_emb = pd.DataFrame(rng.standard_normal((n_fit, d)), columns=['dim_1', 'dim_2'])
+        fit_emb.insert(0, 'sample_id', [f'F{i}' for i in range(n_fit)])
+        proj_emb = pd.DataFrame(rng.standard_normal((n_proj, d)), columns=['dim_1', 'dim_2'])
+        proj_emb.insert(0, 'sample_id', [f'P{i}' for i in range(n_proj)])
+
+        fit_lbl = pd.DataFrame({'sample_id': [f'F{i}' for i in range(n_fit)], 'Pop': fit_label_arr})
+        proj_lbl = pd.DataFrame({'sample_id': [f'P{i}' for i in range(n_proj)], 'Group': proj_label_arr})
+        cmap = {'Pop': {'PopA': '#FF0000', 'PopB': '#0000FF'}}
+
+        for df, name in [(fit_emb, 'fe'), (proj_emb, 'pe'), (fit_lbl, 'fl'), (proj_lbl, 'pl')]:
+            df.to_csv(temp_dir / f'{name}.csv', index=False)
+        (temp_dir / 'cmap.json').write_text(json.dumps(cmap))
+
+        out = temp_dir / 'knn_comp.png'
+        result = plot_knn_composition(
+            fit_embedding=temp_dir / 'fe.csv',
+            project_embedding=temp_dir / 'pe.csv',
+            fit_labels=temp_dir / 'fl.csv',
+            project_labels=temp_dir / 'pl.csv',
+            fit_colormap=temp_dir / 'cmap.json',
+            fit_label_column='Pop',
+            project_label_column='Group',
+            output_path=out,
+            k=5,
+        )
+        assert out.exists()
+        assert result == out
