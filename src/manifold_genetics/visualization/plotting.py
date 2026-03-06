@@ -18,7 +18,7 @@ from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.optimize import linear_sum_assignment
 
-from ..utils.io import read_admixture_csv, read_colormap, read_embedding_csv, read_labels_csv
+from ..utils.io import _coerce_ids_to_str, read_admixture_csv, read_colormap, read_embedding_csv, read_labels_csv
 
 matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
@@ -925,9 +925,9 @@ def plot_knn_composition(
 
     # Step 2 — Align fit labels to fit embedding
     fit_emb_df = fit_emb_df.copy()
-    fit_emb_df['sample_id'] = fit_emb_df['sample_id'].astype(str)
+    fit_emb_df['sample_id'] = _coerce_ids_to_str(fit_emb_df['sample_id'])
     fit_labels_df = fit_labels_df.copy()
-    fit_labels_df['sample_id'] = fit_labels_df['sample_id'].astype(str)
+    fit_labels_df['sample_id'] = _coerce_ids_to_str(fit_labels_df['sample_id'])
 
     fit_merged = fit_emb_df.merge(fit_labels_df[['sample_id', fit_label_column]], on='sample_id', how='inner')
     if fit_merged.empty:
@@ -944,9 +944,9 @@ def plot_knn_composition(
 
     # Step 3 — Align project labels to project embedding
     proj_emb_df = proj_emb_df.copy()
-    proj_emb_df['sample_id'] = proj_emb_df['sample_id'].astype(str)
+    proj_emb_df['sample_id'] = _coerce_ids_to_str(proj_emb_df['sample_id'])
     proj_labels_df = proj_labels_df.copy()
-    proj_labels_df['sample_id'] = proj_labels_df['sample_id'].astype(str)
+    proj_labels_df['sample_id'] = _coerce_ids_to_str(proj_labels_df['sample_id'])
 
     proj_merged = proj_emb_df.merge(
         proj_labels_df[['sample_id', project_label_column]], on='sample_id', how='inner'
