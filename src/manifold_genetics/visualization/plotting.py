@@ -949,6 +949,12 @@ def plot_knn_composition(
     proj_group_labels = proj_merged[project_label_column].to_numpy()
 
     # Step 3 — KNN index
+    n_fit_samples = fit_coords.shape[0]
+    if k > n_fit_samples:
+        raise ValueError(
+            f"k (n_neighbors={k}) must be <= number of fit samples ({n_fit_samples}) "
+            "when building the NearestNeighbors index."
+        )
     knn = NearestNeighbors(n_neighbors=k, metric='euclidean', algorithm='auto')
     knn.fit(fit_coords)
     indices = knn.kneighbors(proj_coords, return_distance=False)  # (N_proj, k)
