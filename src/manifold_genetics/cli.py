@@ -19,6 +19,7 @@ from .visualization import (
     visualize,
     plot_pca_pairs,
     plot_projection,
+    plot_knn_composition,
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
 )
@@ -29,6 +30,7 @@ from .utils.tools import ToolResolver
 from .utils.validation import (
     validate_admixture_csv,
     validate_colormap_json,
+    validate_column_in_csv,
     validate_embedding_csv,
     validate_geographic_csv,
     validate_label_column,
@@ -234,6 +236,57 @@ def cmd_plot_admixture_embedding(args):
         component_colormap=getattr(args, "component_colormap", None),
     )
     print(f"Admixture-embedding plot written to: {output_path}")
+    return 0
+
+
+def cmd_plot_knn_composition(args):
+    """Plot KNN label composition stacked bars for project individuals."""
+    setup_logging(args.verbose)
+
+    # Validate inputs
+    validate_embedding_csv(args.fit_embedding)
+    validate_embedding_csv(args.project_embedding)
+    validate_labels_csv(args.fit_labels)
+    validate_labels_csv(args.project_labels)
+    validate_colormap_json(args.fit_colormap)
+    validate_label_column(args.fit_label_column, args.fit_labels, args.fit_colormap)
+    validate_column_in_csv(args.project_label_column, args.project_labels)
+    validate_sample_id_overlap(
+        args.fit_embedding,
+        args.fit_labels,
+        "fit embedding",
+        "fit labels",
+    )
+    validate_sample_id_overlap(
+        args.project_embedding,
+        args.project_labels,
+        "project embedding",
+        "project labels",
+    )
+
+    # Resolve output path
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        proj_emb = Path(args.project_embedding)
+        output_path = proj_emb.parent / f"{proj_emb.stem}_knn_composition.png"
+
+    result = plot_knn_composition(
+        fit_embedding=args.fit_embedding,
+        project_embedding=args.project_embedding,
+        fit_labels=args.fit_labels,
+        project_labels=args.project_labels,
+        fit_colormap=args.fit_colormap,
+        fit_label_column=args.fit_label_column,
+        project_label_column=args.project_label_column,
+        output_path=output_path,
+        project_label_subset=args.project_label_subset,
+        k=args.k,
+        sort_by_dominant=args.sort_by_dominant,
+        subsample_per_group=args.subsample_per_group,
+        project_name=args.project_name,
+    )
+    print(f"KNN composition plot saved: {result}")
     return 0
 
 
@@ -757,6 +810,49 @@ def main():
     )
     plot_admix_emb_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_admix_emb_parser.set_defaults(func=cmd_plot_admixture_embedding)
+
+    # KNN composition plot
+    plot_knn_parser = subparsers.add_parser(
+        "plot-knn-composition",
+        help="Plot KNN label composition for project individuals (stacked bars)",
+    )
+    plot_knn_parser.add_argument("--fit-embedding", required=True, help="Fit embedding CSV")
+    plot_knn_parser.add_argument("--project-embedding", required=True, help="Project embedding CSV")
+    plot_knn_parser.add_argument("--fit-labels", required=True, help="Fit labels CSV")
+    plot_knn_parser.add_argument(
+        "--fit-label-column", required=True,
+        help="Fine-grained label column in fit labels (e.g. Population)",
+    )
+    plot_knn_parser.add_argument("--project-labels", required=True, help="Project labels CSV")
+    plot_knn_parser.add_argument(
+        "--project-label-column", required=True,
+        help="Coarse label column in project labels (e.g. self_described_ancestry)",
+    )
+    plot_knn_parser.add_argument(
+        "--fit-colormap", required=True,
+        help="Colormap JSON (must contain fit-label-column key)",
+    )
+    plot_knn_parser.add_argument("--k", type=int, default=10, help="Number of nearest neighbors (default: 10)")
+    plot_knn_parser.add_argument(
+        "--project-label-subset", nargs="+",
+        help="Subset of project labels to include as panels (default: all)",
+    )
+    plot_knn_parser.add_argument(
+        "--project-name", default="Project",
+        help="Name for project dataset used in panel titles (default: Project)",
+    )
+    plot_knn_parser.add_argument(
+        "--no-sort-by-dominant", dest="sort_by_dominant", action="store_false",
+        help="Disable sorting bars by dominant label within each panel",
+    )
+    plot_knn_parser.set_defaults(sort_by_dominant=True)
+    plot_knn_parser.add_argument(
+        "--subsample-per-group", type=int,
+        help="Randomly subsample each panel to this many individuals (optional)",
+    )
+    plot_knn_parser.add_argument("--output", help="Output PNG path (default: <project_embedding_stem>_knn_composition.png)")
+    plot_knn_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    plot_knn_parser.set_defaults(func=cmd_plot_knn_composition)
 
     # Embedding command
     embed_parser = subparsers.add_parser("embed", help="Run manifold embedding")

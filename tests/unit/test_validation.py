@@ -11,6 +11,7 @@ from manifold_genetics.utils.validation import (
     validate_admixture_csv,
     validate_colormap_json,
     validate_embedding_csv,
+    validate_column_in_csv,
     validate_geographic_csv,
     validate_label_column,
     validate_labels_colormap_match,
@@ -262,6 +263,39 @@ class TestValidateLabelColumn:
 
 
 # ---------------------------------------------------------------------------
+# validate_column_in_csv (column-only check, no colormap)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateColumnInCsv:
+    def test_valid_column_passes(self, tmp_path):
+        labels_path = tmp_path / "labels.csv"
+        pd.DataFrame(
+            {"sample_id": ["s1", "s2"], "Population": ["A", "B"]}
+        ).to_csv(labels_path, index=False)
+
+        validate_column_in_csv("Population", labels_path)
+
+    def test_column_missing_from_labels_raises(self, tmp_path):
+        labels_path = tmp_path / "labels.csv"
+        pd.DataFrame(
+            {"sample_id": ["s1"], "Region": ["North"]}
+        ).to_csv(labels_path, index=False)
+
+        with pytest.raises(ValidationError, match="not found in labels"):
+            validate_column_in_csv("Population", labels_path)
+
+    def test_misspelled_column_suggests_correction(self, tmp_path):
+        labels_path = tmp_path / "labels.csv"
+        pd.DataFrame(
+            {"sample_id": ["s1"], "Population": ["A"]}
+        ).to_csv(labels_path, index=False)
+
+        with pytest.raises(ValidationError, match="Did you mean.*Population"):
+            validate_column_in_csv("Populaton", labels_path)
+
+
+# ---------------------------------------------------------------------------
 # validate_labels_colormap_match (all-keys check)
 # ---------------------------------------------------------------------------
 
@@ -368,7 +402,7 @@ class TestValidateSampleIdOverlap:
         )
         with caplog.at_level(logging.WARNING):
             validate_sample_id_overlap(path1, path2, "file1", "file2")
-        assert "Low sample_id overlap" in caplog.text
+        assert "Sample_id mismatch" in caplog.text
 
     def test_partial_overlap_passes(self, tmp_path):
         path1 = tmp_path / "a.csv"

@@ -15,6 +15,21 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
+def _coerce_ids_to_str(series: pd.Series) -> pd.Series:
+    """Coerce a sample_id Series to string, handling float representation.
+
+    Pandas reads integer IDs as float64 when the column has missing values
+    (e.g., 123456.0). A naive .astype(str) yields "123456.0" instead of
+    "123456", causing merge failures. This converts whole-number floats via
+    int before stringifying. Non-integer floats (e.g. 1.2) are left as-is.
+    """
+    if pd.api.types.is_float_dtype(series):
+        non_null = series.dropna()
+        if len(non_null) > 0 and (non_null == non_null.astype(int)).all():
+            return series.apply(lambda x: str(int(x)) if pd.notna(x) else str(x))
+    return series.astype(str)
+
+
 def _append_extension(path: Union[str, Path], ext: str) -> Path:
     """
     Append an extension to a path without stripping existing suffixes.
@@ -87,9 +102,9 @@ def read_embedding_csv(file_path: Union[str, Path]) -> pd.DataFrame:
     if not dim_cols:
         raise ValueError(f"CSV must have 'dim_' columns. Found: {list(df.columns)}")
 
-    # Coerce sample_id to str to prevent int64/object merge failures.
+    # Coerce sample_id to str to prevent int64/float64/object merge failures.
     if 'sample_id' in df.columns:
-        df['sample_id'] = df['sample_id'].astype(str)
+        df['sample_id'] = _coerce_ids_to_str(df['sample_id'])
 
     return df
 
@@ -157,8 +172,8 @@ def read_admixture_csv(file_path: Union[str, Path]) -> pd.DataFrame:
             f"Admixture CSV missing 'sample_id' column. Found: {list(df.columns)}"
         )
 
-    # Coerce sample_id to str to prevent int64/object merge failures.
-    df['sample_id'] = df['sample_id'].astype(str)
+    # Coerce sample_id to str to prevent int64/float64/object merge failures.
+    df['sample_id'] = _coerce_ids_to_str(df['sample_id'])
 
     return df
 
@@ -192,7 +207,9 @@ def read_labels_csv(file_path: Union[str, Path]) -> pd.DataFrame:
         )
         df = df.set_index(df.columns[0])
 
-    df.index = df.index.astype(str)
+    index_name = df.index.name
+    df.index = _coerce_ids_to_str(df.index.to_series()).values
+    df.index.name = index_name
 
     return df
 
