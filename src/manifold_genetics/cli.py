@@ -30,6 +30,7 @@ from .utils.tools import ToolResolver
 from .utils.validation import (
     validate_admixture_csv,
     validate_colormap_json,
+    validate_column_in_csv,
     validate_embedding_csv,
     validate_geographic_csv,
     validate_label_column,
@@ -249,6 +250,7 @@ def cmd_plot_knn_composition(args):
     validate_labels_csv(args.project_labels)
     validate_colormap_json(args.fit_colormap)
     validate_label_column(args.fit_label_column, args.fit_labels, args.fit_colormap)
+    validate_column_in_csv(args.project_label_column, args.project_labels)
     validate_sample_id_overlap(
         args.fit_embedding,
         args.fit_labels,

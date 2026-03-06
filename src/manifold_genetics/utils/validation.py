@@ -13,6 +13,10 @@ from typing import List, Optional, Union
 
 import pandas as pd
 
+# NOTE: `_coerce_ids_to_str` is defined in `utils.io` with a leading underscore,
+# but is intentionally treated as a stable internal API shared with this module
+# (and tests) for consistent ID coercion behavior. If you change its semantics
+# or signature in `io.py`, review callers here and in tests.
 from .io import _coerce_ids_to_str
 
 logger = logging.getLogger(__name__)
@@ -374,6 +378,31 @@ def validate_label_column(
     _check_label_values_have_colors(labels_path, colormap, [label_column])
 
 
+def validate_column_in_csv(
+    column: str,
+    labels_path: Union[str, Path],
+) -> None:
+    """Validate that a column exists in a labels CSV.
+
+    Use this when a CLI command targets a column that does not have an
+    associated colormap (e.g. ``--project-label-column`` in
+    ``plot-knn-composition``). Errors if the column is missing from the CSV.
+    """
+    labels_path = Path(labels_path)
+    label_columns = _read_csv_columns(labels_path)
+
+    if column not in label_columns:
+        suggestions = _fuzzy_match(column, label_columns)
+        msg = (
+            f"Label column '{column}' not found in labels CSV.\n\n"
+            f"  Labels file: {labels_path}\n"
+            f"  Columns found: {label_columns}"
+        )
+        if suggestions:
+            msg += f"\n\n  Did you mean: '{suggestions[0]}'?"
+        raise ValidationError(msg)
+
+
 def validate_labels_colormap_match(
     labels_path: Union[str, Path],
     colormap_path: Union[str, Path],
@@ -423,7 +452,8 @@ def validate_sample_id_overlap(
     """Validate that two files share sample_ids.
 
     Raises ValidationError if there is zero overlap.
-    Logs a warning if overlap is less than 50% of the smaller file.
+    Logs a warning if any samples are dropped (i.e. the overlap is not identical
+    to both files).
     """
     path1 = Path(path1)
     path2 = Path(path2)
