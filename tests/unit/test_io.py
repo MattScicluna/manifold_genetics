@@ -10,6 +10,7 @@ from manifold_genetics.utils.io import (
     write_embedding_csv,
     read_labels_csv,
     read_colormap,
+    _coerce_ids_to_str,
 )
 
 
@@ -155,3 +156,80 @@ class TestColormapIO:
             for color_value in colors.values():
                 assert color_value.startswith("#")
                 assert len(color_value) == 7  # #RRGGBB
+
+
+class TestCoerceIdsToStr:
+    """Tests for _coerce_ids_to_str helper.
+
+    The core problem: when a CSV has integer sample IDs, pandas may load them
+    as float64 if any NaNs are present (legacy pandas behaviour). A naive
+    .astype(str) then yields "123456.0" instead of "123456", breaking merges.
+    """
+
+    def test_int64_unchanged(self):
+        """int64 series → plain string conversion, no '.0' suffix."""
+        s = pd.Series([0, 1, 123456], dtype=np.int64)
+        result = _coerce_ids_to_str(s)
+        assert list(result) == ["0", "1", "123456"]
+
+    def test_float64_whole_numbers(self):
+        """float64 whole numbers (e.g. from NaN-containing int column) → no '.0' suffix."""
+        s = pd.Series([0.0, 1.0, 123456.0], dtype=np.float64)
+        result = _coerce_ids_to_str(s)
+        assert list(result) == ["0", "1", "123456"]
+
+    def test_float64_non_integer_values_preserved(self):
+        """float64 non-integer values must NOT be truncated to int."""
+        s = pd.Series([1.2, 3.7, 99.9], dtype=np.float64)
+        result = _coerce_ids_to_str(s)
+        assert list(result) == ["1.2", "3.7", "99.9"]
+
+    def test_float64_whole_numbers_with_nan(self):
+        """float64 whole numbers with NaN → integer strings, NaN preserved as 'nan'."""
+        s = pd.Series([0.0, np.nan, 2.0], dtype=np.float64)
+        result = _coerce_ids_to_str(s)
+        assert result.iloc[0] == "0"
+        assert result.iloc[2] == "2"
+        # NaN position should not crash and should be some string
+        assert isinstance(result.iloc[1], str)
+
+    def test_object_string_series_unchanged(self):
+        """String (object dtype) series passes through unchanged."""
+        s = pd.Series(["SAMPLE_001", "SAMPLE_002", "IND_999"], dtype=object)
+        result = _coerce_ids_to_str(s)
+        assert list(result) == ["SAMPLE_001", "SAMPLE_002", "IND_999"]
+
+    def test_mixed_integer_ids_merge_after_coercion(self, temp_dir):
+        """End-to-end: PCA CSV with float64 IDs merges correctly with string labels.
+
+        Simulates the real bug: FlashPCA writes integer IDs → pandas reads as
+        float64 when NaNs exist → naive str coercion breaks the merge.
+        """
+        # PCA file: sample_ids stored as float64 (as if loaded from a CSV with NaNs elsewhere)
+        pca_ids_float = pd.Series([100.0, 200.0, 300.0], dtype=np.float64)
+        pca_df = pd.DataFrame({
+            "sample_id": pca_ids_float,
+            "dim_1": [0.1, 0.2, 0.3],
+            "dim_2": [0.4, 0.5, 0.6],
+        })
+        pca_path = temp_dir / "pca_float_ids.csv"
+        pca_df.to_csv(pca_path, index=False)
+
+        # Labels file: same IDs stored as plain integers / strings
+        labels_df = pd.DataFrame({
+            "sample_id": ["100", "200", "300"],
+            "Population": ["A", "B", "C"],
+        })
+        labels_path = temp_dir / "labels_str_ids.csv"
+        labels_df.to_csv(labels_path, index=False)
+
+        pca_read = read_embedding_csv(pca_path)
+        labels_read = read_labels_csv(labels_path)
+        labels_read = labels_read.reset_index()  # bring sample_id back as column
+
+        merged = pca_read.merge(labels_read, on="sample_id", how="inner")
+        assert len(merged) == 3, (
+            f"Expected all 3 samples to merge, got {len(merged)}. "
+            f"PCA IDs: {pca_read['sample_id'].tolist()}, "
+            f"Labels IDs: {labels_read['sample_id'].tolist()}"
+        )

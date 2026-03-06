@@ -368,7 +368,7 @@ class TestValidateSampleIdOverlap:
         )
         with caplog.at_level(logging.WARNING):
             validate_sample_id_overlap(path1, path2, "file1", "file2")
-        assert "Low sample_id overlap" in caplog.text
+        assert "Sample_id mismatch" in caplog.text
 
     def test_partial_overlap_passes(self, tmp_path):
         path1 = tmp_path / "a.csv"
