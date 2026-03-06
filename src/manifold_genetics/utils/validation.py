@@ -423,7 +423,8 @@ def validate_sample_id_overlap(
     """Validate that two files share sample_ids.
 
     Raises ValidationError if there is zero overlap.
-    Logs a warning if overlap is less than 50% of the smaller file.
+    Logs a warning if any samples are dropped (i.e. the overlap is not identical
+    to both files).
     """
     path1 = Path(path1)
     path2 = Path(path2)
