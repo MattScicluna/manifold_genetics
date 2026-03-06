@@ -219,6 +219,71 @@ class TestVisualization:
         assert out.exists()
         assert result == out
 
+    def test_plot_knn_composition_empty_fit_merge_raises(self, temp_dir):
+        """plot_knn_composition raises ValueError with actionable message when fit merge is empty."""
+        import json
+        rng = np.random.default_rng(0)
+        n_fit, n_proj, d = 10, 5, 2
+
+        fit_emb = pd.DataFrame(rng.standard_normal((n_fit, d)), columns=['dim_1', 'dim_2'])
+        fit_emb.insert(0, 'sample_id', [f'FIT_{i}' for i in range(n_fit)])
+        proj_emb = pd.DataFrame(rng.standard_normal((n_proj, d)), columns=['dim_1', 'dim_2'])
+        proj_emb.insert(0, 'sample_id', [f'P{i}' for i in range(n_proj)])
+
+        # Deliberately mismatched sample_ids for fit labels
+        fit_lbl = pd.DataFrame({'sample_id': [f'NOMATCH_{i}' for i in range(n_fit)], 'Pop': ['A'] * n_fit})
+        proj_lbl = pd.DataFrame({'sample_id': [f'P{i}' for i in range(n_proj)], 'Group': ['X'] * n_proj})
+        cmap = {'Pop': {'A': '#FF0000'}}
+
+        for df, name in [(fit_emb, 'fe'), (proj_emb, 'pe'), (fit_lbl, 'fl'), (proj_lbl, 'pl')]:
+            df.to_csv(temp_dir / f'{name}.csv', index=False)
+        (temp_dir / 'cmap.json').write_text(json.dumps(cmap))
+
+        with pytest.raises(ValueError, match="fit_emb_df.*fit_labels_df.*sample_id.*zero rows"):
+            plot_knn_composition(
+                fit_embedding=temp_dir / 'fe.csv',
+                project_embedding=temp_dir / 'pe.csv',
+                fit_labels=temp_dir / 'fl.csv',
+                project_labels=temp_dir / 'pl.csv',
+                fit_colormap=temp_dir / 'cmap.json',
+                fit_label_column='Pop',
+                project_label_column='Group',
+                output_path=temp_dir / 'out.png',
+                k=3,
+            )
+
+    def test_plot_knn_composition_empty_proj_merge_raises(self, temp_dir):
+        """plot_knn_composition raises ValueError with actionable message when proj merge is empty."""
+        import json
+        rng = np.random.default_rng(1)
+        n_fit, n_proj, d = 10, 5, 2
+
+        fit_emb = pd.DataFrame(rng.standard_normal((n_fit, d)), columns=['dim_1', 'dim_2'])
+        fit_emb.insert(0, 'sample_id', [f'F{i}' for i in range(n_fit)])
+        proj_emb = pd.DataFrame(rng.standard_normal((n_proj, d)), columns=['dim_1', 'dim_2'])
+        proj_emb.insert(0, 'sample_id', [f'PROJ_{i}' for i in range(n_proj)])
+
+        fit_lbl = pd.DataFrame({'sample_id': [f'F{i}' for i in range(n_fit)], 'Pop': ['A'] * n_fit})
+        # Deliberately mismatched sample_ids for proj labels
+        proj_lbl = pd.DataFrame({'sample_id': [f'NOMATCH_{i}' for i in range(n_proj)], 'Group': ['X'] * n_proj})
+        cmap = {'Pop': {'A': '#FF0000'}}
+
+        for df, name in [(fit_emb, 'fe'), (proj_emb, 'pe'), (fit_lbl, 'fl'), (proj_lbl, 'pl')]:
+            df.to_csv(temp_dir / f'{name}.csv', index=False)
+        (temp_dir / 'cmap.json').write_text(json.dumps(cmap))
+
+        with pytest.raises(ValueError, match="proj_emb_df.*proj_labels_df.*sample_id.*zero rows"):
+            plot_knn_composition(
+                fit_embedding=temp_dir / 'fe.csv',
+                project_embedding=temp_dir / 'pe.csv',
+                fit_labels=temp_dir / 'fl.csv',
+                project_labels=temp_dir / 'pl.csv',
+                fit_colormap=temp_dir / 'cmap.json',
+                fit_label_column='Pop',
+                project_label_column='Group',
+                output_path=temp_dir / 'out.png',
+                k=3,
+            )
     def test_plot_knn_composition_float_sample_ids(self, temp_dir):
         """plot_knn_composition handles float64 whole-number sample_id values without error."""
         import json

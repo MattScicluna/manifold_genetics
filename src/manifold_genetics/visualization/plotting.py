@@ -930,6 +930,14 @@ def plot_knn_composition(
     fit_labels_df['sample_id'] = fit_labels_df['sample_id'].astype(str)
 
     fit_merged = fit_emb_df.merge(fit_labels_df[['sample_id', fit_label_column]], on='sample_id', how='inner')
+    if fit_merged.empty:
+        n_emb = len(fit_emb_df['sample_id'].unique())
+        n_lbl = len(fit_labels_df['sample_id'].unique())
+        raise ValueError(
+            f"Merging fit_emb_df and fit_labels_df on 'sample_id' produced zero rows. "
+            f"fit_emb_df has {n_emb} unique sample_id(s), fit_labels_df has {n_lbl} unique sample_id(s), "
+            "but none overlap. Check that both inputs share the same sample identifiers."
+        )
     dim_cols = [c for c in fit_merged.columns if c.startswith('dim_')]
     fit_coords = fit_merged[dim_cols].to_numpy()
     aligned_fit_labels = fit_merged[fit_label_column].to_numpy()
@@ -943,6 +951,14 @@ def plot_knn_composition(
     proj_merged = proj_emb_df.merge(
         proj_labels_df[['sample_id', project_label_column]], on='sample_id', how='inner'
     )
+    if proj_merged.empty:
+        n_emb = len(proj_emb_df['sample_id'].unique())
+        n_lbl = len(proj_labels_df['sample_id'].unique())
+        raise ValueError(
+            f"Merging proj_emb_df and proj_labels_df on 'sample_id' produced zero rows. "
+            f"proj_emb_df has {n_emb} unique sample_id(s), proj_labels_df has {n_lbl} unique sample_id(s), "
+            "but none overlap. Check that both inputs share the same sample identifiers."
+        )
     proj_dim_cols = [c for c in proj_merged.columns if c.startswith('dim_')]
     proj_coords = proj_merged[proj_dim_cols].to_numpy()
     proj_sample_ids = proj_merged['sample_id'].to_numpy()
