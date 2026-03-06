@@ -13,6 +13,10 @@ from typing import List, Optional, Union
 
 import pandas as pd
 
+# NOTE: `_coerce_ids_to_str` is defined in `utils.io` with a leading underscore,
+# but is intentionally treated as a stable internal API shared with this module
+# (and tests) for consistent ID coercion behavior. If you change its semantics
+# or signature in `io.py`, review callers here and in tests.
 from .io import _coerce_ids_to_str
 
 logger = logging.getLogger(__name__)

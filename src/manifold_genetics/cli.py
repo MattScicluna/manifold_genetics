@@ -251,6 +251,18 @@ def cmd_plot_knn_composition(args):
     validate_colormap_json(args.fit_colormap)
     validate_label_column(args.fit_label_column, args.fit_labels, args.fit_colormap)
     validate_column_in_csv(args.project_label_column, args.project_labels)
+    validate_sample_id_overlap(
+        args.fit_embedding,
+        args.fit_labels,
+        "fit embedding",
+        "fit labels",
+    )
+    validate_sample_id_overlap(
+        args.project_embedding,
+        args.project_labels,
+        "project embedding",
+        "project labels",
+    )
 
     # Resolve output path
     if args.output:

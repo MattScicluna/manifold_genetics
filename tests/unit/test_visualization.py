@@ -218,3 +218,43 @@ class TestVisualization:
         )
         assert out.exists()
         assert result == out
+
+    def test_plot_knn_composition_float_sample_ids(self, temp_dir):
+        """plot_knn_composition handles float64 whole-number sample_id values without error."""
+        import json
+        rng = np.random.default_rng(42)
+        n_fit, n_proj, d = 60, 30, 2
+        fit_label_arr = np.where(np.arange(n_fit) < 30, 'PopA', 'PopB')
+        proj_label_arr = np.where(np.arange(n_proj) < 15, 'GroupX', 'GroupY')
+
+        # Use float64 whole-number sample IDs to exercise type-coercion behavior.
+        fit_ids = np.arange(1, n_fit + 1, dtype=float)
+        proj_ids = np.arange(1, n_proj + 1, dtype=float)
+
+        fit_emb = pd.DataFrame(rng.standard_normal((n_fit, d)), columns=['dim_1', 'dim_2'])
+        fit_emb.insert(0, 'sample_id', fit_ids)
+        proj_emb = pd.DataFrame(rng.standard_normal((n_proj, d)), columns=['dim_1', 'dim_2'])
+        proj_emb.insert(0, 'sample_id', proj_ids)
+
+        fit_lbl = pd.DataFrame({'sample_id': fit_ids, 'Pop': fit_label_arr})
+        proj_lbl = pd.DataFrame({'sample_id': proj_ids, 'Group': proj_label_arr})
+        cmap = {'Pop': {'PopA': '#FF0000', 'PopB': '#0000FF'}}
+
+        for df, name in [(fit_emb, 'fe_f'), (proj_emb, 'pe_f'), (fit_lbl, 'fl_f'), (proj_lbl, 'pl_f')]:
+            df.to_csv(temp_dir / f'{name}.csv', index=False)
+        (temp_dir / 'cmap_f.json').write_text(json.dumps(cmap))
+
+        out = temp_dir / 'knn_comp_float_ids.png'
+        result = plot_knn_composition(
+            fit_embedding=temp_dir / 'fe_f.csv',
+            project_embedding=temp_dir / 'pe_f.csv',
+            fit_labels=temp_dir / 'fl_f.csv',
+            project_labels=temp_dir / 'pl_f.csv',
+            fit_colormap=temp_dir / 'cmap_f.json',
+            fit_label_column='Pop',
+            project_label_column='Group',
+            output_path=out,
+            k=5,
+        )
+        assert out.exists()
+        assert result == out
