@@ -862,6 +862,7 @@ def main():
             "Pass --component-colormap (exported by plot-admixture) to use the same\n"
             "white-to-component-colour gradients as the bar chart."
         ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     plot_admix_emb_parser.add_argument("--embedding", required=True, help="Embedding CSV (sample_id, dim_1, dim_2, ...)")
     plot_admix_emb_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
