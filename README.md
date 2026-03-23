@@ -219,6 +219,9 @@ uv run manifold-genetics plot-admixture-embedding \
     --component-colormap examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
 # 5) Overlay reference (fit) and target (project) embeddings (cross-cohort comparison)
+# Note: In practice, --fit-embedding and --project-embedding should come from different
+# biobanks (e.g. fit on HGDP+1KGP, project on UKBB). The same cohort is used here for
+# demonstrative purposes only.
 uv run manifold-genetics plot-projection \
     --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
     --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
@@ -231,6 +234,9 @@ uv run manifold-genetics plot-projection \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/projection.png
 
 # 6) KNN label composition (how well reference labels characterise project individuals)
+# Note: In practice, --fit-embedding and --project-embedding should come from different
+# biobanks (e.g. fit on HGDP+1KGP, project on UKBB). The same cohort is used here for
+# demonstrative purposes only.
 uv run manifold-genetics plot-knn-composition \
     --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
     --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
