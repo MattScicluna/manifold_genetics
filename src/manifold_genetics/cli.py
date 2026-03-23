@@ -708,7 +708,13 @@ def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="manifold-genetics",
-        description="Genetic analysis with PCA, Admixture, and manifold learning",
+        description=(
+            "Genetic analysis with PCA, Neural Admixture, and manifold learning.\n\n"
+            "Run 'manifold-genetics --help' for this list, or\n"
+            "'manifold-genetics <subcommand> --help' (or with '-h' instead of '--help') for\n"
+            "subcommand-specific options and usage examples."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
@@ -716,8 +722,30 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # PCA command
-    pca_parser = subparsers.add_parser("pca", help="Run PCA")
-    pca_parser.add_argument("--input", help="Input PLINK prefix (fit + project)")
+    pca_parser = subparsers.add_parser(
+        "pca",
+        help="Run PCA",
+        description=(
+            "Run FlashPCA on a PLINK dataset.\n\n"
+            "Fits a PCA model on the fit set and projects it onto the project set\n"
+            "(or the same set when only --input is given). Outputs standardised CSV\n"
+            "files with columns: sample_id, dim_1, dim_2, ..., dim_N."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  # Fit and project on the same dataset\n"
+            "  manifold-genetics pca --input data/all --output results/pca/pca_50.csv\n\n"
+            "  # Fit on one set, project another\n"
+            "  manifold-genetics pca \\\n"
+            "      --fit-plink data/fit --project-plink data/project \\\n"
+            "      --fit-output results/pca/fit_pca_50.csv \\\n"
+            "      --project-output results/pca/transform_pca_50.csv \\\n"
+            "      --flashpca-output-dir results/pca/flashpca_outputs \\\n"
+            "      --n-pcs 50"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pca_parser.add_argument("--input", help="Input PLINK prefix — fits and projects on the same dataset")
     pca_parser.add_argument(
         "--fit-plink", help="PLINK prefix to fit PCA (defaults to --input)"
     )
@@ -748,7 +776,28 @@ def main():
     pca_parser.set_defaults(func=cmd_pca)
 
     # Admixture command
-    admix_parser = subparsers.add_parser("admixture", help="Run neural admixture")
+    admix_parser = subparsers.add_parser(
+        "admixture",
+        help="Run neural admixture",
+        description=(
+            "Run Neural Admixture for K in [k-min, k-max].\n\n"
+            "Fits models on the fit set and infers ancestry proportions (Q matrices) for\n"
+            "both fit and project sets. Outputs one CSV per K with columns:\n"
+            "sample_id, component_1, ..., component_K (values sum to 1.0)."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  manifold-genetics admixture \\\n"
+            "      --fit-plink data/fit --project-plink data/project \\\n"
+            "      --neuraladmixture-output-dir results/admixture/checkpoints \\\n"
+            "      --fit-output results/admixture/fit \\\n"
+            "      --project-output results/admixture/transform \\\n"
+            "      --k-min 2 --k-max 10 --threads 8\n\n"
+            "  # With GPU and large-dataset batch size\n"
+            "  manifold-genetics admixture ... --num-gpus 1 --neuraladmixture-batch-size 400"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     admix_parser.add_argument("--input", help="Input PLINK prefix (fit + project)")
     admix_parser.add_argument("--fit-plink", help="PLINK prefix to fit admixture (defaults to --input)")
     admix_parser.add_argument("--project-plink", help="PLINK prefix to project admixture (defaults to fit prefix)")
@@ -774,7 +823,18 @@ def main():
     admix_parser.set_defaults(func=cmd_admixture)
 
     # Admixture visualization: stacked barplots
-    plot_admix_parser = subparsers.add_parser("plot-admixture", help="Plot stacked admixture barplots for Ks")
+    plot_admix_parser = subparsers.add_parser(
+        "plot-admixture",
+        help="Plot stacked admixture barplots for Ks",
+        description=(
+            "Plot a grid of stacked ancestry-proportion bar charts, one panel per K.\n\n"
+            "Samples are grouped by --group-column and ordered within groups by\n"
+            "--within-group-order. Group order comes from the colormap JSON.\n"
+            "Use --component-colors-output to save the component-colour assignments so\n"
+            "that plot-admixture-embedding can use matching colours."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     plot_admix_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
     plot_admix_parser.add_argument("--labels", required=True, help="Labels CSV with sample_id and grouping column")
     plot_admix_parser.add_argument("--group-column", required=True, help="Column in labels used to order bars (e.g., Population)")
@@ -793,7 +853,17 @@ def main():
     plot_admix_parser.set_defaults(func=cmd_plot_admixture)
 
     # Admixture visualization: embedding colored by admixture components
-    plot_admix_emb_parser = subparsers.add_parser("plot-admixture-embedding", help="Plot embedding colored by admixture components")
+    plot_admix_emb_parser = subparsers.add_parser(
+        "plot-admixture-embedding",
+        help="Plot embedding colored by admixture components",
+        description=(
+            "Plot a grid of 2-D embedding scatter plots coloured by admixture component\n"
+            "proportion, one subplot per (K, component) combination.\n\n"
+            "Pass --component-colormap (exported by plot-admixture) to use the same\n"
+            "white-to-component-colour gradients as the bar chart."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     plot_admix_emb_parser.add_argument("--embedding", required=True, help="Embedding CSV (sample_id, dim_1, dim_2, ...)")
     plot_admix_emb_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
     plot_admix_emb_parser.add_argument("--k-min", type=int, help="Minimum K (if Ks not provided)")
@@ -815,6 +885,15 @@ def main():
     plot_knn_parser = subparsers.add_parser(
         "plot-knn-composition",
         help="Plot KNN label composition for project individuals (stacked bars)",
+        description=(
+            "For each project individual, find its K nearest neighbours in the fit embedding\n"
+            "and plot the composition of their fine-grained labels as a stacked bar.\n\n"
+            "Useful for assessing how well-characterised project samples are by the reference\n"
+            "panel (e.g. projecting a biobank onto an HGDP reference).\n"
+            "Panels are grouped by --project-label-column; use --project-label-subset to\n"
+            "restrict to specific groups."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     plot_knn_parser.add_argument("--fit-embedding", required=True, help="Fit embedding CSV")
     plot_knn_parser.add_argument("--project-embedding", required=True, help="Project embedding CSV")
@@ -855,7 +934,37 @@ def main():
     plot_knn_parser.set_defaults(func=cmd_plot_knn_composition)
 
     # Embedding command
-    embed_parser = subparsers.add_parser("embed", help="Run manifold embedding")
+    embed_parser = subparsers.add_parser(
+        "embed",
+        help="Run manifold embedding",
+        description=(
+            "Fit a 2-D manifold embedding on a PCA coordinate CSV and project samples into it.\n\n"
+            "Supported methods:\n"
+            "  phate        -- PHATE (recommended for population structure).\n"
+            "                  Key params: --knn, --t, --n-landmark, --random-landmarking\n"
+            "  umap         -- UMAP. Key params: --n-neighbors, --min-dist\n"
+            "  tsne         -- t-SNE. Key params: --perplexity\n"
+            "  diffusion_map -- Diffusion Maps. Key params: --knn\n\n"
+            "Input CSVs must have columns: sample_id, dim_1, dim_2, ... (standard pipeline output)."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  # PHATE: fit on fit set, project the project set\n"
+            "  manifold-genetics embed \\\n"
+            "      --fit-input results/pca/fit_pca_50.csv \\\n"
+            "      --project-input results/pca/transform_pca_50.csv \\\n"
+            "      --project-output results/embeddings/phate_2d.csv \\\n"
+            "      --method phate --knn 100 --t 3\n\n"
+            "  # PHATE with landmarking for large datasets (>10K samples)\n"
+            "  manifold-genetics embed ... --n-landmark 10000 --random-landmarking\n\n"
+            "  # UMAP\n"
+            "  manifold-genetics embed \\\n"
+            "      --fit-input results/pca/transform_pca_50.csv \\\n"
+            "      --project-output results/embeddings/umap_2d.csv \\\n"
+            "      --method umap --n-neighbors 15 --min-dist 0.1"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     embed_parser.add_argument("--input", help="Input CSV file (fit + project)")
     embed_parser.add_argument("--fit-input", help="Input CSV to fit embedding (defaults to --input)")
     embed_parser.add_argument("--project-input", help="Input CSV to project embedding (defaults to fit input)")
@@ -866,10 +975,10 @@ def main():
         "--method",
         choices=["phate", "umap", "tsne", "diffusion_map"],
         default="phate",
-        help="Embedding method",
+        help="Embedding method (default: phate). See description above for method-specific params.",
     )
-    embed_parser.add_argument("--knn", type=int, default=25, help="K nearest neighbors (PHATE/DM)")
-    embed_parser.add_argument("--t", default="auto", help="Diffusion time (PHATE)")
+    embed_parser.add_argument("--knn", type=int, default=25, help="K nearest neighbors (PHATE/diffusion_map; default: 25)")
+    embed_parser.add_argument("--t", default="auto", help="Diffusion time for PHATE: integer or 'auto' (PHATE chooses automatically; default: auto)")
     embed_parser.add_argument(
         "--n-landmark",
         type=str,
@@ -892,7 +1001,24 @@ def main():
     embed_parser.set_defaults(func=cmd_embed)
 
     # Plot command
-    plot_parser = subparsers.add_parser("plot", help="Visualize embeddings")
+    plot_parser = subparsers.add_parser(
+        "plot",
+        help="Visualize embeddings",
+        description=(
+            "Generate publication-ready scatter plots of a 2-D embedding CSV.\n\n"
+            "One figure is produced per label column found in the colormap JSON.\n"
+            "Input CSV must have columns: sample_id, dim_1, dim_2."
+        ),
+        epilog=(
+            "Example:\n"
+            "  manifold-genetics plot \\\n"
+            "      --input results/embeddings/phate_2d.csv \\\n"
+            "      --labels data/labels.csv \\\n"
+            "      --colormap data/colormap.json \\\n"
+            "      --output results/figures/phate.png"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     plot_parser.add_argument("--input", required=True, help="Input embedding CSV")
     plot_parser.add_argument("--labels", required=True, help="Labels CSV file")
     plot_parser.add_argument("--colormap", required=True, help="Colormap JSON file")
@@ -901,7 +1027,14 @@ def main():
     plot_parser.set_defaults(func=cmd_plot)
 
     # Plot PCA command
-    plot_pca_parser = subparsers.add_parser("plot-pca", help="Visualize PCA coordinates")
+    plot_pca_parser = subparsers.add_parser(
+        "plot-pca",
+        help="Visualize PCA coordinates",
+        description=(
+            "Generate pair-plot grids of PCA coordinates, one figure per label column in\n"
+            "the colormap JSON. Plots the first --n-pcs components in pairwise scatter grids."
+        ),
+    )
     plot_pca_parser.add_argument("--input", required=True, help="Input PCA CSV file")
     plot_pca_parser.add_argument("--labels", required=True, help="Labels CSV file")
     plot_pca_parser.add_argument("--colormap", required=True, help="Colormap JSON file")
@@ -911,7 +1044,17 @@ def main():
     plot_pca_parser.set_defaults(func=cmd_plot_pca)
 
     # Plot: projection (fit + project together)
-    plot_proj_parser = subparsers.add_parser("plot-projection", help="Plot fit and projection embeddings together")
+    plot_proj_parser = subparsers.add_parser(
+        "plot-projection",
+        help="Plot fit and projection embeddings together",
+        description=(
+            "Overlay the fit and project embedding sets in a single scatter plot.\n\n"
+            "Fit samples are drawn as filled circles; project samples as hollow markers.\n"
+            "Each set is coloured by its own label column (--fit-column / --project-column)\n"
+            "using separate colormaps, enabling cross-cohort comparison."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     plot_proj_parser.add_argument("--fit-embedding", required=True, help="Fit embedding CSV file")
     plot_proj_parser.add_argument("--project-embedding", required=True, help="Project embedding CSV file")
     plot_proj_parser.add_argument("--fit-labels", required=True, help="Fit labels CSV file")
@@ -931,6 +1074,16 @@ def main():
     setup_parser = subparsers.add_parser(
         "setup",
         help="Download external tools (plink2, flashpca, optional plink v1.9)",
+        description=(
+            "Download the external command-line tools required by the pipeline.\n\n"
+            "Tools are placed in the bin/ directory under the project root:\n"
+            "  bin/plink2   (~20 MB)\n"
+            "  bin/flashpca (~2 MB)\n"
+            "  bin/plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
+            "Requires internet access (run on a login node, not a compute node).\n"
+            "This command does NOT manage the Python environment."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     setup_parser.add_argument(
         "--skip-plink1",
@@ -941,7 +1094,15 @@ def main():
     setup_parser.set_defaults(func=cmd_setup)
 
     # Metrics: geographic
-    geo_metrics_parser = subparsers.add_parser("metrics-geographic", help="Compute geographic preservation")
+    geo_metrics_parser = subparsers.add_parser(
+        "metrics-geographic",
+        help="Compute geographic preservation",
+        description=(
+            "Compute a Spearman correlation between pairwise geographic distances and pairwise\n"
+            "embedding distances across randomly sampled pairs of samples.\n\n"
+            "Outputs a JSON file with keys: correlation, p_value, n_pairs."
+        ),
+    )
     geo_metrics_parser.add_argument("--embedding", required=True, help="Embedding CSV")
     geo_metrics_parser.add_argument("--geographic", required=True, help="Geographic coordinates CSV")
     geo_metrics_parser.add_argument("--output", required=True, help="Output JSON path")
@@ -953,7 +1114,16 @@ def main():
     geo_metrics_parser.set_defaults(func=cmd_metrics_geographic)
 
     # Metrics: admixture
-    admix_metrics_parser = subparsers.add_parser("metrics-admixture", help="Compute admixture preservation")
+    admix_metrics_parser = subparsers.add_parser(
+        "metrics-admixture",
+        help="Compute admixture preservation",
+        description=(
+            "Compute a Spearman correlation between pairwise admixture distances and pairwise\n"
+            "embedding distances across randomly sampled pairs of samples, for each K.\n\n"
+            "Admixture distance is the L1 distance between Q vectors.\n"
+            "Outputs a JSON file keyed by K."
+        ),
+    )
     admix_metrics_parser.add_argument("--embedding", required=True, help="Embedding CSV")
     admix_metrics_parser.add_argument("--admixture-output", required=True, help="Prefix for admixture CSVs (<prefix>.K.csv, e.g., path/to/transform)")
     admix_metrics_parser.add_argument("--output", required=True, help="Output JSON path")
@@ -966,7 +1136,46 @@ def main():
     admix_metrics_parser.set_defaults(func=cmd_metrics_admixture)
 
     # Pipeline command
-    pipeline_parser = subparsers.add_parser("pipeline", help="Run full pipeline")
+    pipeline_parser = subparsers.add_parser(
+        "pipeline",
+        help="Run full pipeline (recommended entry point)",
+        description=(
+            "Run the full manifold-genetics pipeline end-to-end:\n"
+            "  PCA → Neural Admixture → Embedding → Visualization → Metrics\n\n"
+            "Steps can be skipped with --skip-pca, --skip-admixture, --skip-embedding,\n"
+            "--skip-metrics. Visualization sub-steps can be skipped individually.\n\n"
+            "Outputs are written under --output in subfolders:\n"
+            "  pca/          PCA coordinate CSVs\n"
+            "  admixture/    Q-matrix CSVs and model checkpoints\n"
+            "  embeddings/   2-D embedding CSVs\n"
+            "  figures/      All visualisation plots (PNG)\n"
+            "  metrics/      Preservation metric JSONs\n\n"
+            "For cross-cohort analysis (e.g. HGDP reference → biobank projection), pass\n"
+            "separate --fit-labels/--project-labels and --fit-colormap/--project-colormap."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  # Same-cohort analysis\n"
+            "  manifold-genetics pipeline \\\n"
+            "      --fit-plink data/fit --project-plink data/project \\\n"
+            "      --labels data/labels.csv --colormap data/colormap.json \\\n"
+            "      --output results/ \\\n"
+            "      --n-pcs 50 --k-min 2 --k-max 10 \\\n"
+            "      --embedding phate --knn 100 --t 3 \\\n"
+            "      --threads 8\n\n"
+            "  # Large dataset: use landmarking and GPU\n"
+            "  manifold-genetics pipeline ... \\\n"
+            "      --n-landmark 10000 --random-landmarking \\\n"
+            "      --neuraladmixture-batch-size 400 --num-gpus 1\n\n"
+            "  # Cross-cohort (separate fit/project labels and colormaps)\n"
+            "  manifold-genetics pipeline \\\n"
+            "      --fit-plink data/hgdp --project-plink data/ukbb \\\n"
+            "      --fit-labels data/hgdp_labels.csv --fit-colormap data/hgdp_colors.json \\\n"
+            "      --project-labels data/ukbb_labels.csv --project-colormap data/ukbb_colors.json \\\n"
+            "      --output results/ --embedding-input both"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     pipeline_parser.add_argument(
         "--fit-plink",
         required=True,

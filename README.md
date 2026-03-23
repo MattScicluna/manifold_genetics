@@ -119,6 +119,10 @@ bash examples/hgdp_1kgp/run_pipeline.sh
 
 ## Command-Line Interface
 
+The CLI provides a built-in help system. Run `manifold-genetics --help` for the full command list,
+or `manifold-genetics <subcommand> --help` (or `manifold-genetics <subcommand> -h`) for subcommand-specific usage and
+option descriptions.
+
 ### Pipeline (recommended)
 
 Run from the repository root. Outputs land under `examples/hgdp_1kgp/outputs/` in subfolders (`pca/`, `admixture/`, `embeddings/`, `figures/`), and metrics are computed from the pipeline run.
@@ -171,9 +175,9 @@ uv run manifold-genetics admixture \
 # 3) Embedding (PHATE): fit and transform on projected (transform) PCA coordinates
 uv run manifold-genetics embed \
     --method phate \
-    --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --fit-input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
     --project-output examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --knn 100 --t 3 --n-landmark None
+    --knn 100 --t 3
 
 # 4) Visualization
 
@@ -214,7 +218,37 @@ uv run manifold-genetics plot-admixture-embedding \
     --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png \
     --component-colormap examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
-# 5) Metrics (optional, standalone)
+# 5) Overlay reference (fit) and target (project) embeddings (cross-cohort comparison)
+# Note: In practice, --fit-embedding and --project-embedding should come from different
+# biobanks (e.g. fit on HGDP+1KGP, project on UKBB). The same cohort is used here for
+# demonstrative purposes only.
+uv run manifold-genetics plot-projection \
+    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
+    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
+    --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
+    --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --fit-colormap examples/colormaps/hgdp_fit.json \
+    --project-colormap examples/colormaps/hgdp_project.json \
+    --fit-column Genetic_region_merged \
+    --project-column Genetic_region_merged \
+    --output examples/hgdp_1kgp/outputs/figures/embeddings/projection.png
+
+# 6) KNN label composition (how well reference labels characterise project individuals)
+# Note: In practice, --fit-embedding and --project-embedding should come from different
+# biobanks (e.g. fit on HGDP+1KGP, project on UKBB). The same cohort is used here for
+# demonstrative purposes only.
+uv run manifold-genetics plot-knn-composition \
+    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
+    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
+    --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
+    --fit-label-column Population \
+    --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --project-label-column Genetic_region_merged \
+    --fit-colormap examples/colormaps/hgdp_fit.json \
+    --k 10 \
+    --output examples/hgdp_1kgp/outputs/figures/embeddings/knn_composition.png
+
+# 7) Metrics (optional, standalone)
 uv run manifold-genetics metrics-geographic \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --geographic examples/hgdp_1kgp/data/hgdp_project_geographic.csv \
@@ -386,8 +420,9 @@ uv run manifold-genetics pipeline ... \
 ### External Tools (Auto-downloaded)
 - **plink2**: Downloaded to `bin/plink2` (~20MB)
 - **flashPCA**: Downloaded to `bin/flashpca` (~2MB)
+- **plink v1.9**: Downloaded to `bin/plink` (~2MB) — skip with `manifold-genetics setup --skip-plink1`
 
-No manual installation needed!
+No manual installation needed! Run `manifold-genetics setup` once on a login node (requires internet).
 
 ## Troubleshooting
 
