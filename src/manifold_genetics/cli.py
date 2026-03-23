@@ -711,7 +711,7 @@ def main():
         description=(
             "Genetic analysis with PCA, Neural Admixture, and manifold learning.\n\n"
             "Run 'manifold-genetics --help' for this list, or\n"
-            "'manifold-genetics <subcommand> --help' (equivalently '-h') for\n"
+            "'manifold-genetics <subcommand> --help' (or with '-h' instead of '--help') for\n"
             "subcommand-specific options and usage examples."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
