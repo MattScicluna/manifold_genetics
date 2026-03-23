@@ -120,7 +120,7 @@ bash examples/hgdp_1kgp/run_pipeline.sh
 ## Command-Line Interface
 
 The CLI provides a built-in help system. Run `manifold-genetics --help` for the full command list,
-or `manifold-genetics <subcommand> --help` (equivalently `-h`) for subcommand-specific usage and
+or `manifold-genetics <subcommand> --help` (or `manifold-genetics <subcommand> -h`) for subcommand-specific usage and
 option descriptions.
 
 ### Pipeline (recommended)
