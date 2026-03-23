@@ -218,27 +218,27 @@ uv run manifold-genetics plot-admixture-embedding \
     --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png \
     --component-colormap examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
-# 5) Overlay fit and project embeddings (cross-cohort comparison)
+# 5) Overlay reference (fit) and target (project) embeddings (cross-cohort comparison)
 uv run manifold-genetics plot-projection \
-    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --fit-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
+    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
+    --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
     --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --fit-colormap examples/colormaps/hgdp_1kgp.json \
-    --project-colormap examples/colormaps/hgdp_1kgp.json \
+    --fit-colormap examples/colormaps/hgdp_fit.json \
+    --project-colormap examples/colormaps/hgdp_project.json \
     --fit-column Genetic_region_merged \
     --project-column Genetic_region_merged \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/projection.png
 
 # 6) KNN label composition (how well reference labels characterise project individuals)
 uv run manifold-genetics plot-knn-composition \
-    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --fit-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
+    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
+    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
+    --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
     --fit-label-column Population \
     --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --project-label-column Genetic_region_merged \
-    --fit-colormap examples/colormaps/hgdp_1kgp.json \
+    --fit-colormap examples/colormaps/hgdp_fit.json \
     --k 10 \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/knn_composition.png
 
