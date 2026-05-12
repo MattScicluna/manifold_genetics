@@ -44,7 +44,7 @@ PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../hgdp_1kgp_proj/outputs/pca/transform_pca_20
 UKBB_LABELS_SOURCE="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_labels.csv"
 
 # Geosketch parameters
-N_SKETCH="${N_SKETCH:-50000}"
+N_SKETCH="${N_SKETCH:-60000}"
 N_PCS="${N_PCS:-20}"
 SEED="${SEED:-42}"
 
