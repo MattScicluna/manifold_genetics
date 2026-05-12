@@ -239,6 +239,17 @@ class Pipeline:
             results["pca_file"] = transform_pca_file
             results["pca_coords"] = pca_coords
 
+        else:
+            # PCA skipped — resolve expected paths so embedding can still run
+            pca_dir = self.output_dir / "pca"
+            fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
+            transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+            if fit_pca_file.exists():
+                results["fit_pca_file"] = fit_pca_file
+            if transform_pca_file.exists():
+                results["transform_pca_file"] = transform_pca_file
+                results["pca_file"] = transform_pca_file
+
         # Step 1.5: PCA Visualization (independent of PCA computation)
         if not skip_pca_visualization:
             logger.info("=" * 70)
@@ -378,10 +389,16 @@ class Pipeline:
                 results.setdefault("admixture_figures", {})["bars"] = bar_plot_path
 
         # Step 3: Embedding
-        if not skip_embedding and not skip_pca:
+        if not skip_embedding:
             logger.info("=" * 70)
             logger.info(f"STEP 3: EMBEDDING ({embedding.upper()})")
             logger.info("=" * 70)
+
+            if "fit_pca_file" not in results and "transform_pca_file" not in results:
+                raise RuntimeError(
+                    "No PCA files found. Run without --skip-pca, or ensure "
+                    f"{self.output_dir / 'pca'} contains fit_pca_{{n}}.csv / transform_pca_{{n}}.csv."
+                )
 
             embedding_dir = self.output_dir / "embeddings"
             embedding_dir.mkdir(exist_ok=True)
