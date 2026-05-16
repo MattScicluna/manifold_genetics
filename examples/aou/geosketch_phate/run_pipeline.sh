@@ -2,7 +2,7 @@
 #
 # AoU Geosketch PHATE Pipeline
 #
-# Runs PHATE (knn=500, t=50) on the geosketch-selected AoU fit subset.
+# Runs PHATE (knn=500, t=100, n-landmark=2000) on the geosketch-selected AoU fit subset.
 # The fit subset was created by prepare_data.sh using geometric sketching to
 # select a representative sample from the full intersected AoU dataset.
 #
@@ -58,6 +58,9 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --k-min 2 \
     --k-max 10 \
     --embedding "phate" \
+    --knn 500 \
+    --t 100 \
+    --n-landmark 2000 \
     --admixture-group-column "race_ethnicity" \
     --threads "$CLUSTER_CPUS" \
     ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
