@@ -42,8 +42,8 @@ source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 # Run pipeline with subsample mode
 # ============================================================================
 #
-# subsample mode defaults: knn=500, t=50, n-landmark=10000, random-landmarking
-# These match the knn=500, t=50 used in all large-cohort PHATE runs.
+# subsample mode defaults: knn=500, t=50, n-landmark=10000 (spectral landmarking)
+# knn, t, and n-landmark are overridden below to match Shuang's manylatents settings.
 #
 
 bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \

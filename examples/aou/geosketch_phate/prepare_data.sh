@@ -8,10 +8,14 @@
 #
 # Prerequisites:
 #   1. Run examples/aou/hgdp_1kgp_proj/prepare_data.sh  (intersected PLINK data)
-#   2. Run examples/aou/hgdp_1kgp_proj/run_pipeline.sh  (produces PCA for AoU samples)
+#   2. Run examples/aou/10k_WBH/run_pipeline.sh          (produces PCA for AoU samples)
 #
-# The PCA CSV used for geosketch is the HGDP-projected AoU PCA output:
-#   examples/aou/hgdp_1kgp_proj/outputs/pca/transform_pca_20.csv
+# The PCA CSV used for geosketch is from the 10k_WBH pipeline
+# (PCA fit on 10K WBH, projected to all AoU samples):
+#   examples/aou/10k_WBH/outputs/pca/transform_pca_20.csv
+#
+# The same PCA coordinates are written to outputs/pca/fit_pca_20.csv (for the
+# selected samples) so that run_pipeline.sh --skip-pca uses the correct space.
 #
 # Usage:
 #   bash examples/aou/geosketch_phate/prepare_data.sh
@@ -37,11 +41,12 @@ CPU_CORES="${SLURM_CPUS_PER_TASK:-4}"
 # Shared AoU data directories
 SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
 
-# Source intersected AoU data (from hgdp_1kgp_proj)
+# Source intersected AoU data (from hgdp_1kgp_proj) — used for PLINK subsets + admixture
 INTERSECTED_AOU="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
-# PCA CSV for geosketch: HGDP-projected PCA coordinates for AoU samples
-PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../hgdp_1kgp_proj/outputs/pca/transform_pca_20.csv}"
+# PCA CSV for geosketch: 10k_WBH projected PCA coordinates for all AoU samples
+# This matches the approach used for UKBB (same PCA space for geosketch and PHATE)
+PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../10k_WBH/outputs/pca/transform_pca_20.csv}"
 
 # Geosketch parameters
 N_SKETCH="${N_SKETCH:-60000}"
@@ -79,11 +84,11 @@ if [[ ! -f "${PCA_CSV}" ]]; then
     print_error "PCA CSV not found for geosketch!"
     echo "  Expected: ${PCA_CSV}"
     echo ""
-    echo "  This file is produced by the hgdp_1kgp_proj pipeline."
+    echo "  This file is produced by the 10k_WBH pipeline."
     echo "  Please run it first (or submit as a batch job):"
     echo ""
     echo "    bash examples/_shared/submit_batch.sh \\"
-    echo "        examples/aou/hgdp_1kgp_proj/run_pipeline.sh"
+    echo "        examples/aou/10k_WBH/run_pipeline.sh"
     echo ""
     echo "  Alternatively, provide a different PCA CSV via:"
     echo "    PCA_CSV=/path/to/pca.csv bash prepare_data.sh"
@@ -183,6 +188,50 @@ EOF
 done
 
 print_success "Labels created"
+
+# =============================================================================
+# STEP 5: Create fit PCA file for --skip-pca
+# =============================================================================
+print_subheader "Step 5: Create fit PCA file"
+
+# Subset PCA_CSV to the selected fit samples so that run_pipeline.sh --skip-pca
+# uses the same 10k_WBH coordinate space that geosketch ran in.
+OUTPUT_PCA_DIR="${SCRIPT_DIR}/outputs/pca"
+FIT_PCA_FILE="${OUTPUT_PCA_DIR}/fit_pca_${N_PCS}.csv"
+
+mkdir -p "${OUTPUT_PCA_DIR}"
+
+if [[ -f "$FIT_PCA_FILE" ]]; then
+    print_success "fit_pca_${N_PCS}.csv already exists ($(wc -l < "$FIT_PCA_FILE") lines)"
+else
+    echo "  Subsetting PCA coordinates to fit samples..."
+    python3 << EOF
+import pandas as pd
+
+fit_samples_file = "${FIT_SAMPLES_FILE}"
+pca_csv = "${PCA_CSV}"
+output_file = "${FIT_PCA_FILE}"
+n_pcs = ${N_PCS}
+
+# Read selected IIDs from fit_samples.txt (FID TAB IID)
+selected_iids = set()
+with open(fit_samples_file) as f:
+    for line in f:
+        parts = line.strip().split('\t')
+        if len(parts) >= 2:
+            selected_iids.add(str(parts[1]))
+
+# Load and subset the PCA CSV
+pca_df = pd.read_csv(pca_csv)
+pca_df['sample_id'] = pca_df['sample_id'].astype(str)
+
+dim_cols = [c for c in pca_df.columns if c != 'sample_id'][:n_pcs]
+fit_pca = pca_df[pca_df['sample_id'].isin(selected_iids)][['sample_id'] + dim_cols].copy()
+fit_pca.to_csv(output_file, index=False)
+print(f"    Written {len(fit_pca)} samples x {len(dim_cols)} PCs to {output_file}")
+EOF
+    print_success "fit_pca_${N_PCS}.csv created"
+fi
 
 # =============================================================================
 # Summary

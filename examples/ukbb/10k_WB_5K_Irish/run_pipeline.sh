@@ -48,7 +48,7 @@ source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 #
 # The shared runner script will automatically apply the correct defaults for this mode:
 # - PHATE: knn=500, t=50
-# - Random landmarking with 10,000 landmarks
+# - Random landmarking with 10,000 landmarks (explicit --random-landmarking)
 #
 bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --mode subsample \
@@ -62,6 +62,7 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --k-min 2 \
     --k-max 10 \
     --embedding "phate" \
+    --random-landmarking \
     --admixture-group-column "self_described_ancestry" \
     --threads "$CLUSTER_CPUS" \
     ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \

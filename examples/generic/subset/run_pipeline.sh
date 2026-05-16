@@ -108,7 +108,7 @@ echo ""
 echo ""
 echo "Running subsample pipeline..."
 echo "  Mode: subsample (fit on subset, transform on subset by default)"
-echo "  Performance: Large dataset mode (knn=500, t=50, random landmarking)"
+echo "  Performance: Large dataset mode (knn=500, t=50, spectral landmarking)"
 echo "  Note: Add --embedding-input both to project on full dataset (more expensive)"
 echo ""
 
