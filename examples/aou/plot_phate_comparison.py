@@ -48,6 +48,13 @@ DATASETS = {
         "knn":       500,
         "t":         100,
     },
+    "geosketch_10kwbh_pca": {
+        "embedding": SCRIPT_DIR / "geosketch_phate/outputs/phate_10kwbh_pca_knn500_t100.csv",
+        "labels":    SCRIPT_DIR / "geosketch_phate/data/fit_labels.csv",
+        "n_samples": 60_000,
+        "knn":       500,
+        "t":         100,
+    },
 }
 
 # ============================================================================
