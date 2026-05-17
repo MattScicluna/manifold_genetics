@@ -27,6 +27,13 @@ COLORMAP_PATH = PROJECT_ROOT / "examples/colormaps/aou.json"
 LABEL_COL = "race_ethnicity"
 
 DATASETS = {
+    "10k_wbh": {
+        "embedding": SCRIPT_DIR / "10k_WBH/outputs/phate_knn500_t100.csv",
+        "labels":    SCRIPT_DIR / "10k_WBH/data/fit_labels.csv",
+        "n_samples": 10_000,
+        "knn":       500,
+        "t":         100,
+    },
     "random": {
         "embedding": SCRIPT_DIR / "60k_random/outputs/phate_knn500_t100.csv",
         "labels":    SCRIPT_DIR / "60k_random/data/labels.csv",
