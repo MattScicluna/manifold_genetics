@@ -124,7 +124,7 @@ if [[ -f "$FIT_SAMPLES_FILE" ]]; then
 else
     echo "  Selecting ${N_SKETCH} geometrically representative samples..."
 
-    python3 "${PROJECT_ROOT}/examples/aou/shared/select_samples_geosketch.py" \
+    python3 "${PROJECT_ROOT}/examples/_shared/select_samples_geosketch.py" \
         --pca "${PCA_CSV}" \
         --fam "${INTERSECTED_UKBB}.fam" \
         --output "${FIT_SAMPLES_FILE}" \
