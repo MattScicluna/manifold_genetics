@@ -18,6 +18,8 @@
 #SBATCH --time=24:00:00
 #SBATCH --mem=128GB
 #SBATCH --job-name=phate_60k_aou_random
+#SBATCH --output=phate_60k_%j.out
+#SBATCH --error=phate_60k_%j.err
 
 set -e
 
@@ -27,9 +29,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="${SCRIPT_DIR}/outputs"
 COLORMAP="${PROJECT_ROOT}/examples/colormaps/aou.json"
-
-#SBATCH --output=${SCRIPT_DIR}/phate_60k_%j.out
-#SBATCH --error=${SCRIPT_DIR}/phate_60k_%j.err
 
 source "${PROJECT_ROOT}/.venv/bin/activate"
 
