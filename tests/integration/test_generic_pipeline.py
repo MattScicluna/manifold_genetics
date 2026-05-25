@@ -283,3 +283,48 @@ def test_skip_pca_raises_when_no_pca_files(
             skip_admixture_visualization=True,
             skip_metrics=True,
         )
+
+
+@pytest.mark.integration
+def test_skip_pca_runs_embedding_with_existing_pca_files(
+    fit_plink_files,
+    labels_csv,
+    colormap_json,
+    temp_dir,
+    small_pca_data,
+):
+    """
+    Test that skip_pca=True still runs embedding when PCA files already exist.
+    """
+    output_dir = temp_dir / "skip_pca_embedding_reuse_test"
+    output_dir.mkdir()
+
+    pca_dir = output_dir / "pca"
+    pca_dir.mkdir()
+    n_pcs = 10
+
+    fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
+    transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+    small_pca_data.to_csv(fit_pca_file, index=False)
+    small_pca_data.to_csv(transform_pca_file, index=False)
+
+    results = run_pipeline(
+        fit_plink=fit_plink_files,
+        project_plink=fit_plink_files,
+        output_dir=str(output_dir),
+        labels=str(labels_csv),
+        colormap=str(colormap_json),
+        n_pcs=n_pcs,
+        skip_pca=True,
+        skip_admixture=True,
+        embedding="phate",
+        embedding_params={"knn": 5, "n_components": 2},
+        skip_visualization=True,
+        skip_pca_visualization=True,
+        skip_admixture_visualization=True,
+        skip_metrics=True,
+    )
+
+    assert results["embedding_file"].exists()
+    assert "embedding_coords" in results
+    assert len(results["embedding_coords"]) == len(small_pca_data)
