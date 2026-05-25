@@ -202,3 +202,129 @@ def test_pipeline_with_fit_only(
     pca_dir = output_dir / "pca"
     assert (pca_dir / "fit_pca_5.csv").exists(), "Fit PCA should exist"
     assert (pca_dir / "transform_pca_5.csv").exists(), "Transform PCA should exist"
+
+
+@pytest.mark.integration
+def test_skip_pca_resolves_existing_pca_files(
+    fit_plink_files,
+    labels_csv,
+    colormap_json,
+    temp_dir,
+    small_pca_data,
+):
+    """
+    Test that skip_pca=True resolves pre-existing PCA files into results.
+
+    Regression test for the bug where --skip-pca silently blocked the embedding step
+    by never populating fit_pca_file/pca_file in the results dict.
+    """
+    output_dir = temp_dir / "skip_pca_reuse_test"
+    output_dir.mkdir()
+
+    pca_dir = output_dir / "pca"
+    pca_dir.mkdir()
+    n_pcs = 10
+
+    fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
+    transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+    small_pca_data.to_csv(fit_pca_file, index=False)
+    small_pca_data.to_csv(transform_pca_file, index=False)
+
+    results = run_pipeline(
+        fit_plink=fit_plink_files,
+        project_plink=fit_plink_files,
+        output_dir=str(output_dir),
+        labels=str(labels_csv),
+        colormap=str(colormap_json),
+        n_pcs=n_pcs,
+        skip_pca=True,
+        skip_admixture=True,
+        skip_embedding=True,
+        skip_visualization=True,
+        skip_pca_visualization=True,
+        skip_admixture_visualization=True,
+        skip_metrics=True,
+    )
+
+    assert "fit_pca_file" in results, "fit_pca_file should be resolved from pre-existing file"
+    assert "pca_file" in results, "pca_file should be resolved from pre-existing transform file"
+    assert results["fit_pca_file"] == fit_pca_file
+    assert results["pca_file"] == transform_pca_file
+
+
+@pytest.mark.integration
+def test_skip_pca_raises_when_no_pca_files(
+    fit_plink_files,
+    labels_csv,
+    colormap_json,
+    temp_dir,
+):
+    """
+    Test that skip_pca=True with no pre-existing PCA files raises RuntimeError.
+
+    Previously the pipeline would silently skip embedding. Now it raises a clear error.
+    """
+    output_dir = temp_dir / "skip_pca_missing_test"
+    output_dir.mkdir()
+
+    with pytest.raises(RuntimeError, match="No PCA files found"):
+        run_pipeline(
+            fit_plink=fit_plink_files,
+            project_plink=fit_plink_files,
+            output_dir=str(output_dir),
+            labels=str(labels_csv),
+            colormap=str(colormap_json),
+            n_pcs=10,
+            skip_pca=True,
+            skip_admixture=True,
+            # Not skipping embedding — triggers RuntimeError check
+            skip_visualization=True,
+            skip_pca_visualization=True,
+            skip_admixture_visualization=True,
+            skip_metrics=True,
+        )
+
+
+@pytest.mark.integration
+def test_skip_pca_runs_embedding_with_existing_pca_files(
+    fit_plink_files,
+    labels_csv,
+    colormap_json,
+    temp_dir,
+    small_pca_data,
+):
+    """
+    Test that skip_pca=True still runs embedding when PCA files already exist.
+    """
+    output_dir = temp_dir / "skip_pca_embedding_reuse_test"
+    output_dir.mkdir()
+
+    pca_dir = output_dir / "pca"
+    pca_dir.mkdir()
+    n_pcs = 10
+
+    fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
+    transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+    small_pca_data.to_csv(fit_pca_file, index=False)
+    small_pca_data.to_csv(transform_pca_file, index=False)
+
+    results = run_pipeline(
+        fit_plink=fit_plink_files,
+        project_plink=fit_plink_files,
+        output_dir=str(output_dir),
+        labels=str(labels_csv),
+        colormap=str(colormap_json),
+        n_pcs=n_pcs,
+        skip_pca=True,
+        skip_admixture=True,
+        embedding="phate",
+        embedding_params={"knn": 5, "n_components": 2},
+        skip_visualization=True,
+        skip_pca_visualization=True,
+        skip_admixture_visualization=True,
+        skip_metrics=True,
+    )
+
+    assert results["embedding_file"].exists()
+    assert "embedding_coords" in results
+    assert len(results["embedding_coords"]) == len(small_pca_data)

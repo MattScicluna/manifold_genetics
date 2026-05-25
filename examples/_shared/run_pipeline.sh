@@ -21,7 +21,7 @@
 #               Semantic: fit embedding on reference, transform on target
 #               Use Case: Projecting a large biobank (UKBB, AoU) onto a smaller reference dataset (HGDP+1KGP)
 #
-#   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000 --random-landmarking
+#   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000
 #               Semantic: fit+transform on subsampled fit set only (cheaper)
 #               Use Case: visualize large biobanks (UKBB, AoU) without any reference set.
 #
@@ -78,7 +78,7 @@ set_subsample_mode_defaults() {
     KNN="${KNN:-500}"
     T="${T:-50}"
     N_LANDMARK="${N_LANDMARK:-10000}"
-    RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-true}"
+    RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-false}"
     NEURALADMIXTURE_BATCH_SIZE="${NEURALADMIXTURE_BATCH_SIZE:-400}"
     EMBED_BATCH_SIZE="${EMBED_BATCH_SIZE:-}"
 }
@@ -210,6 +210,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --random-landmarking)
             RANDOM_LANDMARKING="true"
+            shift
+            ;;
+        --no-random-landmarking)
+            RANDOM_LANDMARKING="false"
             shift
             ;;
         --admixture-group-column)
