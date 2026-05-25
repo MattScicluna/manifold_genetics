@@ -38,9 +38,6 @@ source "${PROJECT_ROOT}/examples/_shared/preprocessing/common.sh"
 # Configuration
 CPU_CORES="${SLURM_CPUS_PER_TASK:-4}"
 
-# Shared AoU data directories
-SHARED_META_DIR="${SCRIPT_DIR}/../shared/data/Metadata"
-
 # Source intersected AoU data (from hgdp_1kgp_proj) — used for PLINK subsets + admixture
 INTERSECTED_AOU="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
