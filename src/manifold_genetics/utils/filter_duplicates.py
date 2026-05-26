@@ -31,7 +31,7 @@ def parse_args():
 def read_bim(bim_path: Path) -> dict:
     """Read BIM file and return dict of SNP_ID -> (chr, pos, a1, a2)."""
     snp_info = {}
-    with open(bim_path, "r") as f:
+    with open(bim_path) as f:
         for line in f:
             parts = line.strip().split()
             chrom, snp_id, cm, pos, a1, a2 = parts
@@ -42,7 +42,7 @@ def read_bim(bim_path: Path) -> dict:
 def read_lmiss(lmiss_path: Path) -> dict:
     """Read .lmiss file and return dict of SNP_ID -> missingness rate."""
     missingness = {}
-    with open(lmiss_path, "r") as f:
+    with open(lmiss_path) as f:
         f.readline()  # Skip header
         for line in f:
             parts = line.strip().split()
@@ -56,7 +56,7 @@ def read_lmiss(lmiss_path: Path) -> dict:
 def read_frq(frq_path: Path) -> dict:
     """Read .frq file and return dict of SNP_ID -> MAF."""
     maf = {}
-    with open(frq_path, "r") as f:
+    with open(frq_path) as f:
         f.readline()  # Skip header
         for line in f:
             parts = line.strip().split()
