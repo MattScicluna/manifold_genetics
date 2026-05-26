@@ -309,7 +309,7 @@ def _check_label_values_have_colors(
             continue
         color_dict = colormap[col]
         data_values = set(labels_df[col].dropna().astype(str).unique())
-        cmap_values = set(str(k) for k in color_dict.keys())
+        cmap_values = {str(k) for k in color_dict.keys()}
         missing = sorted(data_values - cmap_values)
         if missing:
             raise ValidationError(
