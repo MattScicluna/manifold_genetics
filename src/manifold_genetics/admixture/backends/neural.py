@@ -11,7 +11,12 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-import torch
+try:
+    import torch
+
+    _TORCH_AVAILABLE = True
+except ImportError:
+    _TORCH_AVAILABLE = False
 
 from ...utils.io import _append_extension, get_sample_ids_from_plink, validate_plink_files
 from ...utils.tools import ToolResolver
@@ -102,6 +107,8 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         """Resolve number of GPUs to use (default: 1 if CUDA available)."""
         if requested_gpus is not None:
             return max(0, requested_gpus)
+        if not _TORCH_AVAILABLE:
+            return 0  # no torch → CPU-only
         return 1 if torch.cuda.is_available() else 0
 
     def fit(
