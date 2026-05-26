@@ -199,8 +199,8 @@ class DiffusionMap(EmbeddingBase):
             eigenvectors = eigenvectors[:, idx]
 
             # Skip first eigenvector (trivial, constant)
-            eigenvalues = eigenvalues[1: self.n_components + 1]
-            eigenvectors = eigenvectors[:, 1: self.n_components + 1]
+            eigenvalues = eigenvalues[1 : self.n_components + 1]
+            eigenvectors = eigenvectors[:, 1 : self.n_components + 1]
 
         except Exception as e:
             logger.warning(f"Sparse eigenvalue solver failed: {e}. Using dense solver.")
@@ -212,8 +212,8 @@ class DiffusionMap(EmbeddingBase):
             eigenvectors = eigenvectors[:, idx]
 
             # Skip first eigenvector (trivial)
-            eigenvalues = eigenvalues[1: self.n_components + 1]
-            eigenvectors = eigenvectors[:, 1: self.n_components + 1]
+            eigenvalues = eigenvalues[1 : self.n_components + 1]
+            eigenvectors = eigenvectors[:, 1 : self.n_components + 1]
 
         # Store for later use
         self._eigenvalues = eigenvalues.real
