@@ -513,7 +513,7 @@ def cmd_plot_pca(args):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load colormap to get label columns
-    with open(args.colormap, "r") as f:
+    with open(args.colormap) as f:
         colormap_dict = json.load(f)
 
     figure_paths = []

@@ -267,7 +267,7 @@ def read_sample_indices(indices_path: Union[str, Path]) -> list:
     if not indices_path.exists():
         raise FileNotFoundError(f"Indices file not found: {indices_path}")
 
-    with open(indices_path, "r") as f:
+    with open(indices_path) as f:
         sample_ids = [line.strip() for line in f if line.strip()]
 
     return sample_ids
@@ -299,7 +299,7 @@ def read_colormap(colormap_path: Union[str, Path]) -> dict:
     if not colormap_path.exists():
         raise FileNotFoundError(f"Colormap file not found: {colormap_path}")
 
-    with open(colormap_path, "r") as f:
+    with open(colormap_path) as f:
         colormap = json.load(f)
 
     return colormap
@@ -322,7 +322,7 @@ def read_bim_file(bim_path: Union[str, Path]) -> Dict[str, Tuple[str, str]]:
         raise FileNotFoundError(f"BIM file not found: {bim_path}")
 
     snp_alleles = {}
-    with open(bim_path, "r") as f:
+    with open(bim_path) as f:
         for line in f:
             fields = line.strip().split()
             if len(fields) < 6:
