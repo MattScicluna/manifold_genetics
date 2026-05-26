@@ -29,18 +29,20 @@ def main():
     parser = argparse.ArgumentParser(
         description="Geosketch-based sample selection from PCA coordinates"
     )
-    parser.add_argument("--pca", required=True,
-                        help="Path to PCA CSV (sample_id, dim_1, dim_2, ...)")
-    parser.add_argument("--fam", required=True,
-                        help="Path to .fam file for FID/IID mapping")
-    parser.add_argument("--output", required=True,
-                        help="Output sample list file (FID TAB IID, for PLINK --keep)")
-    parser.add_argument("--n-samples", type=int, default=50000,
-                        help="Number of samples to select (default: 50000)")
-    parser.add_argument("--n-pcs", type=int, default=None,
-                        help="Number of PCs to use for sketching (default: all)")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed (default: 42)")
+    parser.add_argument(
+        "--pca", required=True, help="Path to PCA CSV (sample_id, dim_1, dim_2, ...)"
+    )
+    parser.add_argument("--fam", required=True, help="Path to .fam file for FID/IID mapping")
+    parser.add_argument(
+        "--output", required=True, help="Output sample list file (FID TAB IID, for PLINK --keep)"
+    )
+    parser.add_argument(
+        "--n-samples", type=int, default=50000, help="Number of samples to select (default: 50000)"
+    )
+    parser.add_argument(
+        "--n-pcs", type=int, default=None, help="Number of PCs to use for sketching (default: all)"
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     args = parser.parse_args()
 
     try:
@@ -62,8 +64,9 @@ def main():
 
     # Read .fam file for FID/IID mapping
     print(f"Loading .fam file: {args.fam}")
-    fam = pd.read_csv(args.fam, sep=r"\s+", header=None,
-                      names=["FID", "IID", "PID", "MID", "Sex", "Phenotype"])
+    fam = pd.read_csv(
+        args.fam, sep=r"\s+", header=None, names=["FID", "IID", "PID", "MID", "Sex", "Phenotype"]
+    )
     iid_to_fid = dict(zip(fam["IID"].astype(str), fam["FID"].astype(str)))
     available_samples = set(fam["IID"].astype(str))
 
@@ -79,7 +82,7 @@ def main():
     # Build feature matrix
     dim_cols = [c for c in pca_df.columns if c != "sample_id"]
     if args.n_pcs is not None:
-        dim_cols = dim_cols[:args.n_pcs]
+        dim_cols = dim_cols[: args.n_pcs]
     X = pca_df[dim_cols].values.astype(np.float32)
     print(f"  Using {len(dim_cols)} PCs for geometric sketching")
 

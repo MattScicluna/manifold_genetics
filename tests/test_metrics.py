@@ -24,11 +24,13 @@ class TestGeographicPreservation:
         lats = 40 + np.random.randn(n_samples) * 5  # ~40°N ± 5°
         lons = -100 + np.random.randn(n_samples) * 10  # ~100°W ± 10°
 
-        geo_df = pd.DataFrame({
-            "sample_id": [f"SAMPLE_{i:03d}" for i in range(n_samples)],
-            "latitude": lats,  # Changed to lowercase to match function default
-            "longitude": lons,  # Changed to lowercase to match function default
-        })
+        geo_df = pd.DataFrame(
+            {
+                "sample_id": [f"SAMPLE_{i:03d}" for i in range(n_samples)],
+                "latitude": lats,  # Changed to lowercase to match function default
+                "longitude": lons,  # Changed to lowercase to match function default
+            }
+        )
 
         geo_file = temp_dir / "geo_coords.csv"
         geo_df.to_csv(geo_file, index=False)
@@ -63,11 +65,13 @@ class TestGeographicPreservation:
 
         # Create geographic coordinates DataFrame with matching sample IDs
         sample_ids = small_embedding_data["sample_id"].tolist()
-        geo_df = pd.DataFrame({
-            "sample_id": sample_ids,
-            "latitude": 40 + np.random.randn(n_samples) * 5,  # Changed to lowercase
-            "longitude": -100 + np.random.randn(n_samples) * 10,  # Changed to lowercase
-        })
+        geo_df = pd.DataFrame(
+            {
+                "sample_id": sample_ids,
+                "latitude": 40 + np.random.randn(n_samples) * 5,  # Changed to lowercase
+                "longitude": -100 + np.random.randn(n_samples) * 10,  # Changed to lowercase
+            }
+        )
         # Set sample_id as index (like read_labels_csv does)
         geo_df = geo_df.set_index("sample_id")
 
@@ -97,9 +101,9 @@ class TestAdmixturePreservation:
             # Create CSV with sample_id and component columns
             sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
             component_cols = [f"component_{i+1}" for i in range(k)]
-            
+
             df = pd.DataFrame(q_data, columns=component_cols)
-            df.insert(0, 'sample_id', sample_ids)
+            df.insert(0, "sample_id", sample_ids)
 
             # Save as CSV file
             q_file = temp_dir / f"admixture_k{k}.csv"
@@ -190,16 +194,18 @@ class TestMetricsIntegration:
         embedding = np.random.randn(n_samples, 2) * 10
         sample_ids = [f"S{i}" for i in range(n_samples)]
         embedding_df = pd.DataFrame(embedding, columns=["dim_1", "dim_2"])
-        embedding_df.insert(0, 'sample_id', sample_ids)
+        embedding_df.insert(0, "sample_id", sample_ids)
         embedding_file = temp_dir / "embedding.csv"
         embedding_df.to_csv(embedding_file, index=False)
 
         # POSITIVE CONTROL: Use embedding coords as geographic coords
-        geo_df = pd.DataFrame({
-            "sample_id": sample_ids,
-            "latitude": embedding[:, 0],  # dim_1 = latitude (changed to lowercase)
-            "longitude": embedding[:, 1],  # dim_2 = longitude (changed to lowercase)
-        })
+        geo_df = pd.DataFrame(
+            {
+                "sample_id": sample_ids,
+                "latitude": embedding[:, 0],  # dim_1 = latitude (changed to lowercase)
+                "longitude": embedding[:, 1],  # dim_2 = longitude (changed to lowercase)
+            }
+        )
         geo_file = temp_dir / "geo.csv"
         geo_df.to_csv(geo_file, index=False)
 
@@ -218,17 +224,19 @@ class TestMetricsIntegration:
         embedding = np.random.randn(n_samples, 2)
         sample_ids = [f"S{i}" for i in range(n_samples)]
         embedding_df = pd.DataFrame(embedding, columns=["dim_1", "dim_2"])
-        embedding_df.insert(0, 'sample_id', sample_ids)
+        embedding_df.insert(0, "sample_id", sample_ids)
         embedding_file = temp_dir / "embedding.csv"
         embedding_df.to_csv(embedding_file, index=False)
 
         # NEGATIVE CONTROL: Completely different random coordinates
         np.random.seed(123)  # Different seed
-        geo_df = pd.DataFrame({
-            "sample_id": sample_ids,
-            "latitude": np.random.randn(n_samples) * 50,  # Changed to lowercase
-            "longitude": np.random.randn(n_samples) * 50,  # Changed to lowercase
-        })
+        geo_df = pd.DataFrame(
+            {
+                "sample_id": sample_ids,
+                "latitude": np.random.randn(n_samples) * 50,  # Changed to lowercase
+                "longitude": np.random.randn(n_samples) * 50,  # Changed to lowercase
+            }
+        )
         geo_file = temp_dir / "geo.csv"
         geo_df.to_csv(geo_file, index=False)
 
@@ -246,7 +254,7 @@ class TestMetricsIntegration:
         embedding = np.random.randn(n_samples, 2)
         sample_ids = [f"S{i}" for i in range(n_samples)]
         embedding_df = pd.DataFrame(embedding, columns=["dim_1", "dim_2"])
-        embedding_df.insert(0, 'sample_id', sample_ids)
+        embedding_df.insert(0, "sample_id", sample_ids)
         embedding_file = temp_dir / "embedding.csv"
         embedding_df.to_csv(embedding_file, index=False)
 
@@ -259,17 +267,17 @@ class TestMetricsIntegration:
         lats[missing_indices] = np.nan
         lons[missing_indices] = np.nan
 
-        geo_df = pd.DataFrame({
-            "sample_id": sample_ids,
-            "latitude": lats,  # Changed to lowercase
-            "longitude": lons,  # Changed to lowercase
-        })
+        geo_df = pd.DataFrame(
+            {
+                "sample_id": sample_ids,
+                "latitude": lats,  # Changed to lowercase
+                "longitude": lons,  # Changed to lowercase
+            }
+        )
         geo_file = temp_dir / "geo.csv"
         geo_df.to_csv(geo_file, index=False)
 
-        result = compute_geographic_preservation(
-            embedding_file, geo_file, ignore_missing=True
-        )
+        result = compute_geographic_preservation(embedding_file, geo_file, ignore_missing=True)
 
         # Should use only 80 samples (those with coordinates)
         assert result["n_samples"] == 80
@@ -284,17 +292,17 @@ class TestMetricsIntegration:
         embedding = np.random.randn(n_embedding_samples, 2)
         embedding_sample_ids = [f"S{i}" for i in range(n_embedding_samples)]
         embedding_df = pd.DataFrame(embedding, columns=["dim_1", "dim_2"])
-        embedding_df.insert(0, 'sample_id', embedding_sample_ids)
+        embedding_df.insert(0, "sample_id", embedding_sample_ids)
         embedding_file = temp_dir / "embedding.csv"
         embedding_df.to_csv(embedding_file, index=False)
 
         # Create admixture CSV file with only first 80 samples
         q_data = np.random.dirichlet(np.ones(3), size=n_admixture_samples)
         admixture_sample_ids = [f"S{i}" for i in range(n_admixture_samples)]
-        
+
         q_df = pd.DataFrame(q_data, columns=["component_1", "component_2", "component_3"])
-        q_df.insert(0, 'sample_id', admixture_sample_ids)
-        
+        q_df.insert(0, "sample_id", admixture_sample_ids)
+
         q_file = temp_dir / "admixture_k3.csv"
         q_df.to_csv(q_file, index=False)
 
@@ -320,13 +328,13 @@ class TestMetricsIntegration:
 
         # POSITIVE CONTROL: Use admixture proportions as embedding
         embedding_df = pd.DataFrame(q_data, columns=["dim_1", "dim_2", "dim_3"])
-        embedding_df.insert(0, 'sample_id', sample_ids)
+        embedding_df.insert(0, "sample_id", sample_ids)
         embedding_file = temp_dir / "embedding.csv"
         embedding_df.to_csv(embedding_file, index=False)
 
         # Save Q file in new CSV format
         q_df = pd.DataFrame(q_data, columns=["component_1", "component_2", "component_3"])
-        q_df.insert(0, 'sample_id', sample_ids)
+        q_df.insert(0, "sample_id", sample_ids)
         q_file = temp_dir / "admixture_k3.csv"
         q_df.to_csv(q_file, index=False)
         q_files = {3: q_file}

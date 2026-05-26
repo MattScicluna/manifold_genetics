@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10, <3.13"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -395,6 +395,12 @@ wheels = [
 ]
 
 [[package]]
+name = "fbpca"
+version = "1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/a5/2085d0645a4bb4f0b606251b0b7466c61326e4a471d445c1c3761a2d07bc/fbpca-1.0.tar.gz", hash = "sha256:150677642479663f317fdbb5e06dab3f98721cf7031bb4a84113d7a631c472d1", size = 11758, upload-time = "2014-12-09T21:25:39.221Z" }
+
+[[package]]
 name = "filelock"
 version = "3.20.3"
 source = { registry = "https://pypi.org/simple" }
@@ -466,6 +472,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a7/b2/4140c69c6a66432916b26158687e821ba631a4c9273c474343badf84d3ba/future-1.0.0.tar.gz", hash = "sha256:bd2968309307861edae1458a4f8a4f3598c03be43b97521076aebf5d94c07b05", size = 1228490, upload-time = "2024-02-21T11:52:38.461Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/71/ae30dadffc90b9006d77af76b393cb9dfbfc9629f339fc1574a1c52e6806/future-1.0.0-py3-none-any.whl", hash = "sha256:929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216", size = 491326, upload-time = "2024-02-21T11:52:35.956Z" },
+]
+
+[[package]]
+name = "geosketch"
+version = "1.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fbpca" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/83/be440da764a468bdd2467ce0f74d1a20191be0f25e1ad6ab00e27594ff4e/geosketch-1.3.tar.gz", hash = "sha256:2b2a6056c2134048fa85972ee93b95bdf53555fdf482cc4bfc29c485b78bb5f4", size = 8731, upload-time = "2024-10-29T17:37:22.377Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/af/5159cc0d7de2260985a78bf973279647d6f58156e7ed2b74f66b5006a925/geosketch-1.3-py3-none-any.whl", hash = "sha256:b820d4d2fa727cc8f3a2cface7169f752a4a809e0930ca277fd987328b439c7e", size = 8148, upload-time = "2024-10-29T17:37:19.738Z" },
 ]
 
 [[package]]
@@ -852,11 +874,15 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+geosketch = [
+    { name = "geosketch" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=22.0.0" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "geosketch", marker = "extra == 'geosketch'", specifier = ">=1.3" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.10.0" },
     { name = "llvmlite", specifier = ">=0.40" },
     { name = "matplotlib", specifier = ">=3.4.0" },
@@ -875,7 +901,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.60.0" },
     { name = "umap-learn", specifier = ">=0.5.0" },
 ]
-provides-extras = ["dev", "aou"]
+provides-extras = ["dev", "aou", "geosketch"]
 
 [[package]]
 name = "markupsafe"

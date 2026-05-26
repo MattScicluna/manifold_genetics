@@ -33,7 +33,7 @@ def small_pca_data():
     df = pd.DataFrame(data, columns=cols)
     # Add sample_id column as first column
     sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
-    df.insert(0, 'sample_id', sample_ids)
+    df.insert(0, "sample_id", sample_ids)
     return df
 
 
@@ -54,7 +54,7 @@ def small_embedding_data():
     df = pd.DataFrame(embedding, columns=["dim_1", "dim_2"])
     # Add sample_id column as first column
     sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
-    df.insert(0, 'sample_id', sample_ids)
+    df.insert(0, "sample_id", sample_ids)
     return df
 
 
@@ -71,11 +71,13 @@ def labels_data():
     """Labels for 50 samples with 2 categorical variables."""
     np.random.seed(42)
     n_samples = 50
-    return pd.DataFrame({
-        "sample_id": [f"SAMPLE_{i:03d}" for i in range(n_samples)],
-        "Population": np.random.choice(["PopA", "PopB", "PopC"], n_samples),
-        "Region": np.random.choice(["North", "South"], n_samples),
-    })
+    return pd.DataFrame(
+        {
+            "sample_id": [f"SAMPLE_{i:03d}" for i in range(n_samples)],
+            "Population": np.random.choice(["PopA", "PopB", "PopC"], n_samples),
+            "Region": np.random.choice(["North", "South"], n_samples),
+        }
+    )
 
 
 @pytest.fixture
@@ -90,15 +92,8 @@ def labels_csv(temp_dir, labels_data):
 def colormap_data():
     """Colormap for test labels."""
     return {
-        "Population": {
-            "PopA": "#FF0000",
-            "PopB": "#00FF00",
-            "PopC": "#0000FF"
-        },
-        "Region": {
-            "North": "#FF6B6B",
-            "South": "#4ECDC4"
-        }
+        "Population": {"PopA": "#FF0000", "PopB": "#00FF00", "PopC": "#0000FF"},
+        "Region": {"North": "#FF6B6B", "South": "#4ECDC4"},
     }
 
 
@@ -106,7 +101,7 @@ def colormap_data():
 def colormap_json(temp_dir, colormap_data):
     """Colormap JSON file."""
     colormap_file = temp_dir / "colormap.json"
-    with open(colormap_file, 'w') as f:
+    with open(colormap_file, "w") as f:
         json.dump(colormap_data, f)
     return colormap_file
 
@@ -120,7 +115,7 @@ def numeric_pca_data():
         np.random.randn(n_samples, n_pcs),
         columns=[f"dim_{i+1}" for i in range(n_pcs)],
     )
-    df.insert(0, 'sample_id', np.arange(n_samples, dtype=np.int64))
+    df.insert(0, "sample_id", np.arange(n_samples, dtype=np.int64))
     return df
 
 
@@ -137,11 +132,13 @@ def numeric_labels_data():
     """Labels for 50 samples using integer sample_ids (stored as strings in CSV)."""
     np.random.seed(42)
     n_samples = 50
-    return pd.DataFrame({
-        "sample_id": [str(i) for i in range(n_samples)],
-        "Population": np.random.choice(["PopA", "PopB", "PopC"], n_samples),
-        "Region": np.random.choice(["North", "South"], n_samples),
-    })
+    return pd.DataFrame(
+        {
+            "sample_id": [str(i) for i in range(n_samples)],
+            "Population": np.random.choice(["PopA", "PopB", "PopC"], n_samples),
+            "Region": np.random.choice(["North", "South"], n_samples),
+        }
+    )
 
 
 @pytest.fixture
@@ -171,22 +168,22 @@ def _create_plink_files(temp_dir: Path, prefix_name: str):
     prefix = temp_dir / prefix_name
 
     # Create .fam file (sample information)
-    with open(f"{prefix}.fam", 'w') as f:
+    with open(f"{prefix}.fam", "w") as f:
         for sample_id in sample_ids:
             # FID IID father mother sex phenotype
             f.write(f"{sample_id} {sample_id} 0 0 0 -9\n")
 
     # Create .bim file (variant information)
-    with open(f"{prefix}.bim", 'w') as f:
+    with open(f"{prefix}.bim", "w") as f:
         for i in range(n_snps):
             # chr snp_id genetic_pos physical_pos allele1 allele2
             f.write(f"1 SNP_{i:04d} 0 {i+1} A T\n")
 
     # Create .bed file (genotype data in binary format)
     # PLINK .bed format: magic bytes (0x6c, 0x1b, 0x01) followed by genotype data
-    with open(f"{prefix}.bed", 'wb') as f:
+    with open(f"{prefix}.bed", "wb") as f:
         # Write magic bytes (SNP-major mode)
-        f.write(struct.pack('BBB', 0x6c, 0x1b, 0x01))
+        f.write(struct.pack("BBB", 0x6C, 0x1B, 0x01))
 
         # Write genotype data with some random variation
         # Each SNP needs (n_samples+3)//4 bytes

@@ -108,8 +108,7 @@ class TSNE(EmbeddingBase):
             DataFrame with sample_id and t-SNE coordinates
         """
         logger.warning(
-            "t-SNE does not support out-of-sample projection. "
-            "Refitting on new data..."
+            "t-SNE does not support out-of-sample projection. " "Refitting on new data..."
         )
         return self.fit_transform(X)
 
@@ -130,9 +129,7 @@ class TSNE(EmbeddingBase):
         """
         X_array, sample_ids = self._load_input_data(X)
 
-        logger.info(
-            f"Running t-SNE (perplexity={self.perplexity}) on {len(X_array)} samples..."
-        )
+        logger.info(f"Running t-SNE (perplexity={self.perplexity}) on {len(X_array)} samples...")
         embedding = self.model.fit_transform(X_array)
         self._is_fitted = True
         self._sample_ids = sample_ids

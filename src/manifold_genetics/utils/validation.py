@@ -161,9 +161,7 @@ def validate_colormap_json(path: Union[str, Path]) -> None:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise ValidationError(
-            f"Invalid JSON in colormap file.\n\n"
-            f"  File: {path}\n"
-            f"  Parse error: {e}"
+            f"Invalid JSON in colormap file.\n\n" f"  File: {path}\n" f"  Parse error: {e}"
         )
 
     if not isinstance(data, dict):
@@ -183,9 +181,7 @@ def validate_colormap_json(path: Union[str, Path]) -> None:
             )
 
 
-def validate_admixture_csv(
-    q_prefix: Union[str, Path], k_values: List[int]
-) -> None:
+def validate_admixture_csv(q_prefix: Union[str, Path], k_values: List[int]) -> None:
     """Validate admixture CSV files for each K value.
 
     Checks:
@@ -231,9 +227,7 @@ def validate_admixture_csv(
             )
 
         sample = pd.read_csv(q_path, nrows=5, usecols=comp_cols)
-        non_numeric = [
-            c for c in comp_cols if not pd.api.types.is_numeric_dtype(sample[c])
-        ]
+        non_numeric = [c for c in comp_cols if not pd.api.types.is_numeric_dtype(sample[c])]
         if non_numeric:
             raise ValidationError(
                 f"Admixture CSV for K={k} has non-numeric component columns: {non_numeric}\n\n"

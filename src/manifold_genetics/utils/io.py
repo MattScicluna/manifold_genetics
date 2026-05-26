@@ -82,7 +82,7 @@ def read_embedding_csv(file_path: Union[str, Path]) -> pd.DataFrame:
     Read embedding CSV file in manylatents format.
 
     Expected format:
-    - Columns: sample_id, dim_1, dim_2, ..., dim_N 
+    - Columns: sample_id, dim_1, dim_2, ..., dim_N
     - If no sample_id column, assumes rows are ordered by sample index
 
     Args:
@@ -103,8 +103,8 @@ def read_embedding_csv(file_path: Union[str, Path]) -> pd.DataFrame:
         raise ValueError(f"CSV must have 'dim_' columns. Found: {list(df.columns)}")
 
     # Coerce sample_id to str to prevent int64/float64/object merge failures.
-    if 'sample_id' in df.columns:
-        df['sample_id'] = _coerce_ids_to_str(df['sample_id'])
+    if "sample_id" in df.columns:
+        df["sample_id"] = _coerce_ids_to_str(df["sample_id"])
 
     return df
 
@@ -138,7 +138,7 @@ def write_embedding_csv(
         df = pd.DataFrame(embeddings, columns=dim_cols)
         # Add sample_ids if provided
         if sample_ids is not None:
-            df.insert(0, 'sample_id', sample_ids)
+            df.insert(0, "sample_id", sample_ids)
     else:
         # If DataFrame, use as-is (should already include sample_id if needed)
         df = embeddings.copy()
@@ -168,12 +168,10 @@ def read_admixture_csv(file_path: Union[str, Path]) -> pd.DataFrame:
     df = pd.read_csv(file_path)
 
     if "sample_id" not in df.columns:
-        raise ValueError(
-            f"Admixture CSV missing 'sample_id' column. Found: {list(df.columns)}"
-        )
+        raise ValueError(f"Admixture CSV missing 'sample_id' column. Found: {list(df.columns)}")
 
     # Coerce sample_id to str to prevent int64/float64/object merge failures.
-    df['sample_id'] = _coerce_ids_to_str(df['sample_id'])
+    df["sample_id"] = _coerce_ids_to_str(df["sample_id"])
 
     return df
 
@@ -202,9 +200,7 @@ def read_labels_csv(file_path: Union[str, Path]) -> pd.DataFrame:
     if "sample_id" in df.columns:
         df = df.set_index("sample_id")
     else:
-        logger.warning(
-            f"No 'sample_id' column found in {file_path}. Using first column as index."
-        )
+        logger.warning(f"No 'sample_id' column found in {file_path}. Using first column as index.")
         df = df.set_index(df.columns[0])
 
     index_name = df.index.name
@@ -326,7 +322,7 @@ def read_bim_file(bim_path: Union[str, Path]) -> Dict[str, Tuple[str, str]]:
         raise FileNotFoundError(f"BIM file not found: {bim_path}")
 
     snp_alleles = {}
-    with open(bim_path, 'r') as f:
+    with open(bim_path, "r") as f:
         for line in f:
             fields = line.strip().split()
             if len(fields) < 6:
@@ -342,9 +338,7 @@ def read_bim_file(bim_path: Union[str, Path]) -> Dict[str, Tuple[str, str]]:
 
 
 def check_allele_compatibility(
-    bim1_path: Union[str, Path],
-    bim2_path: Union[str, Path],
-    common_snps: Set[str]
+    bim1_path: Union[str, Path], bim2_path: Union[str, Path], common_snps: Set[str]
 ) -> Tuple[Set[str], Set[str], Set[str]]:
     """
     Check allele compatibility between two PLINK datasets.
@@ -396,10 +390,10 @@ def check_allele_compatibility(
         a1_2, a2_2 = snps2[snp]
 
         # Check for exact match
-        if (a1_1 == a1_2 and a2_1 == a2_2):
+        if a1_1 == a1_2 and a2_1 == a2_2:
             exact_matches.add(snp)
         # Check for complementary (needs flip)
-        elif (a1_1 == a2_2 and a2_1 == a1_2):
+        elif a1_1 == a2_2 and a2_1 == a1_2:
             need_flip.add(snp)
         # Incompatible alleles
         else:

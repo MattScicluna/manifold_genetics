@@ -192,9 +192,7 @@ class DiffusionMap(EmbeddingBase):
         try:
             # Use sparse eigenvalue solver for efficiency
             P_sparse = csr_matrix(P)
-            eigenvalues, eigenvectors = eigs(
-                P_sparse, k=self.n_components + 1, which="LM"
-            )
+            eigenvalues, eigenvectors = eigs(P_sparse, k=self.n_components + 1, which="LM")
 
             # Sort by eigenvalue magnitude
             idx = np.argsort(np.abs(eigenvalues))[::-1]

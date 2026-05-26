@@ -19,7 +19,6 @@ from manifold_genetics.utils.validation import (
     validate_sample_id_overlap,
 )
 
-
 # ---------------------------------------------------------------------------
 # validate_embedding_csv
 # ---------------------------------------------------------------------------
@@ -67,9 +66,7 @@ class TestValidateLabelsCsv:
 
     def test_missing_sample_id_raises(self, tmp_path):
         path = tmp_path / "bad.csv"
-        pd.DataFrame({"Population": ["A"], "Region": ["North"]}).to_csv(
-            path, index=False
-        )
+        pd.DataFrame({"Population": ["A"], "Region": ["North"]}).to_csv(path, index=False)
         with pytest.raises(ValidationError, match="sample_id"):
             validate_labels_csv(path)
 
@@ -140,9 +137,7 @@ class TestValidateAdmixtureCsv:
 
     def test_no_component_columns_raises(self, tmp_path):
         prefix = tmp_path / "q"
-        pd.DataFrame({"sample_id": ["s1"], "foo": [0.5]}).to_csv(
-            f"{prefix}.2.csv", index=False
-        )
+        pd.DataFrame({"sample_id": ["s1"], "foo": [0.5]}).to_csv(f"{prefix}.2.csv", index=False)
         with pytest.raises(ValidationError, match="component_"):
             validate_admixture_csv(str(prefix), [2])
 
@@ -155,9 +150,9 @@ class TestValidateAdmixtureCsv:
 class TestValidateGeographicCsv:
     def test_valid_geographic_passes(self, tmp_path):
         path = tmp_path / "geo.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "longitude": [1.0], "latitude": [2.0]}
-        ).to_csv(path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "longitude": [1.0], "latitude": [2.0]}).to_csv(
+            path, index=False
+        )
         validate_geographic_csv(path)
 
     def test_missing_file_raises(self, tmp_path):
@@ -166,24 +161,20 @@ class TestValidateGeographicCsv:
 
     def test_missing_lat_lon_raises(self, tmp_path):
         path = tmp_path / "geo.csv"
-        pd.DataFrame({"sample_id": ["s1"], "x": [1.0], "y": [2.0]}).to_csv(
-            path, index=False
-        )
+        pd.DataFrame({"sample_id": ["s1"], "x": [1.0], "y": [2.0]}).to_csv(path, index=False)
         with pytest.raises(ValidationError, match="longitude"):
             validate_geographic_csv(path)
 
     def test_custom_column_names(self, tmp_path):
         path = tmp_path / "geo.csv"
-        pd.DataFrame({"sample_id": ["s1"], "lon": [1.0], "lat": [2.0]}).to_csv(
-            path, index=False
-        )
+        pd.DataFrame({"sample_id": ["s1"], "lon": [1.0], "lat": [2.0]}).to_csv(path, index=False)
         validate_geographic_csv(path, longitude_col="lon", latitude_col="lat")
 
     def test_non_numeric_coords_raises(self, tmp_path):
         path = tmp_path / "geo.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "longitude": ["abc"], "latitude": ["def"]}
-        ).to_csv(path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "longitude": ["abc"], "latitude": ["def"]}).to_csv(
+            path, index=False
+        )
         with pytest.raises(ValidationError, match="non-numeric"):
             validate_geographic_csv(path)
 
@@ -196,36 +187,28 @@ class TestValidateGeographicCsv:
 class TestValidateLabelColumn:
     def test_valid_column_passes(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1", "s2"], "Population": ["A", "B"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1", "s2"], "Population": ["A", "B"]}).to_csv(
+            labels_path, index=False
+        )
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Population": {"A": "#FF0000", "B": "#00FF00"}})
-        )
+        cmap_path.write_text(json.dumps({"Population": {"A": "#FF0000", "B": "#00FF00"}}))
 
         validate_label_column("Population", labels_path, cmap_path)
 
     def test_column_missing_from_labels_raises(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Region": ["North"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Region": ["North"]}).to_csv(labels_path, index=False)
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Population": {"A": "#FF0000"}})
-        )
+        cmap_path.write_text(json.dumps({"Population": {"A": "#FF0000"}}))
 
         with pytest.raises(ValidationError, match="not found in labels"):
             validate_label_column("Population", labels_path, cmap_path)
 
     def test_column_missing_from_colormap_raises(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Population": ["A"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Population": ["A"]}).to_csv(labels_path, index=False)
 
         cmap_path = tmp_path / "cmap.json"
         cmap_path.write_text(json.dumps({"Region": {"North": "#FF0000"}}))
@@ -235,28 +218,22 @@ class TestValidateLabelColumn:
 
     def test_misspelled_column_suggests_correction(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Population": ["A"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Population": ["A"]}).to_csv(labels_path, index=False)
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Population": {"A": "#FF0000"}})
-        )
+        cmap_path.write_text(json.dumps({"Population": {"A": "#FF0000"}}))
 
         with pytest.raises(ValidationError, match="Did you mean.*Population"):
             validate_label_column("Populaton", labels_path, cmap_path)
 
     def test_missing_color_for_label_value_raises(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1", "s2", "s3"], "Pop": ["A", "B", "C"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1", "s2", "s3"], "Pop": ["A", "B", "C"]}).to_csv(
+            labels_path, index=False
+        )
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Pop": {"A": "#FF0000", "B": "#00FF00"}})
-        )
+        cmap_path.write_text(json.dumps({"Pop": {"A": "#FF0000", "B": "#00FF00"}}))
 
         with pytest.raises(ValidationError, match="no color in colormap"):
             validate_label_column("Pop", labels_path, cmap_path)
@@ -270,26 +247,22 @@ class TestValidateLabelColumn:
 class TestValidateColumnInCsv:
     def test_valid_column_passes(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1", "s2"], "Population": ["A", "B"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1", "s2"], "Population": ["A", "B"]}).to_csv(
+            labels_path, index=False
+        )
 
         validate_column_in_csv("Population", labels_path)
 
     def test_column_missing_from_labels_raises(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Region": ["North"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Region": ["North"]}).to_csv(labels_path, index=False)
 
         with pytest.raises(ValidationError, match="not found in labels"):
             validate_column_in_csv("Population", labels_path)
 
     def test_misspelled_column_suggests_correction(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Population": ["A"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Population": ["A"]}).to_csv(labels_path, index=False)
 
         with pytest.raises(ValidationError, match="Did you mean.*Population"):
             validate_column_in_csv("Populaton", labels_path)
@@ -307,16 +280,16 @@ class TestValidateLabelsColormapMatch:
     def test_colormap_column_not_in_labels_warns(self, tmp_path, caplog):
         """Colormap key not in labels is a warning (won't crash, just unused)."""
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Population": ["A"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Population": ["A"]}).to_csv(labels_path, index=False)
 
         cmap_path = tmp_path / "cmap.json"
         cmap_path.write_text(
-            json.dumps({
-                "Population": {"A": "#FF0000"},
-                "ExtraColumn": {"X": "#00FF00"},
-            })
+            json.dumps(
+                {
+                    "Population": {"A": "#FF0000"},
+                    "ExtraColumn": {"X": "#00FF00"},
+                }
+            )
         )
 
         with caplog.at_level(logging.WARNING):
@@ -326,14 +299,10 @@ class TestValidateLabelsColormapMatch:
 
     def test_misspelled_column_warns_with_suggestion(self, tmp_path, caplog):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1"], "Population": ["A"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1"], "Population": ["A"]}).to_csv(labels_path, index=False)
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Populaton": {"A": "#FF0000"}})
-        )
+        cmap_path.write_text(json.dumps({"Populaton": {"A": "#FF0000"}}))
 
         with caplog.at_level(logging.WARNING):
             validate_labels_colormap_match(labels_path, cmap_path)
@@ -344,28 +313,24 @@ class TestValidateLabelsColormapMatch:
     def test_missing_color_for_label_value_raises(self, tmp_path):
         """For columns present in both, all label values must have a color."""
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1", "s2", "s3"], "Pop": ["A", "B", "C"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1", "s2", "s3"], "Pop": ["A", "B", "C"]}).to_csv(
+            labels_path, index=False
+        )
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Pop": {"A": "#FF0000", "B": "#00FF00"}})
-        )
+        cmap_path.write_text(json.dumps({"Pop": {"A": "#FF0000", "B": "#00FF00"}}))
 
         with pytest.raises(ValidationError, match="no color in colormap"):
             validate_labels_colormap_match(labels_path, cmap_path)
 
     def test_all_values_have_colors_passes(self, tmp_path):
         labels_path = tmp_path / "labels.csv"
-        pd.DataFrame(
-            {"sample_id": ["s1", "s2"], "Pop": ["A", "B"]}
-        ).to_csv(labels_path, index=False)
+        pd.DataFrame({"sample_id": ["s1", "s2"], "Pop": ["A", "B"]}).to_csv(
+            labels_path, index=False
+        )
 
         cmap_path = tmp_path / "cmap.json"
-        cmap_path.write_text(
-            json.dumps({"Pop": {"A": "#FF0000", "B": "#00FF00"}})
-        )
+        cmap_path.write_text(json.dumps({"Pop": {"A": "#FF0000", "B": "#00FF00"}}))
 
         validate_labels_colormap_match(labels_path, cmap_path)
 
@@ -394,12 +359,8 @@ class TestValidateSampleIdOverlap:
     def test_low_overlap_warns(self, tmp_path, caplog):
         path1 = tmp_path / "a.csv"
         path2 = tmp_path / "b.csv"
-        pd.DataFrame({"sample_id": ["s1", "s2", "s3", "s4", "s5"]}).to_csv(
-            path1, index=False
-        )
-        pd.DataFrame({"sample_id": ["s1", "x2", "x3", "x4", "x5"]}).to_csv(
-            path2, index=False
-        )
+        pd.DataFrame({"sample_id": ["s1", "s2", "s3", "s4", "s5"]}).to_csv(path1, index=False)
+        pd.DataFrame({"sample_id": ["s1", "x2", "x3", "x4", "x5"]}).to_csv(path2, index=False)
         with caplog.at_level(logging.WARNING):
             validate_sample_id_overlap(path1, path2, "file1", "file2")
         assert "Sample_id mismatch" in caplog.text

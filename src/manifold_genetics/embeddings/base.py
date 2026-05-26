@@ -146,9 +146,9 @@ class EmbeddingBase(ABC):
         n_dims = embedding.shape[1]
         dim_cols = [f"dim_{i+1}" for i in range(n_dims)]
         df = pd.DataFrame(embedding, columns=dim_cols)
-        
+
         # Add sample_id column as the first column
-        df.insert(0, 'sample_id', sample_ids)
+        df.insert(0, "sample_id", sample_ids)
 
         # Save if output path provided
         if output_path:

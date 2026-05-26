@@ -142,7 +142,9 @@ class PHATE(EmbeddingBase):
                 start_idx = i * self.embed_batch_size
                 end_idx = min((i + 1) * self.embed_batch_size, n_samples)
 
-                logger.info(f"  Processing batch {i+1}/{n_batches} (samples {start_idx}-{end_idx})...")
+                logger.info(
+                    f"  Processing batch {i+1}/{n_batches} (samples {start_idx}-{end_idx})..."
+                )
                 batch_data = X_array[start_idx:end_idx]
                 batch_embedding = self.model.transform(batch_data)
                 embeddings.append(batch_embedding)

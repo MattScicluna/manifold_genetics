@@ -129,9 +129,7 @@ class ToolResolver:
             if self._validate_executable(env_path):
                 return env_path
             else:
-                raise ToolNotFoundError(
-                    f"FLASHPCA_PATH points to invalid executable: {env_path}"
-                )
+                raise ToolNotFoundError(f"FLASHPCA_PATH points to invalid executable: {env_path}")
 
         # 3. Check PATH
         for name in ["flashpca", "flashpca_x86-64"]:
@@ -392,7 +390,15 @@ class ToolResolver:
 
             # Clean up zip file and extra files
             output_zip.unlink()
-            for extra in ["LICENSE", "prettify", "toy.ped", "toy.map", "toy.fam", "toy.bed", "toy.bim"]:
+            for extra in [
+                "LICENSE",
+                "prettify",
+                "toy.ped",
+                "toy.map",
+                "toy.fam",
+                "toy.bed",
+                "toy.bim",
+            ]:
                 extra_path = self.download_dir / extra
                 if extra_path.exists():
                     extra_path.unlink()

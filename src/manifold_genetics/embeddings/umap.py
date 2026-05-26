@@ -133,9 +133,7 @@ class UMAP(EmbeddingBase):
         """
         X_array, sample_ids = self._load_input_data(X)
 
-        logger.info(
-            f"Running UMAP (n_neighbors={self.n_neighbors}) on {len(X_array)} samples..."
-        )
+        logger.info(f"Running UMAP (n_neighbors={self.n_neighbors}) on {len(X_array)} samples...")
         embedding = self.model.fit_transform(X_array)
         self._is_fitted = True
         self._sample_ids = sample_ids

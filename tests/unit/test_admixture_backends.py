@@ -24,9 +24,9 @@ class TestFakeAdmixtureBackend:
         """Verify FakeAdmixtureBackend implements AdmixtureBackend interface."""
         backend = FakeAdmixtureBackend(k_min=2, k_max=5)
         assert isinstance(backend, AdmixtureBackend)
-        assert hasattr(backend, 'fit')
-        assert hasattr(backend, 'transform')
-        assert hasattr(backend, 'fit_transform')
+        assert hasattr(backend, "fit")
+        assert hasattr(backend, "transform")
+        assert hasattr(backend, "fit_transform")
 
     def test_fit_transform_generates_files(self, dummy_plink_files, temp_dir):
         """Test that fit_transform generates Q files for all K values."""
@@ -113,7 +113,9 @@ class TestFakeAdmixtureBackend:
         # But component values should differ
         components1 = df1[["component_1", "component_2"]].values
         components2 = df2[["component_1", "component_2"]].values
-        assert not np.allclose(components1, components2), "Different seeds should produce different Q matrices"
+        assert not np.allclose(
+            components1, components2
+        ), "Different seeds should produce different Q matrices"
 
 
 class TestPrecomputedAdmixtureBackend:
@@ -123,9 +125,9 @@ class TestPrecomputedAdmixtureBackend:
         """Verify PrecomputedAdmixtureBackend implements AdmixtureBackend interface."""
         backend = PrecomputedAdmixtureBackend(k_min=2, k_max=3)
         assert isinstance(backend, AdmixtureBackend)
-        assert hasattr(backend, 'fit')
-        assert hasattr(backend, 'transform')
-        assert hasattr(backend, 'fit_transform')
+        assert hasattr(backend, "fit")
+        assert hasattr(backend, "transform")
+        assert hasattr(backend, "fit_transform")
 
     def test_loads_existing_fixtures(self, fit_plink_files, temp_dir):
         """Test that backend successfully loads precomputed fixtures."""
@@ -135,11 +137,7 @@ class TestPrecomputedAdmixtureBackend:
 
         assert fixtures_dir.exists(), f"Fixtures not found at {fixtures_dir}"
 
-        backend = PrecomputedAdmixtureBackend(
-            k_min=2,
-            k_max=3,
-            fixtures_dir=str(fixtures_dir)
-        )
+        backend = PrecomputedAdmixtureBackend(k_min=2, k_max=3, fixtures_dir=str(fixtures_dir))
 
         output_prefix = temp_dir / "out"
         q_files = backend.fit_transform(fit_plink_files, str(output_prefix))
@@ -161,11 +159,7 @@ class TestPrecomputedAdmixtureBackend:
         tests_dir = Path(__file__).parent.parent
         fixtures_dir = tests_dir / "fixtures" / "admixture"
 
-        backend = PrecomputedAdmixtureBackend(
-            k_min=2,
-            k_max=3,
-            fixtures_dir=str(fixtures_dir)
-        )
+        backend = PrecomputedAdmixtureBackend(k_min=2, k_max=3, fixtures_dir=str(fixtures_dir))
 
         # Fit on "fit" subset
         output_dir = temp_dir / "models"
@@ -191,11 +185,7 @@ class TestPrecomputedAdmixtureBackend:
         empty_fixtures = temp_dir / "empty_fixtures"
         empty_fixtures.mkdir()
 
-        backend = PrecomputedAdmixtureBackend(
-            k_min=2,
-            k_max=3,
-            fixtures_dir=str(empty_fixtures)
-        )
+        backend = PrecomputedAdmixtureBackend(k_min=2, k_max=3, fixtures_dir=str(empty_fixtures))
 
         # Should raise error when trying to load missing fixtures
         with pytest.raises(FileNotFoundError):
@@ -218,9 +208,9 @@ class TestNeuralAdmixtureBackend:
 
         backend = NeuralAdmixtureBackend(k_min=2, k_max=3)
         assert isinstance(backend, AdmixtureBackend)
-        assert hasattr(backend, 'fit')
-        assert hasattr(backend, 'transform')
-        assert hasattr(backend, 'fit_transform')
+        assert hasattr(backend, "fit")
+        assert hasattr(backend, "transform")
+        assert hasattr(backend, "fit_transform")
 
     # Additional slow tests would go here
     # These would require actual PLINK data and run neural-admixture

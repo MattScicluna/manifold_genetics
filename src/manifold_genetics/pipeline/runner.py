@@ -45,7 +45,7 @@ def run_pipeline(
     embedding_input: str = "both",
     # Visualization parameters
     admix_group_column: Optional[str] = None,
-    admix_within_group_order: Optional[str] = 'chron',
+    admix_within_group_order: Optional[str] = "chron",
     projection_plot_fit_column: Optional[str] = None,
     projection_plot_transform_column: Optional[str] = None,
     # Skip flags

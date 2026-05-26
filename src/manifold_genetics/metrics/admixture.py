@@ -91,9 +91,7 @@ def compute_admixture_preservation(
         q_matrix = _load_q_matrix(q_files[k])
 
         # Align with embedding (match sample IDs)
-        aligned_q, aligned_emb = _align_matrices(
-            q_matrix, embedding_coords, sample_ids
-        )
+        aligned_q, aligned_emb = _align_matrices(q_matrix, embedding_coords, sample_ids)
 
         if len(aligned_q) < 2:
             logger.warning(f"Not enough samples for K={k}, skipping")
@@ -122,9 +120,7 @@ def compute_admixture_preservation(
             "n_pairs": len(admix_dists),
         }
 
-        logger.info(
-            f"K={k}: correlation={correlation:.4f}, p={p_value:.2e}, n={len(aligned_q)}"
-        )
+        logger.info(f"K={k}: correlation={correlation:.4f}, p={p_value:.2e}, n={len(aligned_q)}")
 
     return results
 
@@ -152,7 +148,7 @@ def _load_q_matrix(q_path: Union[str, Path]) -> pd.DataFrame:
         return df[component_cols]
     except (ValueError, FileNotFoundError):
         pass
-        
+
     # Fallback: load as space-separated file (old format)
     logger.warning(f"Loading {q_path} as legacy format (no headers)")
     q_matrix = pd.read_csv(q_path, sep=r"\s+", header=None)
@@ -175,20 +171,22 @@ def _align_matrices(
     """
     # Create DataFrame for embedding with sample_id as index
     embedding_df = pd.DataFrame(embedding_coords, index=sample_ids)
-    
+
     # Find intersection of sample IDs
     common_samples = q_matrix.index.intersection(embedding_df.index)
-    
+
     if len(common_samples) == 0:
         raise ValueError("No common sample IDs found between Q matrix and embedding")
-        
-    logger.info(f"Found {len(common_samples)} common samples for alignment "
-                f"(Q matrix: {len(q_matrix)}, embedding: {len(embedding_df)})")
-    
+
+    logger.info(
+        f"Found {len(common_samples)} common samples for alignment "
+        f"(Q matrix: {len(q_matrix)}, embedding: {len(embedding_df)})"
+    )
+
     # Align both matrices by common sample IDs
     q_aligned = q_matrix.loc[common_samples]
     embedding_aligned = embedding_df.loc[common_samples]
-    
+
     return q_aligned.values, embedding_aligned.values
 
 
