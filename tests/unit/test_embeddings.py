@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from manifold_genetics.embeddings import PHATE, UMAP, TSNE, DiffusionMap
+from manifold_genetics.embeddings import PHATE, TSNE, UMAP, DiffusionMap
 
 
 class TestPHATE:

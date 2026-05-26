@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 import phate
 
-from .base import EmbeddingBase
 from ..utils.io import write_embedding_csv
+from .base import EmbeddingBase
 
 logger = logging.getLogger(__name__)
 

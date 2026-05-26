@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap, to_hex
 from matplotlib.patches import Patch
-from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.cluster.hierarchy import leaves_list, linkage
 from scipy.optimize import linear_sum_assignment
 
 from ..utils.io import (
@@ -908,6 +908,7 @@ def plot_knn_composition(
         Path to saved figure
     """
     from collections import Counter
+
     from sklearn.neighbors import NearestNeighbors
 
     # Step 1 — Load data

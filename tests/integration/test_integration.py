@@ -5,10 +5,11 @@ These tests verify end-to-end workflows using small test data.
 They use precomputed admixture fixtures to avoid slow neural-admixture computation.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
 
 
 @pytest.mark.integration

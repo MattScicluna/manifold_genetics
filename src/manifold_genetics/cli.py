@@ -7,24 +7,16 @@ Provides commands for PCA, admixture, embeddings, visualization, and full pipeli
 import argparse
 import json
 import logging
-import sys
 import re
+import sys
 from pathlib import Path
 from typing import List, Optional
 
-from .pca import PCA
 from .admixture import NeuralAdmixture
-from .embeddings import PHATE, UMAP, TSNE, DiffusionMap
-from .visualization import (
-    visualize,
-    plot_pca_pairs,
-    plot_projection,
-    plot_knn_composition,
-    plot_admixture_bar_grid,
-    plot_admixture_embedding_grid,
-)
+from .embeddings import PHATE, TSNE, UMAP, DiffusionMap
+from .metrics import compute_admixture_preservation, compute_geographic_preservation
+from .pca import PCA
 from .pipeline import Pipeline, run_pipeline
-from .metrics import compute_geographic_preservation, compute_admixture_preservation
 from .utils.io import read_colormap
 from .utils.tools import ToolResolver
 from .utils.validation import (
@@ -37,6 +29,14 @@ from .utils.validation import (
     validate_labels_colormap_match,
     validate_labels_csv,
     validate_sample_id_overlap,
+)
+from .visualization import (
+    plot_admixture_bar_grid,
+    plot_admixture_embedding_grid,
+    plot_knn_composition,
+    plot_pca_pairs,
+    plot_projection,
+    visualize,
 )
 
 

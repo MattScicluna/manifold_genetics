@@ -4,26 +4,26 @@ Pipeline orchestrator for end-to-end genetic analysis.
 Coordinates PCA, Admixture, Embeddings, Visualization, and Metrics.
 """
 
+import json
 import logging
 import subprocess
-import json
 from pathlib import Path
 from typing import Dict, Optional, Union
 
 import pandas as pd
 
-from ..pca import PCA
 from ..admixture import NeuralAdmixture
-from ..embeddings import PHATE, UMAP, TSNE, DiffusionMap
+from ..embeddings import PHATE, TSNE, UMAP, DiffusionMap
+from ..metrics import compute_admixture_preservation, compute_geographic_preservation
+from ..pca import PCA
+from ..utils.io import read_colormap
 from ..visualization import (
-    visualize,
-    plot_pca_pairs,
-    plot_projection,
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
+    plot_pca_pairs,
+    plot_projection,
+    visualize,
 )
-from ..utils.io import read_colormap
-from ..metrics import compute_geographic_preservation, compute_admixture_preservation
 
 logger = logging.getLogger(__name__)
 
@@ -269,8 +269,8 @@ class Pipeline:
 
                 logger.info("Plotting PCA pairs grid via plot_pca_pairs")
                 # Use plot_pca_pairs to generate a single grid covering PC pairs
-                from ..visualization import plot_pca_pairs
                 from ..utils.io import read_colormap
+                from ..visualization import plot_pca_pairs
 
                 colormap_dict = read_colormap(self.project_colormap)
                 pca_figure_paths = []

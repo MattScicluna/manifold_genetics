@@ -5,12 +5,13 @@ Tests end-to-end pipeline execution with precomputed admixture backend.
 Uses small test data (50 samples, 100 SNPs) for fast execution.
 """
 
-import pytest
-import pandas as pd
 from pathlib import Path
 
-from manifold_genetics.pipeline import run_pipeline
+import pandas as pd
+import pytest
+
 from manifold_genetics.admixture.backends import PrecomputedAdmixtureBackend
+from manifold_genetics.pipeline import run_pipeline
 
 
 @pytest.mark.integration

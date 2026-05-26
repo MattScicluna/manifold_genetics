@@ -10,12 +10,13 @@ These are integration tests that require the full HGDP+1KGP dataset.
 They use precomputed admixture to avoid slow computation but test everything else.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import subprocess
 import tempfile
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
 
 
 def get_hgdp_data_dir():

@@ -1,7 +1,7 @@
 """CLI contract tests (PCA, admixture, embedding) using lightweight fakes."""
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 
 import pandas as pd
 

@@ -6,7 +6,7 @@ Handles reading/writing PLINK files, CSV files, and format conversions.
 
 import logging
 from pathlib import Path
-from typing import Optional, Union, Dict, Tuple, Set
+from typing import Dict, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
