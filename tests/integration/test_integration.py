@@ -76,12 +76,14 @@ def test_sample_ids_consistent():
     transform_3 = pd.read_csv(fixtures_dir / "transform.3.csv")
 
     # Check fit subset has consistent sample IDs
-    assert list(fit_2["sample_id"]) == list(fit_3["sample_id"]), \
-        "Fit subset should have same sample IDs across K values"
+    assert list(fit_2["sample_id"]) == list(
+        fit_3["sample_id"]
+    ), "Fit subset should have same sample IDs across K values"
 
     # Check transform subset has consistent sample IDs
-    assert list(transform_2["sample_id"]) == list(transform_3["sample_id"]), \
-        "Transform subset should have same sample IDs across K values"
+    assert list(transform_2["sample_id"]) == list(
+        transform_3["sample_id"]
+    ), "Transform subset should have same sample IDs across K values"
 
     # Check expected sample ID format
     expected_ids = [f"SAMPLE_{i:03d}" for i in range(50)]

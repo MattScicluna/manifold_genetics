@@ -164,7 +164,6 @@ class PCA:
 
         return df
 
-
     def fit_transform(
         self, plink_prefix: Union[str, Path], output_path: Optional[Union[str, Path]] = None
     ) -> pd.DataFrame:
@@ -211,9 +210,7 @@ class PCA:
 
         return df
 
-    def _run_flashpca_fit(
-        self, plink_prefix: Path, output_prefix: Path
-    ) -> Dict[str, Path]:
+    def _run_flashpca_fit(self, plink_prefix: Path, output_prefix: Path) -> Dict[str, Path]:
         """Run FlashPCA fit command."""
         logger.info("=" * 70)
         logger.info("FLASHPCA FIT")
@@ -363,7 +360,7 @@ class PCA:
 
         # Get sample IDs from PLINK files (IID column); coerce to str to
         # avoid int64/object dtype mismatch when merging with label DataFrames.
-        sample_ids = df['IID'].astype(str).values
+        sample_ids = df["IID"].astype(str).values
 
         # Extract PC columns (skip FID and IID)
         pc_cols = [col for col in df.columns if col.startswith("PC")]
@@ -374,7 +371,7 @@ class PCA:
         dim_cols = [f"dim_{i+1}" for i in range(n_pcs)]
 
         result_df = pd.DataFrame(pc_values, columns=dim_cols)
-        result_df.insert(0, 'sample_id', sample_ids)
+        result_df.insert(0, "sample_id", sample_ids)
 
         logger.info(f"Converted {len(result_df)} samples with {n_pcs} PCs")
         return result_df

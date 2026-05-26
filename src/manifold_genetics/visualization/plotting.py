@@ -18,7 +18,13 @@ from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.optimize import linear_sum_assignment
 
-from ..utils.io import _coerce_ids_to_str, read_admixture_csv, read_colormap, read_embedding_csv, read_labels_csv
+from ..utils.io import (
+    _coerce_ids_to_str,
+    read_admixture_csv,
+    read_colormap,
+    read_embedding_csv,
+    read_labels_csv,
+)
 
 matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
@@ -64,7 +70,7 @@ def plot_embedding(
         labels_df = labels
 
     # Reset index if sample_id is the index (from read_labels_csv)
-    if labels_df.index.name == 'sample_id':
+    if labels_df.index.name == "sample_id":
         labels_df = labels_df.reset_index()
 
     if isinstance(colormap, (str, Path)):
@@ -76,7 +82,7 @@ def plot_embedding(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Merge embedding with labels on sample_id to ensure correct alignment
-    merged_df = embedding_df.merge(labels_df, on='sample_id', how='inner')
+    merged_df = embedding_df.merge(labels_df, on="sample_id", how="inner")
 
     # Create figure
     fig, axes = plt.subplots(
@@ -99,9 +105,9 @@ def plot_embedding(
                 merged_df.loc[missing_mask, "dim_2"],
                 s=point_size,
                 alpha=alpha * 0.5,  # More transparent for background
-                color='lightgray',
-                edgecolors='none',
-                label='Unknown',
+                color="lightgray",
+                edgecolors="none",
+                label="Unknown",
                 rasterized=True,
                 zorder=1,  # Low z-order for background
             )
@@ -121,7 +127,7 @@ def plot_embedding(
                 s=point_size,
                 alpha=alpha,
                 color=color,
-                edgecolors='none',
+                edgecolors="none",
                 label=label,
                 rasterized=True,
                 zorder=2,  # Higher z-order for foreground
@@ -135,7 +141,7 @@ def plot_embedding(
             if g in merged_df[label_col].values
         ]
         if merged_df[label_col].isna().any():
-            legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
+            legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
         # Remove ticks, tick labels, axis labels, and titles
         ax.set_xticks([])
@@ -150,7 +156,7 @@ def plot_embedding(
                 handles=legend_elements,
                 fontsize=8,
                 framealpha=0.9,
-                loc='center left',
+                loc="center left",
                 bbox_to_anchor=(1.02, 0.5),
             )
 
@@ -202,7 +208,7 @@ def plot_pca_pairs(
         labels_df = labels
 
     # Reset index if sample_id is the index (from read_labels_csv)
-    if labels_df.index.name == 'sample_id':
+    if labels_df.index.name == "sample_id":
         labels_df = labels_df.reset_index()
 
     if isinstance(colormap, (str, Path)):
@@ -214,11 +220,15 @@ def plot_pca_pairs(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Merge PCA with labels on sample_id to ensure correct alignment
-    merged_df = pca_df.merge(labels_df, on='sample_id', how='inner')
+    merged_df = pca_df.merge(labels_df, on="sample_id", how="inner")
 
     # Validate label column exists in the data
     if label_column not in merged_df.columns:
-        available_cols = [col for col in merged_df.columns if col not in ['sample_id'] + [f"dim_{i+1}" for i in range(50)]]
+        available_cols = [
+            col
+            for col in merged_df.columns
+            if col not in ["sample_id"] + [f"dim_{i+1}" for i in range(50)]
+        ]
         error_msg = (
             f"\n{'='*70}\n"
             f"ERROR: Label column '{label_column}' not found in labels data\n"
@@ -283,9 +293,9 @@ def plot_pca_pairs(
                 merged_df.loc[missing_mask, pc_y_col],
                 s=point_size,
                 alpha=alpha * 0.5,  # More transparent for background
-                color='lightgray',
-                edgecolors='none',
-                label='Unknown' if pair_idx == 0 else '',
+                color="lightgray",
+                edgecolors="none",
+                label="Unknown" if pair_idx == 0 else "",
                 rasterized=True,
                 zorder=1,  # Low z-order for background
             )
@@ -304,8 +314,8 @@ def plot_pca_pairs(
                 s=point_size,
                 alpha=alpha,
                 color=color,
-                edgecolors='none',
-                label=label if pair_idx == 0 else '',  # Only label on first plot
+                edgecolors="none",
+                label=label if pair_idx == 0 else "",  # Only label on first plot
                 rasterized=True,
                 zorder=2,  # Higher z-order for foreground
             )
@@ -328,7 +338,7 @@ def plot_pca_pairs(
         if g in merged_df[label_column].values
     ]
     if merged_df[label_column].isna().any():
-        legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
+        legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
     # Add legend with patches
     if len(legend_elements) <= 50:
@@ -411,6 +421,7 @@ def visualize(
 # Admixture visualizations
 # --------------------------------------------------------------------------- #
 
+
 def _load_admixture_csv(
     q_prefix: Union[str, Path],
     k_values: Sequence[int],
@@ -456,7 +467,7 @@ def plot_admixture_bar_grid(
     sort_groups: bool = True,
     group_order: Optional[Sequence[str]] = None,
     colormap: Optional[Union[Dict, str, Path]] = None,
-    within_group_order: Optional[str] = 'chron',
+    within_group_order: Optional[str] = "chron",
     component_colors_output: Optional[Union[str, Path]] = None,
 ) -> Path:
     """
@@ -529,7 +540,9 @@ def plot_admixture_bar_grid(
         if derived_order:
             present_groups = set(df[group_column])
             order = [g for g in derived_order if g in present_groups]
-            missing_groups = [g for g in df[group_column].dropna().unique().tolist() if g not in order]
+            missing_groups = [
+                g for g in df[group_column].dropna().unique().tolist() if g not in order
+            ]
             order.extend(missing_groups)
             cat = pd.Categorical(df[group_column], categories=order, ordered=True)
             df[group_column] = cat
@@ -565,20 +578,26 @@ def plot_admixture_bar_grid(
 
         prepared_by_k[k] = df
         comp_cols_by_k[k] = comp_cols
-        component_values_by_k[k] = df[["sample_id", *comp_cols]].drop_duplicates("sample_id").set_index("sample_id")
+        component_values_by_k[k] = (
+            df[["sample_id", *comp_cols]].drop_duplicates("sample_id").set_index("sample_id")
+        )
 
     # Build an alignment sample set that is shared across all K values.
     common_sample_ids = set(component_values_by_k[k_values[0]].index)
     for k in k_values[1:]:
         common_sample_ids &= set(component_values_by_k[k].index)
     if not common_sample_ids:
-        raise ValueError("No shared sample_id values found across K values for component alignment.")
+        raise ValueError(
+            "No shared sample_id values found across K values for component alignment."
+        )
 
     alignment_sample_ids = list(common_sample_ids)
     alignment_max_samples = 12000
     if len(alignment_sample_ids) > alignment_max_samples:
         # Stratified sample by group to keep large cohorts tractable while preserving structure.
-        ref_df = prepared_by_k[k_values[0]][["sample_id", group_column]].drop_duplicates("sample_id")
+        ref_df = prepared_by_k[k_values[0]][["sample_id", group_column]].drop_duplicates(
+            "sample_id"
+        )
         ref_df = ref_df[ref_df["sample_id"].isin(common_sample_ids)]
 
         sampled_parts: List[pd.Series] = []
@@ -598,7 +617,9 @@ def plot_admixture_bar_grid(
             remaining_ids = [sid for sid in alignment_sample_ids if sid not in sampled_set]
             need = min(alignment_max_samples - len(sampled_ids), len(remaining_ids))
             if need > 0:
-                sampled_ids.extend(pd.Series(remaining_ids).sample(n=need, random_state=42).tolist())
+                sampled_ids.extend(
+                    pd.Series(remaining_ids).sample(n=need, random_state=42).tolist()
+                )
 
         alignment_sample_ids = sampled_ids
         logger.info(
@@ -615,7 +636,9 @@ def plot_admixture_bar_grid(
     # Build aligned matrices in the same sample order for similarity matching.
     aligned_matrix_by_k: Dict[int, np.ndarray] = {}
     for k in k_values:
-        aligned_matrix_by_k[k] = component_values_by_k[k].loc[alignment_sample_ids, comp_cols_by_k[k]].to_numpy()
+        aligned_matrix_by_k[k] = (
+            component_values_by_k[k].loc[alignment_sample_ids, comp_cols_by_k[k]].to_numpy()
+        )
 
     # Create a reusable palette. Start from user colors if provided, then extend deterministically.
     if colors:
@@ -625,7 +648,9 @@ def plot_admixture_bar_grid(
 
     max_needed_colors = max(len(cols) for cols in comp_cols_by_k.values())
     if len(palette) < max_needed_colors:
-        extra = plt.get_cmap("hsv")(np.linspace(0, 1, max_needed_colors - len(palette), endpoint=False))
+        extra = plt.get_cmap("hsv")(
+            np.linspace(0, 1, max_needed_colors - len(palette), endpoint=False)
+        )
         palette.extend(to_hex(c) for c in extra)
 
     # Track component lineage across Ks via Hungarian matching.
@@ -810,7 +835,9 @@ def plot_admixture_embedding_grid(
                 comp_col = sorted_comp_cols[col_idx]
                 color = k_cmap[comp_col]["color"]
                 lineage_idx = k_cmap[comp_col]["lineage"]
-                cmap = LinearSegmentedColormap.from_list(f"lin_{lineage_idx}", ["white", color], N=256)
+                cmap = LinearSegmentedColormap.from_list(
+                    f"lin_{lineage_idx}", ["white", color], N=256
+                )
                 title = f"K={k} • Comp {lineage_idx + 1}"
             else:
                 comp_col = f"component_{col_idx + 1}"
@@ -898,14 +925,14 @@ def plot_knn_composition(
         fit_labels_df = read_labels_csv(fit_labels)
     else:
         fit_labels_df = fit_labels
-    if fit_labels_df.index.name == 'sample_id':
+    if fit_labels_df.index.name == "sample_id":
         fit_labels_df = fit_labels_df.reset_index()
 
     if isinstance(project_labels, (str, Path)):
         proj_labels_df = read_labels_csv(project_labels)
     else:
         proj_labels_df = project_labels
-    if proj_labels_df.index.name == 'sample_id':
+    if proj_labels_df.index.name == "sample_id":
         proj_labels_df = proj_labels_df.reset_index()
 
     if isinstance(fit_colormap, (str, Path)):
@@ -925,43 +952,45 @@ def plot_knn_composition(
 
     # Step 2 — Align fit labels to fit embedding
     fit_emb_df = fit_emb_df.copy()
-    fit_emb_df['sample_id'] = _coerce_ids_to_str(fit_emb_df['sample_id'])
+    fit_emb_df["sample_id"] = _coerce_ids_to_str(fit_emb_df["sample_id"])
     fit_labels_df = fit_labels_df.copy()
-    fit_labels_df['sample_id'] = _coerce_ids_to_str(fit_labels_df['sample_id'])
+    fit_labels_df["sample_id"] = _coerce_ids_to_str(fit_labels_df["sample_id"])
 
-    fit_merged = fit_emb_df.merge(fit_labels_df[['sample_id', fit_label_column]], on='sample_id', how='inner')
+    fit_merged = fit_emb_df.merge(
+        fit_labels_df[["sample_id", fit_label_column]], on="sample_id", how="inner"
+    )
     if fit_merged.empty:
-        n_emb = len(fit_emb_df['sample_id'].unique())
-        n_lbl = len(fit_labels_df['sample_id'].unique())
+        n_emb = len(fit_emb_df["sample_id"].unique())
+        n_lbl = len(fit_labels_df["sample_id"].unique())
         raise ValueError(
             f"Merging fit_emb_df and fit_labels_df on 'sample_id' produced zero rows. "
             f"fit_emb_df has {n_emb} unique sample_id(s), fit_labels_df has {n_lbl} unique sample_id(s), "
             "but none overlap. Check that both inputs share the same sample identifiers."
         )
-    dim_cols = [c for c in fit_merged.columns if c.startswith('dim_')]
+    dim_cols = [c for c in fit_merged.columns if c.startswith("dim_")]
     fit_coords = fit_merged[dim_cols].to_numpy()
     aligned_fit_labels = fit_merged[fit_label_column].to_numpy()
 
     # Step 3 — Align project labels to project embedding
     proj_emb_df = proj_emb_df.copy()
-    proj_emb_df['sample_id'] = _coerce_ids_to_str(proj_emb_df['sample_id'])
+    proj_emb_df["sample_id"] = _coerce_ids_to_str(proj_emb_df["sample_id"])
     proj_labels_df = proj_labels_df.copy()
-    proj_labels_df['sample_id'] = _coerce_ids_to_str(proj_labels_df['sample_id'])
+    proj_labels_df["sample_id"] = _coerce_ids_to_str(proj_labels_df["sample_id"])
 
     proj_merged = proj_emb_df.merge(
-        proj_labels_df[['sample_id', project_label_column]], on='sample_id', how='inner'
+        proj_labels_df[["sample_id", project_label_column]], on="sample_id", how="inner"
     )
     if proj_merged.empty:
-        n_emb = len(proj_emb_df['sample_id'].unique())
-        n_lbl = len(proj_labels_df['sample_id'].unique())
+        n_emb = len(proj_emb_df["sample_id"].unique())
+        n_lbl = len(proj_labels_df["sample_id"].unique())
         raise ValueError(
             f"Merging proj_emb_df and proj_labels_df on 'sample_id' produced zero rows. "
             f"proj_emb_df has {n_emb} unique sample_id(s), proj_labels_df has {n_lbl} unique sample_id(s), "
             "but none overlap. Check that both inputs share the same sample identifiers."
         )
-    proj_dim_cols = [c for c in proj_merged.columns if c.startswith('dim_')]
+    proj_dim_cols = [c for c in proj_merged.columns if c.startswith("dim_")]
     proj_coords = proj_merged[proj_dim_cols].to_numpy()
-    proj_sample_ids = proj_merged['sample_id'].to_numpy()
+    proj_sample_ids = proj_merged["sample_id"].to_numpy()
     proj_group_labels = proj_merged[project_label_column].to_numpy()
 
     # Step 3 — KNN index
@@ -971,7 +1000,7 @@ def plot_knn_composition(
             f"k (n_neighbors={k}) must be <= number of fit samples ({n_fit_samples}) "
             "when building the NearestNeighbors index."
         )
-    knn = NearestNeighbors(n_neighbors=k, metric='euclidean', algorithm='auto')
+    knn = NearestNeighbors(n_neighbors=k, metric="euclidean", algorithm="auto")
     knn.fit(fit_coords)
     indices = knn.kneighbors(proj_coords, return_distance=False)  # (N_proj, k)
 
@@ -984,13 +1013,13 @@ def plot_knn_composition(
         rows.append({lbl: counter.get(lbl, 0) for lbl in all_fit_labels})
 
     count_df = pd.DataFrame(rows, index=proj_sample_ids)
-    count_df.index.name = 'sample_id'
+    count_df.index.name = "sample_id"
     count_df[project_label_column] = proj_group_labels
 
     # Order columns by total count across all project individuals (most frequent first)
     col_totals = count_df[all_fit_labels].sum(axis=0).sort_values(ascending=False)
     ordered_labels = list(col_totals.index)
-    color_list = [fit_color_dict.get(col, '#888888') for col in ordered_labels]
+    color_list = [fit_color_dict.get(col, "#888888") for col in ordered_labels]
 
     # Step 5 — Panel loop
     if project_label_subset is None:
@@ -1021,9 +1050,10 @@ def plot_knn_composition(
 
             # Build color → [labels] mapping using only labels present in this embedding
             from collections import defaultdict
+
             color_to_labels: Dict[str, List[str]] = defaultdict(list)
             for label in ordered_labels:
-                color_to_labels[fit_color_dict.get(label, '#888888')].append(label)
+                color_to_labels[fit_color_dict.get(label, "#888888")].append(label)
 
             # Per-sample sum of neighbor counts for each color group
             color_count_df = pd.DataFrame(
@@ -1031,22 +1061,22 @@ def plot_knn_composition(
                 index=panel_df.index,
             )
 
-            panel_df['_dom_color'] = color_count_df.idxmax(axis=1)
-            panel_df['_dom_color_count'] = color_count_df.max(axis=1)
+            panel_df["_dom_color"] = color_count_df.idxmax(axis=1)
+            panel_df["_dom_color_count"] = color_count_df.max(axis=1)
 
             # Rank colors by how many samples have that color as dominant (most = rank 0)
-            dom_color_freq = panel_df['_dom_color'].value_counts()
+            dom_color_freq = panel_df["_dom_color"].value_counts()
             dom_color_rank = {c: r for r, c in enumerate(dom_color_freq.index)}
-            panel_df['_dom_color_rank'] = panel_df['_dom_color'].map(dom_color_rank)
+            panel_df["_dom_color_rank"] = panel_df["_dom_color"].map(dom_color_rank)
 
             panel_df = (
                 panel_df.reset_index()
                 .sort_values(
-                    ['_dom_color_rank', '_dom_color_count', 'sample_id'],
+                    ["_dom_color_rank", "_dom_color_count", "sample_id"],
                     ascending=[True, False, True],
                 )
-                .set_index('sample_id')
-                .drop(columns=['_dom_color', '_dom_color_count', '_dom_color_rank'])
+                .set_index("sample_id")
+                .drop(columns=["_dom_color", "_dom_color_count", "_dom_color_rank"])
             )
 
         n = len(panel_df)
@@ -1056,11 +1086,11 @@ def plot_knn_composition(
         present_cols = [col for col in ordered_labels if plot_data[col].sum() > 0]
 
         plot_data.plot(
-            kind='bar',
+            kind="bar",
             stacked=True,
             ax=ax,
             width=1.0,
-            edgecolor='none',
+            edgecolor="none",
             color=color_list,
             legend=False,
         )
@@ -1076,7 +1106,7 @@ def plot_knn_composition(
         # Append any present labels not in the colormap at the end
         in_cmap = set(fit_color_dict)
         legend_patches += [
-            Patch(facecolor='#888888', label=col)
+            Patch(facecolor="#888888", label=col)
             for col in ordered_labels
             if col in present_set and col not in in_cmap
         ]
@@ -1093,7 +1123,7 @@ def plot_knn_composition(
             handles=legend_patches,
             fontsize=7,
             framealpha=0.9,
-            loc='center left',
+            loc="center left",
             bbox_to_anchor=(1.02, 0.5),
             ncol=ncol,
         )
@@ -1125,8 +1155,8 @@ def plot_projection(
     point_size: float = 4.0,
     alpha: float = 0.6,
     linewidth: float = 0.8,
-    fit_marker: str = '^',
-    project_marker: str = 'o',
+    fit_marker: str = "^",
+    project_marker: str = "o",
     show_legend: bool = True,
 ) -> Path:
     """
@@ -1176,7 +1206,7 @@ def plot_projection(
         fit_labels_df = fit_labels
 
     # Reset index if sample_id is the index
-    if fit_labels_df.index.name == 'sample_id':
+    if fit_labels_df.index.name == "sample_id":
         fit_labels_df = fit_labels_df.reset_index()
 
     # Load project labels
@@ -1186,7 +1216,7 @@ def plot_projection(
         project_labels_df = project_labels
 
     # Reset index if sample_id is the index
-    if project_labels_df.index.name == 'sample_id':
+    if project_labels_df.index.name == "sample_id":
         project_labels_df = project_labels_df.reset_index()
 
     # Load colormaps
@@ -1216,8 +1246,8 @@ def plot_projection(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Merge embeddings with labels
-    fit_merged = fit_emb_df.merge(fit_labels_df, on='sample_id', how='inner')
-    project_merged = project_emb_df.merge(project_labels_df, on='sample_id', how='inner')
+    fit_merged = fit_emb_df.merge(fit_labels_df, on="sample_id", how="inner")
+    project_merged = project_emb_df.merge(project_labels_df, on="sample_id", how="inner")
 
     # Get color dictionaries for the specified columns
     fit_color_dict = fit_cmap_dict[fit_label_column]
@@ -1244,8 +1274,8 @@ def plot_projection(
                 fit_merged.loc[fit_missing_mask, "dim_2"],
                 marker=fit_marker,
                 s=point_size,
-                facecolors='none',
-                edgecolors='lightgray',
+                facecolors="none",
+                edgecolors="lightgray",
                 linewidths=linewidth,
                 alpha=alpha * 0.5,
                 rasterized=True,
@@ -1261,8 +1291,8 @@ def plot_projection(
                 project_merged.loc[project_missing_mask, "dim_2"],
                 marker=project_marker,
                 s=point_size,
-                facecolors='none',
-                edgecolors='lightgray',
+                facecolors="none",
+                edgecolors="lightgray",
                 linewidths=linewidth,
                 alpha=alpha * 0.5,
                 rasterized=True,
@@ -1282,7 +1312,7 @@ def plot_projection(
                     fit_merged.loc[fit_mask, "dim_2"],
                     marker=fit_marker,
                     s=point_size,
-                    facecolors='none',
+                    facecolors="none",
                     edgecolors=fit_color,
                     linewidths=linewidth,
                     alpha=alpha,
@@ -1302,7 +1332,7 @@ def plot_projection(
                     project_merged.loc[project_mask, "dim_2"],
                     marker=project_marker,
                     s=point_size,
-                    facecolors='none',
+                    facecolors="none",
                     edgecolors=project_color,
                     linewidths=linewidth,
                     alpha=alpha,
@@ -1328,20 +1358,22 @@ def plot_projection(
 
         # Add "Unknown" if there's missing data
         has_missing = (
-            (fit_label_column in fit_merged.columns and fit_merged[fit_label_column].isna().any()) or
-            (project_label_column in project_merged.columns and project_merged[project_label_column].isna().any())
+            fit_label_column in fit_merged.columns and fit_merged[fit_label_column].isna().any()
+        ) or (
+            project_label_column in project_merged.columns
+            and project_merged[project_label_column].isna().any()
         )
         if has_missing:
-            legend_elements.append(Patch(facecolor='lightgray', label='Unknown'))
+            legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
         if legend_elements:
             ax.legend(
                 handles=legend_elements,
                 fontsize=7,
                 framealpha=0.9,
-                loc='center left',
+                loc="center left",
                 bbox_to_anchor=(1.02, 0.5),
-                title=f"▲ fit: {fit_label_column}\n● transform: {project_label_column}"
+                title=f"▲ fit: {fit_label_column}\n● transform: {project_label_column}",
             )
 
     # Remove ticks, tick labels, axis labels, and titles

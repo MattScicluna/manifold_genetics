@@ -20,13 +20,7 @@ class AdmixtureBackend(ABC):
     CSV format: sample_id,component_1,component_2,...,component_K
     """
 
-    def __init__(
-        self,
-        k_min: int = 2,
-        k_max: int = 10,
-        force: bool = False,
-        **kwargs
-    ):
+    def __init__(self, k_min: int = 2, k_max: int = 10, force: bool = False, **kwargs):
         """
         Initialize backend.
 

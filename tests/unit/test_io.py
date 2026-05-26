@@ -24,7 +24,7 @@ class TestEmbeddingIO:
         embedding_data = np.random.randn(n_samples, n_dims)
         sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
         df = pd.DataFrame(embedding_data, columns=[f"dim_{i+1}" for i in range(n_dims)])
-        df.insert(0, 'sample_id', sample_ids)
+        df.insert(0, "sample_id", sample_ids)
         output_file = temp_dir / "test.csv"
 
         # Write
@@ -43,7 +43,7 @@ class TestEmbeddingIO:
         embedding_data = np.random.randn(20, 3)
         sample_ids = [f"SAMPLE_{i:03d}" for i in range(20)]
         df = pd.DataFrame(embedding_data, columns=[f"dim_{i+1}" for i in range(3)])
-        df.insert(0, 'sample_id', sample_ids)
+        df.insert(0, "sample_id", sample_ids)
         output_file = temp_dir / "test.csv"
 
         write_embedding_csv(df, output_file)
@@ -64,14 +64,13 @@ class TestEmbeddingIO:
 
         pd.testing.assert_frame_equal(small_pca_data, df, check_dtype=False)
 
-
     def test_read_embedding_csv_coerces_numeric_sample_id_to_str(self, numeric_pca_csv):
         """read_embedding_csv must coerce int sample_ids to str dtype."""
         df = read_embedding_csv(numeric_pca_csv)
-        assert 'sample_id' in df.columns
-        assert pd.api.types.is_string_dtype(df['sample_id']), (
-            f"Expected str dtype for sample_id, got {df['sample_id'].dtype}"
-        )
+        assert "sample_id" in df.columns
+        assert pd.api.types.is_string_dtype(
+            df["sample_id"]
+        ), f"Expected str dtype for sample_id, got {df['sample_id'].dtype}"
 
 
 class TestLabelsIO:
@@ -96,9 +95,9 @@ class TestLabelsIO:
     def test_read_labels_csv_coerces_numeric_sample_id_to_str(self, numeric_labels_csv):
         """read_labels_csv must coerce int sample_ids to str index dtype."""
         df = read_labels_csv(numeric_labels_csv)
-        assert pd.api.types.is_string_dtype(df.index), (
-            f"Expected str dtype for index, got {df.index.dtype}"
-        )
+        assert pd.api.types.is_string_dtype(
+            df.index
+        ), f"Expected str dtype for index, got {df.index.dtype}"
         assert df.index[0] == "0"
 
 
@@ -107,11 +106,13 @@ class TestAdmixtureIO:
 
     def test_read_admixture_csv_basic(self, temp_dir):
         """read_admixture_csv returns DataFrame with sample_id column and component columns."""
-        df = pd.DataFrame({
-            "sample_id": [f"SAMPLE_{i:03d}" for i in range(20)],
-            "component_1": np.random.dirichlet([1, 1], 20)[:, 0],
-            "component_2": np.random.dirichlet([1, 1], 20)[:, 1],
-        })
+        df = pd.DataFrame(
+            {
+                "sample_id": [f"SAMPLE_{i:03d}" for i in range(20)],
+                "component_1": np.random.dirichlet([1, 1], 20)[:, 0],
+                "component_2": np.random.dirichlet([1, 1], 20)[:, 1],
+            }
+        )
         path = temp_dir / "admix.2.csv"
         df.to_csv(path, index=False)
 
@@ -122,18 +123,20 @@ class TestAdmixtureIO:
 
     def test_read_admixture_csv_coerces_numeric_sample_id_to_str(self, temp_dir):
         """read_admixture_csv must coerce int sample_ids to str dtype."""
-        df = pd.DataFrame({
-            "sample_id": np.arange(20, dtype=np.int64),
-            "component_1": np.random.rand(20),
-            "component_2": np.random.rand(20),
-        })
+        df = pd.DataFrame(
+            {
+                "sample_id": np.arange(20, dtype=np.int64),
+                "component_1": np.random.rand(20),
+                "component_2": np.random.rand(20),
+            }
+        )
         path = temp_dir / "admix_numeric.2.csv"
         df.to_csv(path, index=False)
 
         result = read_admixture_csv(path)
-        assert pd.api.types.is_string_dtype(result["sample_id"]), (
-            f"Expected str dtype, got {result['sample_id'].dtype}"
-        )
+        assert pd.api.types.is_string_dtype(
+            result["sample_id"]
+        ), f"Expected str dtype, got {result['sample_id'].dtype}"
         assert result["sample_id"].iloc[0] == "0"
 
 
@@ -207,19 +210,23 @@ class TestCoerceIdsToStr:
         """
         # PCA file: sample_ids stored as float64 (as if loaded from a CSV with NaNs elsewhere)
         pca_ids_float = pd.Series([100.0, 200.0, 300.0], dtype=np.float64)
-        pca_df = pd.DataFrame({
-            "sample_id": pca_ids_float,
-            "dim_1": [0.1, 0.2, 0.3],
-            "dim_2": [0.4, 0.5, 0.6],
-        })
+        pca_df = pd.DataFrame(
+            {
+                "sample_id": pca_ids_float,
+                "dim_1": [0.1, 0.2, 0.3],
+                "dim_2": [0.4, 0.5, 0.6],
+            }
+        )
         pca_path = temp_dir / "pca_float_ids.csv"
         pca_df.to_csv(pca_path, index=False)
 
         # Labels file: same IDs stored as plain integers / strings
-        labels_df = pd.DataFrame({
-            "sample_id": ["100", "200", "300"],
-            "Population": ["A", "B", "C"],
-        })
+        labels_df = pd.DataFrame(
+            {
+                "sample_id": ["100", "200", "300"],
+                "Population": ["A", "B", "C"],
+            }
+        )
         labels_path = temp_dir / "labels_str_ids.csv"
         labels_df.to_csv(labels_path, index=False)
 

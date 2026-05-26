@@ -18,104 +18,98 @@ from pathlib import Path
 # Population to Genetic_region_merged mapping
 POPULATION_TO_REGION = {
     # Africa
-    'ACB': 'Africa',
-    'ASW': 'Africa',
-    'BantuKenya': 'Africa',
-    'BantuSouthAfrica': 'Africa',
-    'Biaka': 'Africa',
-    'BiakaPygmy': 'Africa',
-    'ESN': 'Africa',
-    'GWD': 'Africa',
-    'LWK': 'Africa',
-    'MSL': 'Africa',
-    'Mandenka': 'Africa',
-    'Mbuti': 'Africa',
-    'MbutiPygmy': 'Africa',
-    'San': 'Africa',
-    'YRI': 'Africa',
-    'Yoruba': 'Africa',
-
+    "ACB": "Africa",
+    "ASW": "Africa",
+    "BantuKenya": "Africa",
+    "BantuSouthAfrica": "Africa",
+    "Biaka": "Africa",
+    "BiakaPygmy": "Africa",
+    "ESN": "Africa",
+    "GWD": "Africa",
+    "LWK": "Africa",
+    "MSL": "Africa",
+    "Mandenka": "Africa",
+    "Mbuti": "Africa",
+    "MbutiPygmy": "Africa",
+    "San": "Africa",
+    "YRI": "Africa",
+    "Yoruba": "Africa",
     # America
-    'CLM': 'America',
-    'Colombian': 'America',
-    'Karitiana': 'America',
-    'MXL': 'America',
-    'Maya': 'America',
-    'PEL': 'America',
-    'PUR': 'America',
-    'Pima': 'America',
-    'Surui': 'America',
-
+    "CLM": "America",
+    "Colombian": "America",
+    "Karitiana": "America",
+    "MXL": "America",
+    "Maya": "America",
+    "PEL": "America",
+    "PUR": "America",
+    "Pima": "America",
+    "Surui": "America",
     # Central_South_Asia
-    'BEB': 'Central_South_Asia',
-    'Balochi': 'Central_South_Asia',
-    'Brahui': 'Central_South_Asia',
-    'Burusho': 'Central_South_Asia',
-    'GIH': 'Central_South_Asia',
-    'Hazara': 'Central_South_Asia',
-    'ITU': 'Central_South_Asia',
-    'Kalash': 'Central_South_Asia',
-    'Makrani': 'Central_South_Asia',
-    'PJL': 'Central_South_Asia',
-    'Pathan': 'Central_South_Asia',
-    'STU': 'Central_South_Asia',
-    'Sindhi': 'Central_South_Asia',
-
+    "BEB": "Central_South_Asia",
+    "Balochi": "Central_South_Asia",
+    "Brahui": "Central_South_Asia",
+    "Burusho": "Central_South_Asia",
+    "GIH": "Central_South_Asia",
+    "Hazara": "Central_South_Asia",
+    "ITU": "Central_South_Asia",
+    "Kalash": "Central_South_Asia",
+    "Makrani": "Central_South_Asia",
+    "PJL": "Central_South_Asia",
+    "Pathan": "Central_South_Asia",
+    "STU": "Central_South_Asia",
+    "Sindhi": "Central_South_Asia",
     # East_Asia
-    'CDX': 'East_Asia',
-    'CHB': 'East_Asia',
-    'CHS': 'East_Asia',
-    'Cambodian': 'East_Asia',
-    'Dai': 'East_Asia',
-    'Daur': 'East_Asia',
-    'Han': 'East_Asia',
-    'NorthernHan': 'East_Asia',
-    'Hezhen': 'East_Asia',
-    'JPT': 'East_Asia',
-    'Japanese': 'East_Asia',
-    'KHV': 'East_Asia',
-    'Lahu': 'East_Asia',
-    'Miao': 'East_Asia',
-    'Mongola': 'East_Asia',
-    'Mongolian': 'East_Asia',
-    'Naxi': 'East_Asia',
-    'Oroqen': 'East_Asia',
-    'She': 'East_Asia',
-    'Tu': 'East_Asia',
-    'Tujia': 'East_Asia',
-    'Uygur': 'East_Asia',
-    'Xibo': 'East_Asia',
-    'Yakut': 'East_Asia',
-    'Yi': 'East_Asia',
-
+    "CDX": "East_Asia",
+    "CHB": "East_Asia",
+    "CHS": "East_Asia",
+    "Cambodian": "East_Asia",
+    "Dai": "East_Asia",
+    "Daur": "East_Asia",
+    "Han": "East_Asia",
+    "NorthernHan": "East_Asia",
+    "Hezhen": "East_Asia",
+    "JPT": "East_Asia",
+    "Japanese": "East_Asia",
+    "KHV": "East_Asia",
+    "Lahu": "East_Asia",
+    "Miao": "East_Asia",
+    "Mongola": "East_Asia",
+    "Mongolian": "East_Asia",
+    "Naxi": "East_Asia",
+    "Oroqen": "East_Asia",
+    "She": "East_Asia",
+    "Tu": "East_Asia",
+    "Tujia": "East_Asia",
+    "Uygur": "East_Asia",
+    "Xibo": "East_Asia",
+    "Yakut": "East_Asia",
+    "Yi": "East_Asia",
     # Europe
-    'Adygei': 'Europe',
-    'Basque': 'Europe',
-    'CEU': 'Europe',
-    'FIN': 'Europe',
-    'French': 'Europe',
-    'GBR': 'Europe',
-    'IBS': 'Europe',
-    'Italian': 'Europe',
-    'BergamoItalian': 'Europe',
-    'Orcadian': 'Europe',
-    'Russian': 'Europe',
-    'Sardinian': 'Europe',
-    'TSI': 'Europe',
-    'Tuscan': 'Europe',
-
+    "Adygei": "Europe",
+    "Basque": "Europe",
+    "CEU": "Europe",
+    "FIN": "Europe",
+    "French": "Europe",
+    "GBR": "Europe",
+    "IBS": "Europe",
+    "Italian": "Europe",
+    "BergamoItalian": "Europe",
+    "Orcadian": "Europe",
+    "Russian": "Europe",
+    "Sardinian": "Europe",
+    "TSI": "Europe",
+    "Tuscan": "Europe",
     # Middle_East
-    'Bedouin': 'Middle_East',
-    'Druze': 'Middle_East',
-    'Mozabite': 'Middle_East',
-    'Palestinian': 'Middle_East',
-
+    "Bedouin": "Middle_East",
+    "Druze": "Middle_East",
+    "Mozabite": "Middle_East",
+    "Palestinian": "Middle_East",
     # Oceania
-    'Bougainville': 'Oceania',
-    'Melanesian': 'Oceania',
-    'Papuan': 'Oceania',
-    'PapuanHighlands': 'Oceania',
-    'PapuanSepik': 'Oceania',
+    "Bougainville": "Oceania",
+    "Melanesian": "Oceania",
+    "Papuan": "Oceania",
+    "PapuanHighlands": "Oceania",
+    "PapuanSepik": "Oceania",
 }
 
 
@@ -133,13 +127,13 @@ def add_genetic_region(input_path, output_path=None):
     print(f"Loaded {len(df)} rows from {input_path}")
 
     # Check if Population column exists
-    if 'Population' not in df.columns:
+    if "Population" not in df.columns:
         print(f"Error: 'Population' column not found in {input_path}")
         print(f"Available columns: {list(df.columns)}")
         return False
 
     # Show unique populations
-    populations = df['Population'].unique()
+    populations = df["Population"].unique()
     print(f"Found {len(populations)} unique populations")
 
     # Check for unmapped populations
@@ -150,15 +144,15 @@ def add_genetic_region(input_path, output_path=None):
             print(f"  - {p}")
 
     # Add Genetic_region_merged column
-    df['Genetic_region_merged'] = df['Population'].map(POPULATION_TO_REGION)
+    df["Genetic_region_merged"] = df["Population"].map(POPULATION_TO_REGION)
 
     # Report mapping results
-    mapped_count = df['Genetic_region_merged'].notna().sum()
+    mapped_count = df["Genetic_region_merged"].notna().sum()
     print(f"Mapped {mapped_count}/{len(df)} samples to regions")
 
     # Show distribution
     print("\nGenetic_region_merged distribution:")
-    print(df['Genetic_region_merged'].value_counts())
+    print(df["Genetic_region_merged"].value_counts())
 
     # Save
     df.to_csv(output_path, index=False)
@@ -167,7 +161,7 @@ def add_genetic_region(input_path, output_path=None):
     return True
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)

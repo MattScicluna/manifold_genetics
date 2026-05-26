@@ -29,31 +29,31 @@ LABEL_COL = "race_ethnicity"
 DATASETS = {
     "10k_wbh": {
         "embedding": SCRIPT_DIR / "10k_WBH/outputs/phate_knn500_t100.csv",
-        "labels":    SCRIPT_DIR / "10k_WBH/data/fit_labels.csv",
+        "labels": SCRIPT_DIR / "10k_WBH/data/fit_labels.csv",
         "n_samples": 10_000,
-        "knn":       500,
-        "t":         100,
+        "knn": 500,
+        "t": 100,
     },
     "random": {
         "embedding": SCRIPT_DIR / "60k_random/outputs/phate_knn500_t100.csv",
-        "labels":    SCRIPT_DIR / "60k_random/data/labels.csv",
+        "labels": SCRIPT_DIR / "60k_random/data/labels.csv",
         "n_samples": 60_000,
-        "knn":       500,
-        "t":         100,
+        "knn": 500,
+        "t": 100,
     },
     "geosketch": {
         "embedding": SCRIPT_DIR / "geosketch_phate/outputs/embeddings/phate_2d.csv",
-        "labels":    SCRIPT_DIR / "geosketch_phate/data/fit_labels.csv",
+        "labels": SCRIPT_DIR / "geosketch_phate/data/fit_labels.csv",
         "n_samples": 60_000,
-        "knn":       500,
-        "t":         100,
+        "knn": 500,
+        "t": 100,
     },
     "geosketch_10kwbh_pca": {
         "embedding": SCRIPT_DIR / "geosketch_phate/outputs/phate_10kwbh_pca_knn500_t100.csv",
-        "labels":    SCRIPT_DIR / "geosketch_phate/data/fit_labels.csv",
+        "labels": SCRIPT_DIR / "geosketch_phate/data/fit_labels.csv",
         "n_samples": 60_000,
-        "knn":       500,
-        "t":         100,
+        "knn": 500,
+        "t": 100,
     },
 }
 
@@ -61,24 +61,27 @@ DATASETS = {
 # Style
 # ============================================================================
 
-plt.rcParams.update({
-    'font.size': 10,
-    'font.family': 'sans-serif',
-    'axes.linewidth': 0.8,
-    'axes.labelsize': 11,
-    'axes.titlesize': 12,
-    'xtick.labelsize': 9,
-    'ytick.labelsize': 9,
-    'legend.fontsize': 8,
-    'figure.dpi': 150,
-    'savefig.dpi': 300,
-    'savefig.bbox': 'tight',
-    'savefig.pad_inches': 0.08,
-})
+plt.rcParams.update(
+    {
+        "font.size": 10,
+        "font.family": "sans-serif",
+        "axes.linewidth": 0.8,
+        "axes.labelsize": 11,
+        "axes.titlesize": 12,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.fontsize": 8,
+        "figure.dpi": 150,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+        "savefig.pad_inches": 0.08,
+    }
+)
 
 # ============================================================================
 # Helpers
 # ============================================================================
+
 
 def load_colormap(path: Path, label_col: str) -> dict:
     with open(path) as f:
@@ -86,7 +89,9 @@ def load_colormap(path: Path, label_col: str) -> dict:
     return dict(cmap[label_col])  # preserves insertion order
 
 
-def plot_single_plot(plot_df: pd.DataFrame, color_map: dict, label_col: str, save_path: Path) -> None:
+def plot_single_plot(
+    plot_df: pd.DataFrame, color_map: dict, label_col: str, save_path: Path
+) -> None:
     fig, ax = plt.subplots(figsize=(10, 10), dpi=600)
 
     # Layer 1: NaN values as lightgray background
@@ -153,8 +158,7 @@ for sampler, cfg in DATASETS.items():
     plot_df = embedding.merge(labels[["sample_id", LABEL_COL]], on="sample_id", how="left")
 
     save_path = FIGURES_DIR / (
-        f"aou_phate_{sampler}_{cfg['n_samples']}"
-        f"_knn{cfg['knn']}_t{cfg['t']}.pdf"
+        f"aou_phate_{sampler}_{cfg['n_samples']}" f"_knn{cfg['knn']}_t{cfg['t']}.pdf"
     )
 
     print(f"[{sampler}] Plotting {len(plot_df):,} points...")

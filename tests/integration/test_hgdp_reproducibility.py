@@ -41,7 +41,7 @@ def check_hgdp_data_available():
 @pytest.mark.network
 @pytest.mark.skipif(
     not check_hgdp_data_available(),
-    reason="HGDP+1KGP data not available (run examples/hgdp_1kgp/download_data.sh)"
+    reason="HGDP+1KGP data not available (run examples/hgdp_1kgp/download_data.sh)",
 )
 def test_hgdp_data_structure():
     """Verify HGDP+1KGP data has expected structure."""

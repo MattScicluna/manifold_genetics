@@ -48,7 +48,12 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def _resolve_k_values(k_min: Optional[int], k_max: Optional[int], ks: Optional[List[int]], q_prefix: Optional[Path] = None) -> List[int]:
+def _resolve_k_values(
+    k_min: Optional[int],
+    k_max: Optional[int],
+    ks: Optional[List[int]],
+    q_prefix: Optional[Path] = None,
+) -> List[int]:
     """Resolve list of K values from explicit list, range, or filesystem."""
     if ks:
         return sorted(set(ks))
@@ -65,7 +70,9 @@ def _resolve_k_values(k_min: Optional[int], k_max: Optional[int], ks: Optional[L
                 continue
         if found:
             return sorted(set(found))
-    raise ValueError("Please provide --ks or both --k-min/--k-max (or ensure <prefix>.<K>.csv files exist to auto-detect).")
+    raise ValueError(
+        "Please provide --ks or both --k-min/--k-max (or ensure <prefix>.<K>.csv files exist to auto-detect)."
+    )
 
 
 def cmd_pca(args):
@@ -125,7 +132,9 @@ def cmd_admixture(args):
         raise ValueError("Please provide --input or --fit-plink for admixture fitting.")
 
     # Resolve checkpoint dir and Q output dir
-    checkpoint_dir = Path(args.neuraladmixture_output_dir or args.output or Path.cwd() / "admixture_outputs")
+    checkpoint_dir = Path(
+        args.neuraladmixture_output_dir or args.output or Path.cwd() / "admixture_outputs"
+    )
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.fit_output or not args.project_output:
@@ -141,7 +150,7 @@ def cmd_admixture(args):
         force=args.force,
         threads=args.threads,
         num_gpus=args.num_gpus,
-        batch_size=getattr(args, 'neuraladmixture_batch_size', None),
+        batch_size=getattr(args, "neuraladmixture_batch_size", None),
     )
 
     # Fit models
@@ -180,7 +189,9 @@ def cmd_plot_admixture(args):
     validate_colormap_json(args.colormap)
     validate_label_column(group_col, labels, args.colormap)
 
-    output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture.png"
+    output_path = (
+        Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture.png"
+    )
 
     group_order = None
     if args.colormap:
@@ -223,7 +234,11 @@ def cmd_plot_admixture_embedding(args):
     validate_admixture_csv(str(q_prefix), k_values)
     first_q = f"{q_prefix}.{k_values[0]}.csv"
     validate_sample_id_overlap(embedding, first_q, "embedding", "admixture")
-    output_path = Path(args.output) if args.output else q_prefix.parent / f"{q_prefix.name}_admixture_embedding.png"
+    output_path = (
+        Path(args.output)
+        if args.output
+        else q_prefix.parent / f"{q_prefix.name}_admixture_embedding.png"
+    )
 
     plot_admixture_embedding_grid(
         embedding=embedding,
@@ -396,7 +411,9 @@ def cmd_metrics_geographic(args):
     # Validate inputs
     validate_embedding_csv(args.embedding)
     validate_geographic_csv(args.geographic, args.longitude_col, args.latitude_col)
-    validate_sample_id_overlap(args.embedding, args.geographic, "embedding", "geographic coordinates")
+    validate_sample_id_overlap(
+        args.embedding, args.geographic, "embedding", "geographic coordinates"
+    )
 
     result = compute_geographic_preservation(
         embedding=args.embedding,
@@ -602,7 +619,11 @@ def cmd_pipeline(args):
         validate_label_column(
             proj_fit_col, fit_labels or args.labels, fit_colormap or args.colormap
         )
-    if proj_transform_col and (project_labels or args.labels) and (project_colormap or args.colormap):
+    if (
+        proj_transform_col
+        and (project_labels or args.labels)
+        and (project_colormap or args.colormap)
+    ):
         validate_label_column(
             proj_transform_col,
             project_labels or args.labels,
@@ -643,13 +664,21 @@ def cmd_pipeline(args):
 
     # Handle separate labels/colormaps for cross-cohort analysis
     fit_labels = args.fit_labels if hasattr(args, "fit_labels") and args.fit_labels else None
-    project_labels = args.project_labels if hasattr(args, "project_labels") and args.project_labels else None
-    fit_colormap = args.fit_colormap if hasattr(args, "fit_colormap") and args.fit_colormap else None
-    project_colormap = args.project_colormap if hasattr(args, "project_colormap") and args.project_colormap else None
+    project_labels = (
+        args.project_labels if hasattr(args, "project_labels") and args.project_labels else None
+    )
+    fit_colormap = (
+        args.fit_colormap if hasattr(args, "fit_colormap") and args.fit_colormap else None
+    )
+    project_colormap = (
+        args.project_colormap
+        if hasattr(args, "project_colormap") and args.project_colormap
+        else None
+    )
 
     # Handle projection column args
-    projection_plot_fit_column = getattr(args, 'projection_plot_fit_column', None)
-    projection_plot_transform_column = getattr(args, 'projection_plot_transform_column', None)
+    projection_plot_fit_column = getattr(args, "projection_plot_fit_column", None)
+    projection_plot_transform_column = getattr(args, "projection_plot_transform_column", None)
 
     # Use the canonical run_pipeline function
     results = run_pipeline(
@@ -669,12 +698,16 @@ def cmd_pipeline(args):
         k_max=args.k_max,
         admix_threads=args.threads,
         admix_gpus=args.num_gpus,
-        admix_batch_size=getattr(args, 'neuraladmixture_batch_size', None),
+        admix_batch_size=getattr(args, "neuraladmixture_batch_size", None),
         embedding=args.embedding,
         embedding_params=embedding_params,
         embedding_input=args.embedding_input,
         admix_group_column=args.admixture_group_column,
-        admix_within_group_order=None if args.admixture_within_group_order == "none" else args.admixture_within_group_order,
+        admix_within_group_order=(
+            None
+            if args.admixture_within_group_order == "none"
+            else args.admixture_within_group_order
+        ),
         projection_plot_fit_column=projection_plot_fit_column,
         projection_plot_transform_column=projection_plot_transform_column,
         skip_pca=args.skip_pca,
@@ -693,9 +726,7 @@ def cmd_pipeline(args):
         print("\nMetrics:")
         if "geographic" in results["metrics"]:
             geo = results["metrics"]["geographic"]
-            print(
-                f"  Geographic preservation: {geo['correlation']:.4f} (p={geo['p_value']:.2e})"
-            )
+            print(f"  Geographic preservation: {geo['correlation']:.4f} (p={geo['p_value']:.2e})")
         if "admixture" in results["metrics"]:
             print("  Admixture preservation:")
             for k, metrics in results["metrics"]["admixture"].items():
@@ -745,10 +776,10 @@ def main():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    pca_parser.add_argument("--input", help="Input PLINK prefix — fits and projects on the same dataset")
     pca_parser.add_argument(
-        "--fit-plink", help="PLINK prefix to fit PCA (defaults to --input)"
+        "--input", help="Input PLINK prefix — fits and projects on the same dataset"
     )
+    pca_parser.add_argument("--fit-plink", help="PLINK prefix to fit PCA (defaults to --input)")
     pca_parser.add_argument(
         "--project-plink",
         help="PLINK prefix to project using the fitted PCA (defaults to fit prefix)",
@@ -799,12 +830,25 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     admix_parser.add_argument("--input", help="Input PLINK prefix (fit + project)")
-    admix_parser.add_argument("--fit-plink", help="PLINK prefix to fit admixture (defaults to --input)")
-    admix_parser.add_argument("--project-plink", help="PLINK prefix to project admixture (defaults to fit prefix)")
-    admix_parser.add_argument("--output", help="Output directory (deprecated; use --neuraladmixture-output-dir and explicit --fit-output/--project-output)")
-    admix_parser.add_argument("--model-name", default="fit", help="Model name prefix (default: fit)")
-    admix_parser.add_argument("--fit-output", help="Prefix for fit admixture CSV outputs (required)")
-    admix_parser.add_argument("--project-output", help="Prefix for projected admixture CSV outputs (required)")
+    admix_parser.add_argument(
+        "--fit-plink", help="PLINK prefix to fit admixture (defaults to --input)"
+    )
+    admix_parser.add_argument(
+        "--project-plink", help="PLINK prefix to project admixture (defaults to fit prefix)"
+    )
+    admix_parser.add_argument(
+        "--output",
+        help="Output directory (deprecated; use --neuraladmixture-output-dir and explicit --fit-output/--project-output)",
+    )
+    admix_parser.add_argument(
+        "--model-name", default="fit", help="Model name prefix (default: fit)"
+    )
+    admix_parser.add_argument(
+        "--fit-output", help="Prefix for fit admixture CSV outputs (required)"
+    )
+    admix_parser.add_argument(
+        "--project-output", help="Prefix for projected admixture CSV outputs (required)"
+    )
     admix_parser.add_argument(
         "--neuraladmixture-output-dir",
         help="Directory for neural admixture checkpoints/outputs (defaults to --output or ./admixture_outputs)",
@@ -817,7 +861,9 @@ def main():
         "--num-gpus", type=int, help="GPUs for neural admixture (default: auto)"
     )
     admix_parser.add_argument(
-        "--neuraladmixture-batch-size", type=int, help="Batch size for training and inference (helps avoid OOM on large datasets)"
+        "--neuraladmixture-batch-size",
+        type=int,
+        help="Batch size for training and inference (helps avoid OOM on large datasets)",
     )
     admix_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_parser.set_defaults(func=cmd_admixture)
@@ -835,16 +881,39 @@ def main():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    plot_admix_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
-    plot_admix_parser.add_argument("--labels", required=True, help="Labels CSV with sample_id and grouping column")
-    plot_admix_parser.add_argument("--group-column", required=True, help="Column in labels used to order bars (e.g., Population)")
-    plot_admix_parser.add_argument("--colormap", required=True, help="Colormap JSON (used to derive group ordering for the chosen column)")
+    plot_admix_parser.add_argument(
+        "--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)"
+    )
+    plot_admix_parser.add_argument(
+        "--labels", required=True, help="Labels CSV with sample_id and grouping column"
+    )
+    plot_admix_parser.add_argument(
+        "--group-column",
+        required=True,
+        help="Column in labels used to order bars (e.g., Population)",
+    )
+    plot_admix_parser.add_argument(
+        "--colormap",
+        required=True,
+        help="Colormap JSON (used to derive group ordering for the chosen column)",
+    )
     plot_admix_parser.add_argument("--k-min", type=int, help="Minimum K (if Ks not provided)")
     plot_admix_parser.add_argument("--k-max", type=int, help="Maximum K (if Ks not provided)")
-    plot_admix_parser.add_argument("--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)")
-    plot_admix_parser.add_argument("--subsample-per-group", type=int, help="Subsample each group to N samples (optional)")
-    plot_admix_parser.add_argument("--within-group-order", choices=["chron", "tree", "none"], default="chron", help="Method for ordering samples within groups: 'chron' (sort by components), 'tree' (hierarchical clustering), 'none' (original order)")
-    plot_admix_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture.png)")
+    plot_admix_parser.add_argument(
+        "--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)"
+    )
+    plot_admix_parser.add_argument(
+        "--subsample-per-group", type=int, help="Subsample each group to N samples (optional)"
+    )
+    plot_admix_parser.add_argument(
+        "--within-group-order",
+        choices=["chron", "tree", "none"],
+        default="chron",
+        help="Method for ordering samples within groups: 'chron' (sort by components), 'tree' (hierarchical clustering), 'none' (original order)",
+    )
+    plot_admix_parser.add_argument(
+        "--output", help="Output PNG path (default: <prefix>_admixture.png)"
+    )
     plot_admix_parser.add_argument(
         "--component-colors-output",
         help="Optional path to save component colors JSON (for use with plot-admixture-embedding).",
@@ -864,19 +933,33 @@ def main():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    plot_admix_emb_parser.add_argument("--embedding", required=True, help="Embedding CSV (sample_id, dim_1, dim_2, ...)")
-    plot_admix_emb_parser.add_argument("--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)")
+    plot_admix_emb_parser.add_argument(
+        "--embedding", required=True, help="Embedding CSV (sample_id, dim_1, dim_2, ...)"
+    )
+    plot_admix_emb_parser.add_argument(
+        "--q-prefix", required=True, help="Prefix for admixture CSVs (<prefix>.<K>.csv)"
+    )
     plot_admix_emb_parser.add_argument("--k-min", type=int, help="Minimum K (if Ks not provided)")
     plot_admix_emb_parser.add_argument("--k-max", type=int, help="Maximum K (if Ks not provided)")
-    plot_admix_emb_parser.add_argument("--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)")
-    plot_admix_emb_parser.add_argument("--pc-x", type=int, default=1, help="PC for x-axis (default: 1)")
-    plot_admix_emb_parser.add_argument("--pc-y", type=int, default=2, help="PC for y-axis (default: 2)")
-    plot_admix_emb_parser.add_argument("--subsample", type=int, help="Optional subsample size for plotting")
-    plot_admix_emb_parser.add_argument("--output", help="Output PNG path (default: <prefix>_admixture_embedding.png)")
+    plot_admix_emb_parser.add_argument(
+        "--ks", type=int, nargs="+", help="Explicit K values (overrides k-min/k-max)"
+    )
+    plot_admix_emb_parser.add_argument(
+        "--pc-x", type=int, default=1, help="PC for x-axis (default: 1)"
+    )
+    plot_admix_emb_parser.add_argument(
+        "--pc-y", type=int, default=2, help="PC for y-axis (default: 2)"
+    )
+    plot_admix_emb_parser.add_argument(
+        "--subsample", type=int, help="Optional subsample size for plotting"
+    )
+    plot_admix_emb_parser.add_argument(
+        "--output", help="Output PNG path (default: <prefix>_admixture_embedding.png)"
+    )
     plot_admix_emb_parser.add_argument(
         "--component-colormap",
         help="Path to component colors JSON exported by plot-admixture. When provided, each "
-             "component subplot uses a white-to-component-color gradient matching the bar chart.",
+        "component subplot uses a white-to-component-color gradient matching the bar chart.",
     )
     plot_admix_emb_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_admix_emb_parser.set_defaults(func=cmd_plot_admixture_embedding)
@@ -899,37 +982,49 @@ def main():
     plot_knn_parser.add_argument("--project-embedding", required=True, help="Project embedding CSV")
     plot_knn_parser.add_argument("--fit-labels", required=True, help="Fit labels CSV")
     plot_knn_parser.add_argument(
-        "--fit-label-column", required=True,
+        "--fit-label-column",
+        required=True,
         help="Fine-grained label column in fit labels (e.g. Population)",
     )
     plot_knn_parser.add_argument("--project-labels", required=True, help="Project labels CSV")
     plot_knn_parser.add_argument(
-        "--project-label-column", required=True,
+        "--project-label-column",
+        required=True,
         help="Coarse label column in project labels (e.g. self_described_ancestry)",
     )
     plot_knn_parser.add_argument(
-        "--fit-colormap", required=True,
+        "--fit-colormap",
+        required=True,
         help="Colormap JSON (must contain fit-label-column key)",
     )
-    plot_knn_parser.add_argument("--k", type=int, default=10, help="Number of nearest neighbors (default: 10)")
     plot_knn_parser.add_argument(
-        "--project-label-subset", nargs="+",
+        "--k", type=int, default=10, help="Number of nearest neighbors (default: 10)"
+    )
+    plot_knn_parser.add_argument(
+        "--project-label-subset",
+        nargs="+",
         help="Subset of project labels to include as panels (default: all)",
     )
     plot_knn_parser.add_argument(
-        "--project-name", default="Project",
+        "--project-name",
+        default="Project",
         help="Name for project dataset used in panel titles (default: Project)",
     )
     plot_knn_parser.add_argument(
-        "--no-sort-by-dominant", dest="sort_by_dominant", action="store_false",
+        "--no-sort-by-dominant",
+        dest="sort_by_dominant",
+        action="store_false",
         help="Disable sorting bars by dominant label within each panel",
     )
     plot_knn_parser.set_defaults(sort_by_dominant=True)
     plot_knn_parser.add_argument(
-        "--subsample-per-group", type=int,
+        "--subsample-per-group",
+        type=int,
         help="Randomly subsample each panel to this many individuals (optional)",
     )
-    plot_knn_parser.add_argument("--output", help="Output PNG path (default: <project_embedding_stem>_knn_composition.png)")
+    plot_knn_parser.add_argument(
+        "--output", help="Output PNG path (default: <project_embedding_stem>_knn_composition.png)"
+    )
     plot_knn_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_knn_parser.set_defaults(func=cmd_plot_knn_composition)
 
@@ -966,10 +1061,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     embed_parser.add_argument("--input", help="Input CSV file (fit + project)")
-    embed_parser.add_argument("--fit-input", help="Input CSV to fit embedding (defaults to --input)")
-    embed_parser.add_argument("--project-input", help="Input CSV to project embedding (defaults to fit input)")
+    embed_parser.add_argument(
+        "--fit-input", help="Input CSV to fit embedding (defaults to --input)"
+    )
+    embed_parser.add_argument(
+        "--project-input", help="Input CSV to project embedding (defaults to fit input)"
+    )
     embed_parser.add_argument("--fit-output", help="Output CSV for fit embedding (optional)")
-    embed_parser.add_argument("--project-output", help="Output CSV for projected embedding (defaults to --output)")
+    embed_parser.add_argument(
+        "--project-output", help="Output CSV for projected embedding (defaults to --output)"
+    )
     embed_parser.add_argument("--output", help="Output CSV for projected embedding")
     embed_parser.add_argument(
         "--method",
@@ -977,8 +1078,14 @@ def main():
         default="phate",
         help="Embedding method (default: phate). See description above for method-specific params.",
     )
-    embed_parser.add_argument("--knn", type=int, default=25, help="K nearest neighbors (PHATE/diffusion_map; default: 25)")
-    embed_parser.add_argument("--t", default="auto", help="Diffusion time for PHATE: integer or 'auto' (PHATE chooses automatically; default: auto)")
+    embed_parser.add_argument(
+        "--knn", type=int, default=25, help="K nearest neighbors (PHATE/diffusion_map; default: 25)"
+    )
+    embed_parser.add_argument(
+        "--t",
+        default="auto",
+        help="Diffusion time for PHATE: integer or 'auto' (PHATE chooses automatically; default: auto)",
+    )
     embed_parser.add_argument(
         "--n-landmark",
         type=str,
@@ -1056,17 +1163,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     plot_proj_parser.add_argument("--fit-embedding", required=True, help="Fit embedding CSV file")
-    plot_proj_parser.add_argument("--project-embedding", required=True, help="Project embedding CSV file")
+    plot_proj_parser.add_argument(
+        "--project-embedding", required=True, help="Project embedding CSV file"
+    )
     plot_proj_parser.add_argument("--fit-labels", required=True, help="Fit labels CSV file")
     plot_proj_parser.add_argument("--project-labels", required=True, help="Project labels CSV file")
     plot_proj_parser.add_argument("--fit-colormap", required=True, help="Fit colormap JSON file")
-    plot_proj_parser.add_argument("--project-colormap", required=True, help="Project colormap JSON file")
-    plot_proj_parser.add_argument("--fit-column", required=True, help="Column from fit colormap to use for coloring")
-    plot_proj_parser.add_argument("--project-column", required=True, help="Column from project colormap to use for coloring")
+    plot_proj_parser.add_argument(
+        "--project-colormap", required=True, help="Project colormap JSON file"
+    )
+    plot_proj_parser.add_argument(
+        "--fit-column", required=True, help="Column from fit colormap to use for coloring"
+    )
+    plot_proj_parser.add_argument(
+        "--project-column", required=True, help="Column from project colormap to use for coloring"
+    )
     plot_proj_parser.add_argument("--output", required=True, help="Output figure path")
-    plot_proj_parser.add_argument("--point-size", type=float, default=4.0, help="Size of scatter points")
+    plot_proj_parser.add_argument(
+        "--point-size", type=float, default=4.0, help="Size of scatter points"
+    )
     plot_proj_parser.add_argument("--alpha", type=float, default=0.6, help="Transparency of points")
-    plot_proj_parser.add_argument("--linewidth", type=float, default=0.8, help="Edge width for hollow markers")
+    plot_proj_parser.add_argument(
+        "--linewidth", type=float, default=0.8, help="Edge width for hollow markers"
+    )
     plot_proj_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_proj_parser.set_defaults(func=cmd_plot_projection)
 
@@ -1104,12 +1223,22 @@ def main():
         ),
     )
     geo_metrics_parser.add_argument("--embedding", required=True, help="Embedding CSV")
-    geo_metrics_parser.add_argument("--geographic", required=True, help="Geographic coordinates CSV")
+    geo_metrics_parser.add_argument(
+        "--geographic", required=True, help="Geographic coordinates CSV"
+    )
     geo_metrics_parser.add_argument("--output", required=True, help="Output JSON path")
-    geo_metrics_parser.add_argument("--longitude-col", default="longitude", help="Longitude column name")
-    geo_metrics_parser.add_argument("--latitude-col", default="latitude", help="Latitude column name")
-    geo_metrics_parser.add_argument("--num-dists-sampled", type=int, default=50000, help="Max pairwise distances to sample")
-    geo_metrics_parser.add_argument("--keep-missing", action="store_true", help="Keep samples with missing coordinates")
+    geo_metrics_parser.add_argument(
+        "--longitude-col", default="longitude", help="Longitude column name"
+    )
+    geo_metrics_parser.add_argument(
+        "--latitude-col", default="latitude", help="Latitude column name"
+    )
+    geo_metrics_parser.add_argument(
+        "--num-dists-sampled", type=int, default=50000, help="Max pairwise distances to sample"
+    )
+    geo_metrics_parser.add_argument(
+        "--keep-missing", action="store_true", help="Keep samples with missing coordinates"
+    )
     geo_metrics_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     geo_metrics_parser.set_defaults(func=cmd_metrics_geographic)
 
@@ -1125,13 +1254,28 @@ def main():
         ),
     )
     admix_metrics_parser.add_argument("--embedding", required=True, help="Embedding CSV")
-    admix_metrics_parser.add_argument("--admixture-output", required=True, help="Prefix for admixture CSVs (<prefix>.K.csv, e.g., path/to/transform)")
+    admix_metrics_parser.add_argument(
+        "--admixture-output",
+        required=True,
+        help="Prefix for admixture CSVs (<prefix>.K.csv, e.g., path/to/transform)",
+    )
     admix_metrics_parser.add_argument("--output", required=True, help="Output JSON path")
-    admix_metrics_parser.add_argument("--k-min", type=int, required=True, help="Minimum K to include")
-    admix_metrics_parser.add_argument("--k-max", type=int, required=True, help="Maximum K to include")
+    admix_metrics_parser.add_argument(
+        "--k-min", type=int, required=True, help="Minimum K to include"
+    )
+    admix_metrics_parser.add_argument(
+        "--k-max", type=int, required=True, help="Maximum K to include"
+    )
     admix_metrics_parser.add_argument("--k-value", type=int, help="Compute only a single K")
-    admix_metrics_parser.add_argument("--num-dists-sampled", type=int, default=50000, help="Max pairwise distances to sample")
-    admix_metrics_parser.add_argument("--subsample", type=int, default=None, help="Subsample individuals to this count before computing distances (applied consistently across all K values). Useful for large datasets.")
+    admix_metrics_parser.add_argument(
+        "--num-dists-sampled", type=int, default=50000, help="Max pairwise distances to sample"
+    )
+    admix_metrics_parser.add_argument(
+        "--subsample",
+        type=int,
+        default=None,
+        help="Subsample individuals to this count before computing distances (applied consistently across all K values). Useful for large datasets.",
+    )
     admix_metrics_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     admix_metrics_parser.set_defaults(func=cmd_metrics_admixture)
 
@@ -1186,12 +1330,29 @@ def main():
         required=True,
         help="PLINK prefix to project/apply the fitted models (transform subset)",
     )
-    pipeline_parser.add_argument("--labels", help="Labels CSV file (used for both fit and project if --fit-labels/--project-labels not provided)")
-    pipeline_parser.add_argument("--colormap", help="Colormap JSON file (used for both fit and project if --fit-colormap/--project-colormap not provided)")
-    pipeline_parser.add_argument("--fit-labels", help="Labels CSV file for fit dataset (for separate fit/project labels)")
-    pipeline_parser.add_argument("--project-labels", help="Labels CSV file for project dataset (for separate fit/project labels)")
-    pipeline_parser.add_argument("--fit-colormap", help="Colormap JSON file for fit dataset (optional, for cross-cohort analysis)")
-    pipeline_parser.add_argument("--project-colormap", help="Colormap JSON file for project dataset (optional, for cross-cohort analysis)")
+    pipeline_parser.add_argument(
+        "--labels",
+        help="Labels CSV file (used for both fit and project if --fit-labels/--project-labels not provided)",
+    )
+    pipeline_parser.add_argument(
+        "--colormap",
+        help="Colormap JSON file (used for both fit and project if --fit-colormap/--project-colormap not provided)",
+    )
+    pipeline_parser.add_argument(
+        "--fit-labels", help="Labels CSV file for fit dataset (for separate fit/project labels)"
+    )
+    pipeline_parser.add_argument(
+        "--project-labels",
+        help="Labels CSV file for project dataset (for separate fit/project labels)",
+    )
+    pipeline_parser.add_argument(
+        "--fit-colormap",
+        help="Colormap JSON file for fit dataset (optional, for cross-cohort analysis)",
+    )
+    pipeline_parser.add_argument(
+        "--project-colormap",
+        help="Colormap JSON file for project dataset (optional, for cross-cohort analysis)",
+    )
     pipeline_parser.add_argument("--output", required=True, help="Output directory")
     pipeline_parser.add_argument("--geographic", help="Geographic coordinates CSV")
     pipeline_parser.add_argument(
@@ -1224,8 +1385,16 @@ def main():
     )
     pipeline_parser.add_argument("--knn", type=int, default=5, help="KNN (PHATE/DM, default 5)")
     pipeline_parser.add_argument("--t", default="auto", help="Diffusion time (PHATE)")
-    pipeline_parser.add_argument("--n-landmark", type=str, help='Number of landmarks for PHATE (use an integer or "None"/omit for all samples)')
-    pipeline_parser.add_argument("--random-landmarking", action="store_true", help="Use random landmarking for PHATE (requires --n-landmark)")
+    pipeline_parser.add_argument(
+        "--n-landmark",
+        type=str,
+        help='Number of landmarks for PHATE (use an integer or "None"/omit for all samples)',
+    )
+    pipeline_parser.add_argument(
+        "--random-landmarking",
+        action="store_true",
+        help="Use random landmarking for PHATE (requires --n-landmark)",
+    )
     pipeline_parser.add_argument("--n-neighbors", type=int, default=15, help="Neighbors (UMAP)")
     pipeline_parser.add_argument("--perplexity", type=float, default=30, help="Perplexity (t-SNE)")
     pipeline_parser.add_argument(
@@ -1240,7 +1409,7 @@ def main():
         "--embedding-input",
         choices=["fit", "project", "both"],
         default="both",
-        help="Which dataset to embed: 'fit' (fit+transform on fit set), 'project' (fit+transform on project set), 'both' (fit on fit, transform on project)"
+        help="Which dataset to embed: 'fit' (fit+transform on fit set), 'project' (fit+transform on project set), 'both' (fit on fit, transform on project)",
     )
     pipeline_parser.add_argument(
         "--skip-embedding-visualization", action="store_true", help="Skip embedding visualization"
@@ -1249,7 +1418,9 @@ def main():
         "--skip-pca-visualization", action="store_true", help="Skip PCA visualization"
     )
     pipeline_parser.add_argument(
-        "--skip-admixture-visualization", action="store_true", help="Skip admixture visualizations (bar/embedding)"
+        "--skip-admixture-visualization",
+        action="store_true",
+        help="Skip admixture visualizations (bar/embedding)",
     )
     pipeline_parser.add_argument(
         "--admixture-group-column",

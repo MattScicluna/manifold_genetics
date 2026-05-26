@@ -65,9 +65,11 @@ def compute_geographic_preservation(
 
     # Merge embedding with geographic coordinates
     merged_df = embedding_df.join(geo_df[[longitude_col, latitude_col]], how="inner")
-    
-    logger.info(f"Found {len(merged_df)} samples with both embedding and geographic data "
-                f"(embedding: {len(embedding_df)}, geographic: {len(geo_df)})")
+
+    logger.info(
+        f"Found {len(merged_df)} samples with both embedding and geographic data "
+        f"(embedding: {len(embedding_df)}, geographic: {len(geo_df)})"
+    )
 
     # Remove samples with missing coordinates
     if ignore_missing:
@@ -75,9 +77,7 @@ def compute_geographic_preservation(
         merged_df = merged_df.dropna(subset=[longitude_col, latitude_col])
         after_count = len(merged_df)
         if before_count > after_count:
-            logger.info(
-                f"Removed {before_count - after_count} samples with missing coordinates"
-            )
+            logger.info(f"Removed {before_count - after_count} samples with missing coordinates")
 
     if len(merged_df) < 2:
         raise ValueError(
@@ -145,10 +145,7 @@ def _haversine_distances(coords: np.ndarray) -> np.ndarray:
             dlat = lat[j] - lat[i]
             dlon = lon[j] - lon[i]
 
-            a = (
-                np.sin(dlat / 2) ** 2
-                + np.cos(lat[i]) * np.cos(lat[j]) * np.sin(dlon / 2) ** 2
-            )
+            a = np.sin(dlat / 2) ** 2 + np.cos(lat[i]) * np.cos(lat[j]) * np.sin(dlon / 2) ** 2
             c = 2 * np.arcsin(np.sqrt(a))
 
             # Earth radius in km

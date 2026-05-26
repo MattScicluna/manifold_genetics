@@ -91,9 +91,7 @@ class FakeAdmixtureBackend(AdmixtureBackend):
 
         # Check if output files already exist
         base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
-        csv_files = {
-            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
-        }
+        csv_files = {k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)}
 
         if all(f.exists() for f in csv_files.values()) and not self.force:
             logger.info("=" * 60)
@@ -118,7 +116,7 @@ class FakeAdmixtureBackend(AdmixtureBackend):
             # Create DataFrame in standardized format
             component_cols = [f"component_{i+1}" for i in range(k)]
             df = pd.DataFrame(q_matrix, columns=component_cols)
-            df.insert(0, 'sample_id', sample_ids)
+            df.insert(0, "sample_id", sample_ids)
 
             # Save to CSV
             output_file = csv_files[k]

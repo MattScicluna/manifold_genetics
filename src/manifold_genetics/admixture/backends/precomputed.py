@@ -109,9 +109,7 @@ class PrecomputedAdmixtureBackend(AdmixtureBackend):
 
         # Check if output files already exist
         base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
-        csv_files = {
-            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
-        }
+        csv_files = {k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)}
 
         if all(f.exists() for f in csv_files.values()) and not self.force:
             logger.info("=" * 60)
@@ -167,9 +165,7 @@ class PrecomputedAdmixtureBackend(AdmixtureBackend):
 
         # Check if output files already exist
         base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
-        csv_files = {
-            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
-        }
+        csv_files = {k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)}
 
         if all(f.exists() for f in csv_files.values()) and not self.force:
             logger.info("=" * 60)

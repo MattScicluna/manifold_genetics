@@ -137,9 +137,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
 
         # Check if CSV files already exist
         base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
-        csv_files = {
-            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
-        }
+        csv_files = {k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)}
 
         if all(f.exists() for f in csv_files.values()) and not self.force:
             logger.info("=" * 60)
@@ -153,9 +151,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         q_files = self._infer(Path(plink_prefix), self._model_dir, out_name)
 
         # Convert Q files to standardized CSV format
-        csv_files = self._convert_q_files_to_csv(
-            q_files, Path(plink_prefix), csv_prefix
-        )
+        csv_files = self._convert_q_files_to_csv(q_files, Path(plink_prefix), csv_prefix)
 
         # Remove raw inference Q files to avoid duplicates
         for q_path in q_files.values():
@@ -179,17 +175,15 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
 
         # Check if CSV files already exist
         base_prefix = csv_prefix.with_suffix("") if csv_prefix.suffix else csv_prefix
-        csv_files = {
-            k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)
-        }
+        csv_files = {k: Path(f"{base_prefix}.{k}.csv") for k in range(self.k_min, self.k_max + 1)}
 
         # Check if both models and CSV files exist
-        model_files = [
-            output_dir / f"fit_k{k}.pt" for k in range(self.k_min, self.k_max + 1)
-        ]
-        if (all(f.exists() for f in csv_files.values()) and
-            all(f.exists() for f in model_files) and
-            not self.force):
+        model_files = [output_dir / f"fit_k{k}.pt" for k in range(self.k_min, self.k_max + 1)]
+        if (
+            all(f.exists() for f in csv_files.values())
+            and all(f.exists() for f in model_files)
+            and not self.force
+        ):
             logger.info("=" * 60)
             logger.info("NEURAL ADMIXTURE FIT_TRANSFORM")
             logger.info("=" * 60)
@@ -205,18 +199,14 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         q_files = self._infer_on_training_data(output_dir)
 
         # Convert Q files to standardized CSV format
-        csv_files = self._convert_q_files_to_csv(
-            q_files, Path(plink_prefix), csv_prefix
-        )
+        csv_files = self._convert_q_files_to_csv(q_files, Path(plink_prefix), csv_prefix)
 
         self._model_dir = output_dir
         self._model_name = "fit"
 
         return csv_files
 
-    def _train(
-        self, plink_prefix: Path, output_dir: Path, model_name: str
-    ) -> None:
+    def _train(self, plink_prefix: Path, output_dir: Path, model_name: str) -> None:
         """Train neural admixture models."""
         logger.info("=" * 60)
         logger.info("NEURAL ADMIXTURE TRAINING")
@@ -242,12 +232,18 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
             cmd = [
                 self.nadm_exec,
                 "train",
-                "--k", str(k),
-                "--name", k_specific_name,
-                "--data_path", str(plink_bed),
-                "--save_dir", str(output_dir),
-                "--threads", str(self.threads),
-                "--num_gpus", str(self.num_gpus),
+                "--k",
+                str(k),
+                "--name",
+                k_specific_name,
+                "--data_path",
+                str(plink_bed),
+                "--save_dir",
+                str(output_dir),
+                "--threads",
+                str(self.threads),
+                "--num_gpus",
+                str(self.num_gpus),
             ]
 
             if self.batch_size is not None:
@@ -263,9 +259,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
 
         logger.info(f"✓ Training complete")
 
-    def _infer(
-        self, plink_prefix: Path, q_dir: Path, out_name: str
-    ) -> Dict[int, Path]:
+    def _infer(self, plink_prefix: Path, q_dir: Path, out_name: str) -> Dict[int, Path]:
         """
         Infer ancestry proportions.
 
@@ -282,14 +276,12 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         plink_bed = _append_extension(plink_prefix, ".bed")
         q_dir.mkdir(parents=True, exist_ok=True)
 
-        q_files = {
-            k: q_dir / f"{out_name}.{k}.Q" for k in range(self.k_min, self.k_max + 1)
-        }
+        q_files = {k: q_dir / f"{out_name}.{k}.Q" for k in range(self.k_min, self.k_max + 1)}
 
         # Check existing
         if all(f.exists() for f in q_files.values()) and not self.force:
-             logger.info("Checkpoints found, skipping...")
-             return q_files
+            logger.info("Checkpoints found, skipping...")
+            return q_files
 
         # Estimate memory requirements and warn user
         try:
@@ -315,12 +307,18 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
             cmd = [
                 self.nadm_exec,
                 "infer",
-                "--name", k_model_name,
-                "--save_dir", str(self._model_dir),
-                "--data_path", str(plink_bed),
-                "--out_name", out_name,
-                "--threads", str(self.threads),
-                "--num_gpus", "0",  # Force CPU-only to avoid OOM bug
+                "--name",
+                k_model_name,
+                "--save_dir",
+                str(self._model_dir),
+                "--data_path",
+                str(plink_bed),
+                "--out_name",
+                out_name,
+                "--threads",
+                str(self.threads),
+                "--num_gpus",
+                "0",  # Force CPU-only to avoid OOM bug
             ]
 
             if self.batch_size is not None:
@@ -349,7 +347,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
                 q_files[k] = q_file
 
         if not q_files:
-             raise FileNotFoundError(f"No Q files found in {output_dir}")
+            raise FileNotFoundError(f"No Q files found in {output_dir}")
         return q_files
 
     def _convert_q_files_to_csv(
@@ -386,7 +384,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
             # Create standardized DataFrame
             component_cols = [f"component_{i+1}" for i in range(k)]
             df = pd.DataFrame(q_matrix.values, columns=component_cols)
-            df.insert(0, 'sample_id', sample_ids_subset)
+            df.insert(0, "sample_id", sample_ids_subset)
 
             # Save to CSV
             csv_file = Path(f"{base_prefix}.{k}.csv")

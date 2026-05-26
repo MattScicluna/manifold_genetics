@@ -35,11 +35,7 @@ def test_generic_pipeline_with_precomputed_admixture(
     fixtures_dir = tests_dir / "fixtures" / "admixture"
 
     # Create precomputed admixture backend
-    admix_backend = PrecomputedAdmixtureBackend(
-        k_min=2,
-        k_max=3,
-        fixtures_dir=str(fixtures_dir)
-    )
+    admix_backend = PrecomputedAdmixtureBackend(k_min=2, k_max=3, fixtures_dir=str(fixtures_dir))
 
     # Set up output directory
     output_dir = temp_dir / "pipeline_output"
@@ -161,7 +157,9 @@ def test_pipeline_output_structure(
     assert (output_dir / "embeddings").exists(), "Embeddings directory should exist"
 
     # Check specific files
-    assert (output_dir / "pca" / "transform_pca_5.csv").exists(), "PCA transform output should exist"
+    assert (
+        output_dir / "pca" / "transform_pca_5.csv"
+    ).exists(), "PCA transform output should exist"
     assert (output_dir / "embeddings" / "phate_2d.csv").exists(), "Embedding output should exist"
 
 

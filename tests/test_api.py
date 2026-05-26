@@ -82,6 +82,7 @@ def test_python_api_admixture_fit_and_project(monkeypatch, tmp_path):
         "manifold_genetics.admixture.backends.neural.validate_plink_files",
         fake_validate,
     )
+
     def fake_get_sample_ids(prefix):
         return ["s1", "s2"]
 
@@ -124,9 +125,12 @@ def test_python_api_admixture_fit_and_project(monkeypatch, tmp_path):
 
     # Patch backend methods (NeuralAdmixture now uses backend)
     from manifold_genetics.admixture.backends import NeuralAdmixtureBackend
+
     monkeypatch.setattr(NeuralAdmixtureBackend, "_train", fake_train, raising=False)
     monkeypatch.setattr(NeuralAdmixtureBackend, "_infer", fake_infer, raising=False)
-    monkeypatch.setattr(NeuralAdmixtureBackend, "_infer_on_training_data", fake_infer_train, raising=False)
+    monkeypatch.setattr(
+        NeuralAdmixtureBackend, "_infer_on_training_data", fake_infer_train, raising=False
+    )
 
     admix = NeuralAdmixture(k_min=2, k_max=3, force=True, threads=1, num_gpus=0)
 
