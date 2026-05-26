@@ -9,7 +9,7 @@ import difflib
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Union
 
 import pandas as pd
 
@@ -28,8 +28,6 @@ class ValidationError(ValueError):
     Inherits from ValueError so the existing cli.py error handler
     catches it and prints the message to stderr.
     """
-
-    pass
 
 
 def _fuzzy_match(target: str, candidates: List[str], n: int = 3) -> List[str]:

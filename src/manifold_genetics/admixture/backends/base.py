@@ -7,7 +7,7 @@ precomputed results, and fake/mock backends for testing.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Union
 
 
 class AdmixtureBackend(ABC):
@@ -49,7 +49,6 @@ class AdmixtureBackend(ABC):
             output_dir: Directory to save model outputs
             model_name: Name for the model (used in output filenames)
         """
-        pass
 
     @abstractmethod
     def transform(
@@ -68,7 +67,6 @@ class AdmixtureBackend(ABC):
             Dictionary mapping K values to CSV file paths
             Example: {2: Path("output.2.csv"), 3: Path("output.3.csv")}
         """
-        pass
 
     @abstractmethod
     def fit_transform(
@@ -86,4 +84,3 @@ class AdmixtureBackend(ABC):
         Returns:
             Dictionary mapping K values to CSV file paths
         """
-        pass

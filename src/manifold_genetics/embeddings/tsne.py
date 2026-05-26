@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 from sklearn.manifold import TSNE as SklearnTSNE
 
-from ..utils.io import write_embedding_csv
 from .base import EmbeddingBase
 
 logger = logging.getLogger(__name__)

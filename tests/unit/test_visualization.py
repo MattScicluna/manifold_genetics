@@ -108,7 +108,7 @@ class TestVisualization:
 
         for k in [2, 3]:
             q_data = np.random.dirichlet(np.ones(k), n_samples)
-            df = pd.DataFrame(q_data, columns=[f"component_{i+1}" for i in range(k)])
+            df = pd.DataFrame(q_data, columns=[f"component_{i + 1}" for i in range(k)])
             df.insert(0, "sample_id", int_ids)  # int64, mimicking pre-fix CSVs
             df.to_csv(f"{q_prefix}.{k}.csv", index=False)
 

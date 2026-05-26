@@ -12,15 +12,10 @@ from typing import Dict, Optional, Union
 
 import pandas as pd
 
-from ..admixture import NeuralAdmixture
 from ..embeddings import PHATE, TSNE, UMAP, DiffusionMap
-from ..metrics import compute_admixture_preservation, compute_geographic_preservation
-from ..pca import PCA
-from ..utils.io import read_colormap
 from ..visualization import (
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
-    plot_pca_pairs,
     plot_projection,
     visualize,
 )

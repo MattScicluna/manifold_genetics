@@ -13,8 +13,6 @@ from typing import Dict, Optional, Union
 import pandas as pd
 
 from ..utils.io import (
-    get_sample_ids_from_plink,
-    read_embedding_csv,
     validate_plink_files,
     write_embedding_csv,
 )
@@ -368,7 +366,7 @@ class PCA:
 
         # Create manylatents format DataFrame with sample_id column
         n_pcs = pc_values.shape[1]
-        dim_cols = [f"dim_{i+1}" for i in range(n_pcs)]
+        dim_cols = [f"dim_{i + 1}" for i in range(n_pcs)]
 
         result_df = pd.DataFrame(pc_values, columns=dim_cols)
         result_df.insert(0, "sample_id", sample_ids)

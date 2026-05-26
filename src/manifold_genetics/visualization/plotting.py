@@ -7,7 +7,7 @@ Provides publication-ready plots with customizable colormaps.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -227,12 +227,12 @@ def plot_pca_pairs(
         available_cols = [
             col
             for col in merged_df.columns
-            if col not in ["sample_id"] + [f"dim_{i+1}" for i in range(50)]
+            if col not in ["sample_id"] + [f"dim_{i + 1}" for i in range(50)]
         ]
         error_msg = (
-            f"\n{'='*70}\n"
+            f"\n{'=' * 70}\n"
             f"ERROR: Label column '{label_column}' not found in labels data\n"
-            f"{'='*70}\n"
+            f"{'=' * 70}\n"
             f"The colormap contains a key '{label_column}', but this column does not\n"
             f"exist in the labels CSV file.\n\n"
             f"Available label columns in the data:\n"
@@ -243,12 +243,12 @@ def plot_pca_pairs(
             f"  1. Update the labels CSV to include a '{label_column}' column\n"
             f"  2. Remove '{label_column}' from the colormap JSON\n"
             f"  3. Use --admixture-group-column with a column that exists in the labels\n"
-            f"{'='*70}\n"
+            f"{'=' * 70}\n"
         )
         raise ValueError(error_msg)
 
     # Get PC columns
-    pc_cols = [f"dim_{i+1}" for i in range(n_pcs)]
+    pc_cols = [f"dim_{i + 1}" for i in range(n_pcs)]
     available_pcs = [col for col in pc_cols if col in merged_df.columns]
     n_pairs = len(available_pcs) // 2
 

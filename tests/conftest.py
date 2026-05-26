@@ -30,7 +30,7 @@ def small_pca_data():
     n_samples = 50
     n_pcs = 10
     data = np.random.randn(n_samples, n_pcs) * 0.1
-    cols = [f"dim_{i+1}" for i in range(n_pcs)]
+    cols = [f"dim_{i + 1}" for i in range(n_pcs)]
     df = pd.DataFrame(data, columns=cols)
     # Add sample_id column as first column
     sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
@@ -114,7 +114,7 @@ def numeric_pca_data():
     n_samples, n_pcs = 50, 10
     df = pd.DataFrame(
         np.random.randn(n_samples, n_pcs),
-        columns=[f"dim_{i+1}" for i in range(n_pcs)],
+        columns=[f"dim_{i + 1}" for i in range(n_pcs)],
     )
     df.insert(0, "sample_id", np.arange(n_samples, dtype=np.int64))
     return df
@@ -178,7 +178,7 @@ def _create_plink_files(temp_dir: Path, prefix_name: str):
     with open(f"{prefix}.bim", "w") as f:
         for i in range(n_snps):
             # chr snp_id genetic_pos physical_pos allele1 allele2
-            f.write(f"1 SNP_{i:04d} 0 {i+1} A T\n")
+            f.write(f"1 SNP_{i:04d} 0 {i + 1} A T\n")
 
     # Create .bed file (genotype data in binary format)
     # PLINK .bed format: magic bytes (0x6c, 0x1b, 0x01) followed by genotype data

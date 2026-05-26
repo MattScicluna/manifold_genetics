@@ -134,7 +134,7 @@ def write_embedding_csv(
     # Convert to DataFrame if needed
     if isinstance(embeddings, np.ndarray):
         n_dims = embeddings.shape[1]
-        dim_cols = [f"dim_{i+1}" for i in range(n_dims)]
+        dim_cols = [f"dim_{i + 1}" for i in range(n_dims)]
         df = pd.DataFrame(embeddings, columns=dim_cols)
         # Add sample_ids if provided
         if sample_ids is not None:

@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 class ToolNotFoundError(Exception):
     """Raised when a required tool cannot be found."""
 
-    pass
-
 
 class ToolResolver:
     """
