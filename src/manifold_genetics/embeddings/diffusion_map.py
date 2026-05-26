@@ -10,12 +10,12 @@ from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import pdist, squareform
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import eigs
+from scipy.spatial.distance import pdist, squareform
 
-from .base import EmbeddingBase
 from ..utils.io import write_embedding_csv
+from .base import EmbeddingBase
 
 logger = logging.getLogger(__name__)
 

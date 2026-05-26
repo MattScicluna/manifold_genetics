@@ -5,10 +5,11 @@ Tests the interface and behavior of FakeAdmixtureBackend, PrecomputedAdmixtureBa
 and (optionally) NeuralAdmixtureBackend.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
 
 from manifold_genetics.admixture.backends import (
     AdmixtureBackend,

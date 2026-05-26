@@ -5,12 +5,12 @@ import pandas as pd
 import pytest
 
 from manifold_genetics.utils.io import (
-    read_admixture_csv,
-    read_embedding_csv,
-    write_embedding_csv,
-    read_labels_csv,
-    read_colormap,
     _coerce_ids_to_str,
+    read_admixture_csv,
+    read_colormap,
+    read_embedding_csv,
+    read_labels_csv,
+    write_embedding_csv,
 )
 
 

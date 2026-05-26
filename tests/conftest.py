@@ -5,13 +5,14 @@ We test downstream steps (embeddings, visualization) with small dummy data.
 PCA and Admixture are not tested as they require expensive external tools.
 """
 
+import json
+import shutil
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
-from pathlib import Path
-import tempfile
-import shutil
-import json
 
 
 @pytest.fixture

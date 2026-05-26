@@ -1,17 +1,18 @@
 """Tests for visualization functions."""
 
-import pytest
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pandas.plotting._core as plotting_core
-from pathlib import Path
+import pytest
 
 from manifold_genetics.visualization import (
-    visualize,
-    plot_embedding,
     plot_admixture_bar_grid,
-    plot_pca_pairs,
+    plot_embedding,
     plot_knn_composition,
+    plot_pca_pairs,
+    visualize,
 )
 
 

@@ -5,8 +5,8 @@ import pandas as pd
 import pytest
 
 from manifold_genetics.metrics import (
-    compute_geographic_preservation,
     compute_admixture_preservation,
+    compute_geographic_preservation,
 )
 
 

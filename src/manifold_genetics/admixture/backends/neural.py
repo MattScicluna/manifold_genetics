@@ -13,7 +13,7 @@ from typing import Dict, Optional, Union
 
 import torch
 
-from ...utils.io import get_sample_ids_from_plink, validate_plink_files, _append_extension
+from ...utils.io import _append_extension, get_sample_ids_from_plink, validate_plink_files
 from ...utils.tools import ToolResolver
 from .base import AdmixtureBackend
 

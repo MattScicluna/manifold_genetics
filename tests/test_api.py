@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from manifold_genetics.pca import PCA
 from manifold_genetics.admixture import NeuralAdmixture
+from manifold_genetics.pca import PCA
 
 
 def test_python_api_pca_fit_and_project(monkeypatch, tmp_path):
