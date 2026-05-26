@@ -40,29 +40,48 @@ def read_bim(bim_path: Path) -> dict:
 
 
 def read_lmiss(lmiss_path: Path) -> dict:
-    """Read .lmiss file and return dict of SNP_ID -> missingness rate."""
+    """Read .lmiss file and return dict of SNP_ID -> missingness rate.
+
+    Handles two PLINK1 output formats:
+      standard (5-col):     CHR SNP N_MISS N_GENO F_MISS
+      per-cluster (6-col):  CHR SNP CLST N_MISS N_GENO F_MISS  (from --within --missing)
+    """
     missingness = {}
     with open(lmiss_path) as f:
-        f.readline()  # Skip header
+        header = f.readline().strip().split()
+        # F_MISS is always the last column; detect 6-col per-cluster format
+        f_miss_idx = 5 if len(header) == 6 else 4
         for line in f:
             parts = line.strip().split()
-            if len(parts) >= 5:
-                snp_id = parts[1]  # SNP column
-                miss_rate = float(parts[4])  # F_MISS column
-                missingness[snp_id] = miss_rate
+            if len(parts) > f_miss_idx:
+                snp_id = parts[1]
+                missingness[snp_id] = float(parts[f_miss_idx])
     return missingness
 
 
 def read_frq(frq_path: Path) -> dict:
-    """Read .frq file and return dict of SNP_ID -> MAF."""
+    """Read .frq / .afreq file and return dict of SNP_ID -> MAF.
+
+    Handles:
+      PLINK1 .frq:   CHR SNP A1 A2 MAF NCHROBS  (missing = 'NA')
+      PLINK2 .afreq: #CHROM ID REF ALT ALT_FREQS OBS_CT  (missing = '.')
+      PLINK2 multiallelic: ALT_FREQS may be comma-separated (e.g. '0.23,0.05');
+        the maximum value is used so the most-common allele drives deduplication.
+    """
     maf = {}
     with open(frq_path) as f:
         f.readline()  # Skip header
         for line in f:
             parts = line.strip().split()
             if len(parts) >= 5:
-                snp_id = parts[1]  # SNP column
-                maf_val = float(parts[4]) if parts[4] != "NA" else 0.0  # MAF column
+                snp_id = parts[1]
+                raw = parts[4]
+                if raw in ("NA", "."):
+                    maf_val = 0.0
+                elif "," in raw:
+                    maf_val = max(float(x) for x in raw.split(","))
+                else:
+                    maf_val = float(raw)
                 maf[snp_id] = maf_val
     return maf
 

@@ -2,18 +2,14 @@
 
 The functions under test parse PLINK-format text files and apply deduplication
 logic. These tests are intentionally strict about format variants because real
-PLINK1 and PLINK2 runs produce subtly different output that the current code
-does not always handle correctly.
+PLINK1 and PLINK2 runs produce subtly different output.
 
-Bugs exposed by this suite:
-- read_lmiss: per-cluster format (6 cols) shifts column index, reads N_GENO as
-  F_MISS — silently wrong missingness values.
-- read_frq: PLINK2 uses '.' for missing MAF, not 'NA' — current code crashes.
+Known limitation (not fixed here):
 - filter_snps: chr-prefix vs numeric chromosome names are treated as distinct
-  positions, so 'chr1:100' and '1:100' are never deduplicated.
+  positions, so 'chr1:100' and '1:100' are never deduplicated. A test documents
+  this behaviour so any future normalisation is an explicit decision.
 """
 
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -25,10 +21,10 @@ from manifold_genetics.utils.filter_duplicates import (
     read_lmiss,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _bim(tmp_path: Path, rows: list[tuple]) -> Path:
     """Write a PLINK1-format .bim file. rows = [(chr, id, pos, a1, a2), ...]."""
@@ -86,6 +82,7 @@ def _frq_plink2(tmp_path: Path, rows: list[tuple], filename="test.afreq") -> Pat
 # TestReadBim
 # ---------------------------------------------------------------------------
 
+
 class TestReadBim:
     """read_bim() against real PLINK .bim format variants."""
 
@@ -128,11 +125,7 @@ class TestReadBim:
     def test_sex_chromosomes(self, tmp_path):
         """X, Y, XY, MT are valid chromosome designations."""
         bim = tmp_path / "sex.bim"
-        bim.write_text(
-            "X rs_x 0 100 A T\n"
-            "Y rs_y 0 200 C G\n"
-            "MT rs_mt 0 300 A C\n"
-        )
+        bim.write_text("X rs_x 0 100 A T\n" "Y rs_y 0 200 C G\n" "MT rs_mt 0 300 A C\n")
         result = read_bim(bim)
         assert result["rs_x"][0] == "X"
         assert result["rs_y"][0] == "Y"
@@ -159,6 +152,7 @@ class TestReadBim:
 # TestReadLmiss
 # ---------------------------------------------------------------------------
 
+
 class TestReadLmiss:
     """read_lmiss() against PLINK1 format variants.
 
@@ -183,25 +177,18 @@ class TestReadLmiss:
         result = read_lmiss(lmiss)
         assert result["rs_all_missing"] == pytest.approx(1.0)
 
-    def test_per_cluster_format_exposes_column_shift_bug(self, tmp_path):
-        """BUG: 6-col per-cluster .lmiss causes read_lmiss to read N_GENO as F_MISS.
+    def test_per_cluster_format_6col(self, tmp_path):
+        """Per-cluster .lmiss (--within --missing) has 6 cols: CHR SNP CLST N_MISS N_GENO F_MISS.
 
-        --within --missing produces: CHR SNP CLST N_MISS N_GENO F_MISS
-        The code does parts[4] = N_GENO (an integer like 1000) instead of
-        parts[5] = F_MISS (0.005). This silently corrupts missingness rates.
-
-        Expected behaviour: read_lmiss detects 6-col header and adjusts index.
-        Current behaviour: reads N_GENO as the missingness rate.
+        read_lmiss must detect the extra CLST column from the header and read
+        F_MISS from index 5, not 4.
         """
         lmiss = _lmiss_per_cluster(
             tmp_path,
             [("rs001", "POP1", 0.005), ("rs002", "POP1", 0.050)],
         )
         result = read_lmiss(lmiss)
-        assert result["rs001"] == pytest.approx(0.005), (
-            "read_lmiss reads N_GENO (1000) as F_MISS for per-cluster .lmiss files. "
-            "Fix: inspect header column count and adjust F_MISS index accordingly."
-        )
+        assert result["rs001"] == pytest.approx(0.005)
         assert result["rs002"] == pytest.approx(0.050)
 
     def test_absent_snp_not_in_result(self, tmp_path):
@@ -226,6 +213,7 @@ class TestReadLmiss:
 # ---------------------------------------------------------------------------
 # TestReadFrq
 # ---------------------------------------------------------------------------
+
 
 class TestReadFrq:
     """read_frq() against PLINK1 .frq and PLINK2 .afreq format variants."""
@@ -255,33 +243,21 @@ class TestReadFrq:
         assert result["rs001"] == pytest.approx(0.234)
         assert result["rs002"] == pytest.approx(0.100)
 
-    def test_plink2_dot_missing_crashes(self, tmp_path):
-        """BUG: PLINK2 uses '.' for missing MAF, not 'NA'. float('.') raises ValueError.
-
-        Any monomorphic SNP in a PLINK2 .afreq file will crash read_frq.
-        Fix: extend the missing-value check to cover both 'NA' and '.'.
-        """
+    def test_plink2_dot_missing_treated_as_zero(self, tmp_path):
+        """PLINK2 uses '.' for missing MAF — must be treated as 0.0, not crash."""
         frq = tmp_path / "dot_missing.afreq"
-        frq.write_text(
-            "#CHROM\tID\tREF\tALT\tALT_FREQS\tOBS_CT\n"
-            "1\trs_mono\tA\tT\t.\t1000\n"
-        )
-        with pytest.raises(ValueError, match=r"could not convert string to float: '\.'"):
-            read_frq(frq)
+        frq.write_text("#CHROM\tID\tREF\tALT\tALT_FREQS\tOBS_CT\n" "1\trs_mono\tA\tT\t.\t1000\n")
+        result = read_frq(frq)
+        assert result["rs_mono"] == pytest.approx(0.0)
 
-    def test_plink2_multiallelic_comma_separated_crashes(self, tmp_path):
-        """BUG: PLINK2 can emit comma-separated ALT_FREQS for multiallelic sites.
-
-        e.g., '0.234,0.050' — float('0.234,0.050') raises ValueError.
-        The current code has no handling for multiallelic sites.
-        """
+    def test_plink2_multiallelic_uses_max_alt_freq(self, tmp_path):
+        """PLINK2 comma-separated ALT_FREQS for multiallelic sites — use max value."""
         frq = tmp_path / "multi.afreq"
         frq.write_text(
-            "#CHROM\tID\tREF\tALT\tALT_FREQS\tOBS_CT\n"
-            "1\trs_multi\tA\tT,G\t0.234,0.050\t1000\n"
+            "#CHROM\tID\tREF\tALT\tALT_FREQS\tOBS_CT\n" "1\trs_multi\tA\tT,G\t0.234,0.050\t1000\n"
         )
-        with pytest.raises(ValueError):
-            read_frq(frq)
+        result = read_frq(frq)
+        assert result["rs_multi"] == pytest.approx(0.234)  # max(0.234, 0.050)
 
     def test_absent_snp_not_in_result(self, tmp_path):
         """SNPs absent from .frq are simply not in the dict."""
@@ -293,6 +269,7 @@ class TestReadFrq:
 # ---------------------------------------------------------------------------
 # TestFilterSnps
 # ---------------------------------------------------------------------------
+
 
 class TestFilterSnps:
     """filter_snps() core deduplication logic."""
@@ -311,7 +288,7 @@ class TestFilterSnps:
     def test_prefers_lower_missingness(self):
         """Duplicate position: keep SNP with lower F_MISS."""
         snp_info = {
-            "rs_bad":  ("1", 100, "A", "T"),
+            "rs_bad": ("1", 100, "A", "T"),
             "rs_good": ("1", 100, "C", "G"),
         }
         missingness = {"rs_bad": 0.5, "rs_good": 0.01}
@@ -323,7 +300,7 @@ class TestFilterSnps:
     def test_prefers_higher_maf_when_missingness_tied(self):
         """Tied missingness: keep SNP with higher MAF."""
         snp_info = {
-            "rs_rare":   ("1", 100, "A", "T"),
+            "rs_rare": ("1", 100, "A", "T"),
             "rs_common": ("1", 100, "C", "G"),
         }
         missingness = {"rs_rare": 0.01, "rs_common": 0.01}
@@ -335,7 +312,7 @@ class TestFilterSnps:
         """SNP missing from .lmiss defaults to 1.0 — always loses to a SNP with data."""
         snp_info = {
             "rs_no_miss_data": ("1", 100, "A", "T"),
-            "rs_has_data":     ("1", 100, "C", "G"),
+            "rs_has_data": ("1", 100, "C", "G"),
         }
         missingness = {"rs_has_data": 0.01}
         maf = {"rs_no_miss_data": 0.9, "rs_has_data": 0.1}  # no_miss_data has better MAF
@@ -346,7 +323,7 @@ class TestFilterSnps:
     def test_snp_absent_from_frq_gets_zero_maf(self):
         """SNP missing from .frq defaults to 0.0 MAF — loses tiebreaker."""
         snp_info = {
-            "rs_no_frq":  ("1", 100, "A", "T"),
+            "rs_no_frq": ("1", 100, "A", "T"),
             "rs_has_frq": ("1", 100, "C", "G"),
         }
         missingness = {"rs_no_frq": 0.01, "rs_has_frq": 0.01}  # tied
@@ -385,7 +362,7 @@ class TestFilterSnps:
         """
         snp_info = {
             "rs_chr_prefix": ("chr1", 100, "A", "T"),
-            "rs_numeric":    ("1",    100, "C", "G"),
+            "rs_numeric": ("1", 100, "C", "G"),
         }
         keep, stats = filter_snps(snp_info, {}, {})
         # Both are kept — chr1:100 ≠ 1:100 in current code
@@ -422,27 +399,41 @@ class TestFilterSnps:
 # TestFilterSnpsRoundTrip — write real PLINK-format files, then parse + filter
 # ---------------------------------------------------------------------------
 
+
 class TestFilterSnpsRoundTrip:
     """End-to-end: write PLINK text files → read → filter → verify results."""
 
     def test_basic_round_trip(self, tmp_path):
-        bim = _bim(tmp_path, [
-            ("1", "rs001", 100, "A", "T"),
-            ("1", "rs002", 100, "C", "G"),  # duplicate of rs001 pos
-            ("1", "rs003", 200, "A", "T"),  # unique
-        ])
-        lmiss = _lmiss_standard(tmp_path, [
-            ("rs001", 0.10), ("rs002", 0.02), ("rs003", 0.01),
-        ])
-        frq = _frq_plink1(tmp_path, [
-            ("rs001", 0.3), ("rs002", 0.4), ("rs003", 0.2),
-        ])
+        bim = _bim(
+            tmp_path,
+            [
+                ("1", "rs001", 100, "A", "T"),
+                ("1", "rs002", 100, "C", "G"),  # duplicate of rs001 pos
+                ("1", "rs003", 200, "A", "T"),  # unique
+            ],
+        )
+        lmiss = _lmiss_standard(
+            tmp_path,
+            [
+                ("rs001", 0.10),
+                ("rs002", 0.02),
+                ("rs003", 0.01),
+            ],
+        )
+        frq = _frq_plink1(
+            tmp_path,
+            [
+                ("rs001", 0.3),
+                ("rs002", 0.4),
+                ("rs003", 0.2),
+            ],
+        )
         snp_info = read_bim(bim)
         missingness = read_lmiss(lmiss)
         maf = read_frq(frq)
         keep, stats = filter_snps(snp_info, missingness, maf)
 
-        assert "rs002" in keep   # lower missingness at chr1:100
+        assert "rs002" in keep  # lower missingness at chr1:100
         assert "rs001" not in keep
         assert "rs003" in keep
         assert stats["snps_removed"] == 1
@@ -452,7 +443,9 @@ class TestFilterSnpsRoundTrip:
         bim = _bim(tmp_path, [("1", "rs_mono", 100, "A", "T"), ("1", "rs_poly", 100, "C", "G")])
         lmiss = _lmiss_standard(tmp_path, [("rs_mono", 0.01), ("rs_poly", 0.01)])
         frq = tmp_path / "mono.frq"
-        frq.write_text(" CHR SNP A1 A2 MAF NCHROBS\n 1 rs_mono A T NA 1000\n 1 rs_poly C G 0.3 1000\n")
+        frq.write_text(
+            " CHR SNP A1 A2 MAF NCHROBS\n 1 rs_mono A T NA 1000\n 1 rs_poly C G 0.3 1000\n"
+        )
 
         keep, _ = filter_snps(read_bim(bim), read_lmiss(lmiss), read_frq(frq))
         # Equal missingness: rs_poly wins (MAF 0.3 > 0.0)

@@ -114,7 +114,10 @@ class TestRunPipelineValidation:
                 colormap="cmap.json",
             )
         # Must NOT be the labels/colormap validation error
-        assert "labels" not in str(exc_info.value).lower() or "colormap" not in str(exc_info.value).lower()
+        assert (
+            "labels" not in str(exc_info.value).lower()
+            or "colormap" not in str(exc_info.value).lower()
+        )
 
     def test_separate_labels_and_colormaps_reaches_pipeline(self, tmp_path):
         """Separate fit/project labels + colormaps also passes validation."""
@@ -128,4 +131,6 @@ class TestRunPipelineValidation:
                 fit_colormap="fit_cmap.json",
                 project_colormap="project_cmap.json",
             )
-        assert "fit_labels" not in str(exc_info.value) and "project_labels" not in str(exc_info.value)
+        assert "fit_labels" not in str(exc_info.value) and "project_labels" not in str(
+            exc_info.value
+        )
