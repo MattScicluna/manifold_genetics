@@ -58,13 +58,16 @@ requires_plink = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def run_plink_missing(plink_prefix: Path, out_prefix: Path) -> Path:
     """Run plink --missing to produce a .lmiss file. Returns path to .lmiss."""
     cmd = plink_cmd()
     plink_flag = "--pfile" if "plink2" in cmd else "--bfile"
     result = subprocess.run(
         [cmd, plink_flag, str(plink_prefix), "--missing", "--out", str(out_prefix)],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         raise RuntimeError(f"plink --missing failed:\n{result.stderr}")
@@ -79,7 +82,9 @@ def run_plink_freq(plink_prefix: Path, out_prefix: Path) -> Path:
     plink_flag = "--pfile" if "plink2" in cmd else "--bfile"
     result = subprocess.run(
         [cmd, plink_flag, str(plink_prefix), "--freq", "--out", str(out_prefix)],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         raise RuntimeError(f"plink --freq failed:\n{result.stderr}")
@@ -91,6 +96,7 @@ def run_plink_freq(plink_prefix: Path, out_prefix: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 @requires_hgdp
@@ -166,9 +172,7 @@ def test_full_pipeline_with_real_lmiss_and_frq(tmp_path):
 
     # All MAF values must be in [0, 0.5]  (or [0,1] for PLINK2 ALT_FREQ)
     bad_maf = {k: v for k, v in maf.items() if not (0.0 <= v <= 1.0)}
-    assert not bad_maf, (
-        f"read_frq returned out-of-range MAF values: {list(bad_maf.items())[:5]}"
-    )
+    assert not bad_maf, f"read_frq returned out-of-range MAF values: {list(bad_maf.items())[:5]}"
 
     keep, stats = filter_snps(snp_info, missingness, maf)
 
@@ -199,6 +203,7 @@ def test_plink_standard_lmiss_not_per_cluster(tmp_path):
         "If this is 6-col per-cluster output, read_lmiss will silently read the wrong column."
     )
     # F_MISS must be the last column
-    assert header[-1].upper() in ("F_MISS", "F_MISS_DOSAGE"), (
-        f"Expected F_MISS as last column, got '{header[-1]}'"
-    )
+    assert header[-1].upper() in (
+        "F_MISS",
+        "F_MISS_DOSAGE",
+    ), f"Expected F_MISS as last column, got '{header[-1]}'"

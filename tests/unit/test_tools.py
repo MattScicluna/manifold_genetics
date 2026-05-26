@@ -19,10 +19,10 @@ import pytest
 
 from manifold_genetics.utils.tools import ToolNotFoundError, ToolResolver
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_script(path: Path, content: str = "#!/bin/sh\nexit 0\n") -> Path:
     """Write a shell script and make it executable."""
@@ -34,6 +34,7 @@ def make_script(path: Path, content: str = "#!/bin/sh\nexit 0\n") -> Path:
 # ---------------------------------------------------------------------------
 # TestValidateExecutable — real filesystem, no mocks
 # ---------------------------------------------------------------------------
+
 
 class TestValidateExecutable:
     """_validate_executable must check existence, file type, and execute permission.
@@ -79,6 +80,7 @@ class TestValidateExecutable:
 # ---------------------------------------------------------------------------
 # TestResolvePlink2
 # ---------------------------------------------------------------------------
+
 
 class TestResolvePlink2:
 
@@ -130,6 +132,7 @@ class TestResolvePlink2:
 # TestResolveFlashPCA
 # ---------------------------------------------------------------------------
 
+
 class TestResolveFlashPCA:
 
     def test_env_var_valid(self, tmp_path, monkeypatch):
@@ -164,6 +167,7 @@ class TestResolveFlashPCA:
 # ---------------------------------------------------------------------------
 # TestResolveNeuralAdmixture
 # ---------------------------------------------------------------------------
+
 
 class TestResolveNeuralAdmixture:
 
@@ -202,6 +206,7 @@ class TestResolveNeuralAdmixture:
 # ---------------------------------------------------------------------------
 # TestModuleSystem — isolate subprocess.run failures gracefully
 # ---------------------------------------------------------------------------
+
 
 class TestModuleSystem:
 
@@ -265,6 +270,7 @@ class TestModuleSystem:
 # Integration tests — require real plink2/plink in PATH
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 class TestToolResolverWithRealPlink:
     """These tests verify ToolResolver against a real installed plink2/plink binary."""
@@ -287,7 +293,9 @@ class TestToolResolverWithRealPlink:
         plink_path = resolver.resolve_plink2()
         proc = subprocess.run(
             [plink_path, "--version"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         output = proc.stdout + proc.stderr
         assert "PLINK" in output.upper(), f"Expected PLINK in output, got: {output[:200]}"
