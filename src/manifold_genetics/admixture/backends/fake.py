@@ -114,7 +114,7 @@ class FakeAdmixtureBackend(AdmixtureBackend):
             q_matrix = self._generate_random_q_matrix(n_samples, k)
 
             # Create DataFrame in standardized format
-            component_cols = [f"component_{i+1}" for i in range(k)]
+            component_cols = [f"component_{i + 1}" for i in range(k)]
             df = pd.DataFrame(q_matrix, columns=component_cols)
             df.insert(0, "sample_id", sample_ids)
 

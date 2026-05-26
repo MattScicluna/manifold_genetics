@@ -1,6 +1,5 @@
 """Tests for embedding methods (PHATE, UMAP, t-SNE, Diffusion Maps)."""
 
-import numpy as np
 import pytest
 
 from manifold_genetics.embeddings import PHATE, TSNE, UMAP, DiffusionMap
@@ -50,7 +49,7 @@ class TestPHATE:
         embedding = phate.fit_transform(small_pca_data)
 
         assert embedding.shape[1] == n_components + 1  # +1 for sample_id
-        expected_cols = ["sample_id"] + [f"dim_{i+1}" for i in range(n_components)]
+        expected_cols = ["sample_id"] + [f"dim_{i + 1}" for i in range(n_components)]
         assert list(embedding.columns) == expected_cols
 
 

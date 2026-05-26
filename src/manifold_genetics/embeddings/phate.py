@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 import phate
 
-from ..utils.io import write_embedding_csv
 from .base import EmbeddingBase
 
 logger = logging.getLogger(__name__)
@@ -143,7 +142,7 @@ class PHATE(EmbeddingBase):
                 end_idx = min((i + 1) * self.embed_batch_size, n_samples)
 
                 logger.info(
-                    f"  Processing batch {i+1}/{n_batches} (samples {start_idx}-{end_idx})..."
+                    f"  Processing batch {i + 1}/{n_batches} (samples {start_idx}-{end_idx})..."
                 )
                 batch_data = X_array[start_idx:end_idx]
                 batch_embedding = self.model.transform(batch_data)

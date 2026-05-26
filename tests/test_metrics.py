@@ -100,7 +100,7 @@ class TestAdmixturePreservation:
 
             # Create CSV with sample_id and component columns
             sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
-            component_cols = [f"component_{i+1}" for i in range(k)]
+            component_cols = [f"component_{i + 1}" for i in range(k)]
 
             df = pd.DataFrame(q_data, columns=component_cols)
             df.insert(0, "sample_id", sample_ids)

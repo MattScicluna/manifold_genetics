@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from manifold_genetics.utils.io import (
     _coerce_ids_to_str,
@@ -23,7 +22,7 @@ class TestEmbeddingIO:
         n_samples, n_dims = 100, 5
         embedding_data = np.random.randn(n_samples, n_dims)
         sample_ids = [f"SAMPLE_{i:03d}" for i in range(n_samples)]
-        df = pd.DataFrame(embedding_data, columns=[f"dim_{i+1}" for i in range(n_dims)])
+        df = pd.DataFrame(embedding_data, columns=[f"dim_{i + 1}" for i in range(n_dims)])
         df.insert(0, "sample_id", sample_ids)
         output_file = temp_dir / "test.csv"
 
@@ -34,7 +33,7 @@ class TestEmbeddingIO:
         # Read
         df_read = read_embedding_csv(output_file)
         assert df_read.shape == (n_samples, n_dims + 1)  # +1 for sample_id
-        expected_cols = ["sample_id"] + [f"dim_{i+1}" for i in range(n_dims)]
+        expected_cols = ["sample_id"] + [f"dim_{i + 1}" for i in range(n_dims)]
         assert list(df_read.columns) == expected_cols
         pd.testing.assert_frame_equal(df, df_read, check_dtype=False)
 
@@ -42,7 +41,7 @@ class TestEmbeddingIO:
         """Test that embedding CSV has sample_id column."""
         embedding_data = np.random.randn(20, 3)
         sample_ids = [f"SAMPLE_{i:03d}" for i in range(20)]
-        df = pd.DataFrame(embedding_data, columns=[f"dim_{i+1}" for i in range(3)])
+        df = pd.DataFrame(embedding_data, columns=[f"dim_{i + 1}" for i in range(3)])
         df.insert(0, "sample_id", sample_ids)
         output_file = temp_dir / "test.csv"
 

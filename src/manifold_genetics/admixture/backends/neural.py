@@ -382,7 +382,7 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
                 sample_ids_subset = sample_ids
 
             # Create standardized DataFrame
-            component_cols = [f"component_{i+1}" for i in range(k)]
+            component_cols = [f"component_{i + 1}" for i in range(k)]
             df = pd.DataFrame(q_matrix.values, columns=component_cols)
             df.insert(0, "sample_id", sample_ids_subset)
 

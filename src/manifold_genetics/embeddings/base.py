@@ -45,7 +45,6 @@ class EmbeddingBase(ABC):
         Returns:
             Self (for method chaining)
         """
-        pass
 
     @abstractmethod
     def transform(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> pd.DataFrame:
@@ -58,7 +57,6 @@ class EmbeddingBase(ABC):
         Returns:
             DataFrame with sample_id and embedding coordinates
         """
-        pass
 
     @abstractmethod
     def fit_transform(
@@ -76,7 +74,6 @@ class EmbeddingBase(ABC):
         Returns:
             DataFrame with sample_id and embedding coordinates
         """
-        pass
 
     def _load_input_data(
         self, X: Union[np.ndarray, pd.DataFrame, str, Path]
@@ -144,7 +141,7 @@ class EmbeddingBase(ABC):
         """
         # Create DataFrame with dimension columns
         n_dims = embedding.shape[1]
-        dim_cols = [f"dim_{i+1}" for i in range(n_dims)]
+        dim_cols = [f"dim_{i + 1}" for i in range(n_dims)]
         df = pd.DataFrame(embedding, columns=dim_cols)
 
         # Add sample_id column as the first column

@@ -10,11 +10,8 @@ These are integration tests that require the full HGDP+1KGP dataset.
 They use precomputed admixture to avoid slow computation but test everything else.
 """
 
-import subprocess
-import tempfile
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -107,4 +104,3 @@ def test_hgdp_data_structure():
 def test_pytest_markers_configured():
     """Verify pytest markers are properly configured."""
     # This test itself demonstrates the markers work
-    pass
