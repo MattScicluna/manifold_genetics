@@ -1,5 +1,7 @@
 # manifold-genetics
 
+<a href="https://coveralls.io/github/MattScicluna/manifold_genetics?branch=main"><img src="https://coveralls.io/repos/github/MattScicluna/manifold_genetics/badge.svg?branch=main"></a>
+
 A lightweight, batteries-included Python package for genetic analysis with dimensionality reduction and visualization.
 
 <p align="center">
