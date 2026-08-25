@@ -400,9 +400,9 @@ uv run manifold-genetics pipeline ... \
 - Apply standard QC filters
 
 **For large cohorts:**
-- Use ~3,000 unrelated samples for fit subset
-- Project remaining samples onto fit models
-- Expected runtimes: PCA (minutes), Admixture (hours), Embeddings (minutes-hours)
+- Either Use a subset of unrelated samples for fitting and projection
+- Or fit on a reference panel like HGDP+1KGP and project the samples onto it
+- Expected runtimes: PCA (minutes), Admixture (hours), Embeddings (minutes, but varies based on hyperparameters)
 
 ## Embedding Methods
 
