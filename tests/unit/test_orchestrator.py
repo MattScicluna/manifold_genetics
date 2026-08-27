@@ -540,3 +540,165 @@ class TestGetEmbeddingModel:
         """Empty params dict must not crash — defaults apply."""
         model = pipeline._get_embedding_model("phate", {})
         assert model.knn == 25  # built-in default
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineRunFullFlow — the step bodies run() executes when nothing skipped
+# ---------------------------------------------------------------------------
+
+
+class _FakeBackend:
+    """Minimal AdmixtureBackend stand-in for the backend branch of run()."""
+
+    def __init__(self):
+        self.calls = []
+
+    def fit(self, *a, **k):
+        self.calls.append("fit")
+
+    def fit_transform(self, *a, **k):
+        self.calls.append("fit_transform")
+        return {}
+
+    def transform(self, *a, **k):
+        self.calls.append("transform")
+        return {}
+
+
+class TestPipelineRunFullFlow:
+    """PCA viz, admixture (backend + CLI), bar plot, embedding viz, admixture-
+    colored embedding, and metrics all run when their skip flags are False.
+    All plotting and I/O is stubbed; subprocess writes the CSV/JSON the
+    orchestrator reads back."""
+
+    def _stub_plots(self, monkeypatch):
+        import manifold_genetics.pipeline.orchestrator as orch
+
+        for name in (
+            "visualize",
+            "plot_admixture_bar_grid",
+            "plot_admixture_embedding_grid",
+            "plot_projection",
+        ):
+            monkeypatch.setattr(orch, name, lambda *a, **k: ["fig.png"])
+        monkeypatch.setattr(
+            "manifold_genetics.visualization.plot_pca_pairs",
+            lambda **k: Path("pca_pairs.png"),
+        )
+        monkeypatch.setattr(
+            "manifold_genetics.utils.io.read_colormap",
+            lambda p: {"Population": {"A": "#000000"}},
+        )
+
+    def _writer(self, pipeline, n_pcs, method="phate"):
+        pca_dir = pipeline.output_dir / "pca"
+        emb_dir = pipeline.output_dir / "embeddings"
+        metrics_dir = pipeline.output_dir / "metrics"
+
+        def on_call(cmd):
+            if "pca" in cmd:
+                write_pca_csv(pca_dir / f"fit_pca_{n_pcs}.csv", n_pcs)
+                write_pca_csv(pca_dir / f"transform_pca_{n_pcs}.csv", n_pcs)
+            elif "embed" in cmd:
+                write_pca_csv(emb_dir / f"{method}_2d.csv", 2)
+                write_pca_csv(emb_dir / f"{method}_fit_2d.csv", 2)
+            elif "metrics-geographic" in cmd:
+                (metrics_dir).mkdir(parents=True, exist_ok=True)
+                (metrics_dir / "geographic.json").write_text('{"correlation": 0.9}')
+            elif "metrics-admixture" in cmd:
+                (metrics_dir).mkdir(parents=True, exist_ok=True)
+                (metrics_dir / "admixture.json").write_text('{"2": {"correlation": 0.5}}')
+
+        return on_call
+
+    def test_full_run_with_backend_and_metrics(self, tmp_path, monkeypatch):
+        self._stub_plots(monkeypatch)
+        backend = _FakeBackend()
+        pipeline = make_pipeline(
+            tmp_path,
+            geographic_coords="geo.csv",
+            projection_plot_fit_column="Population",
+            projection_plot_transform_column="Population",
+            fit_labels="fl.csv",
+            project_labels="pl.csv",
+            fit_colormap="fc.json",
+            project_colormap="pc.json",
+            admixture_backend=backend,
+        )
+        n_pcs = 3
+        calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+
+        results = pipeline.run(
+            n_pcs=n_pcs,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            embedding_params={"knn": 5},
+            embedding_input="both",
+        )
+
+        assert backend.calls == ["fit", "fit_transform", "transform"]
+        assert "pca_figures" in results
+        assert "admixture_figures" in results
+        assert "embedding_figures" in results
+        assert "projection_plot" in results
+        assert results["metrics"]["geographic"]["correlation"] == 0.9
+        assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
+        # no admixture CLI call — backend was used
+        assert admix_calls(calls) == []
+
+    def test_full_run_via_cli_admixture(self, tmp_path, monkeypatch):
+        self._stub_plots(monkeypatch)
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 3
+        calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+
+        pipeline.run(
+            n_pcs=n_pcs,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            embedding_params={"knn": 5},
+            skip_metrics=True,
+        )
+        admix = admix_calls(calls)
+        assert len(admix) == 1
+        assert "--k-min" in admix[0] and "--k-max" in admix[0]
+
+    def test_phate_landmark_and_batch_flags_forwarded(self, tmp_path, monkeypatch):
+        self._stub_plots(monkeypatch)
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 3
+        calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+
+        pipeline.run(
+            n_pcs=n_pcs,
+            embedding="phate",
+            embedding_params={
+                "knn": 5,
+                "n_landmark": 200,
+                "random_landmarking": True,
+                "embed_batch_size": 64,
+            },
+            skip_admixture=True,
+            skip_metrics=True,
+        )
+        cmd = embed_calls(calls)[0]
+        assert cmd[cmd.index("--n-landmark") + 1] == "200"
+        assert "--random-landmarking" in cmd
+        assert cmd[cmd.index("--embed-batch-size") + 1] == "64"
+
+    def test_pca_viz_warns_when_pca_file_absent(self, tmp_path, monkeypatch):
+        self._stub_plots(monkeypatch)
+        pipeline = make_pipeline(tmp_path)
+        # subprocess writes nothing -> transform_pca file never appears
+        capture_subprocess(monkeypatch)
+
+        results = pipeline.run(
+            n_pcs=3,
+            skip_pca=True,
+            skip_admixture=True,
+            skip_embedding=True,
+            skip_metrics=True,
+        )
+        assert "pca_figures" not in results
