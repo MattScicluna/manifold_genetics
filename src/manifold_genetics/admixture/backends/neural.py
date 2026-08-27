@@ -61,19 +61,25 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         self.num_gpus = self._resolve_num_gpus(num_gpus)
         self.batch_size = batch_size
 
-        # Resolve neural-admixture path
-        if neural_admixture_path is None:
-            resolver = ToolResolver()
-            neural_admixture_path = resolver.resolve_neural_admixture()
-
-        self.nadm_exec = neural_admixture_path
-        logger.debug(f"Using neural-admixture: {self.nadm_exec}")
+        # neural-admixture path is resolved lazily on first use (see nadm_exec
+        # property) so the backend can be constructed - and its methods mocked
+        # in tests - without the executable installed.
+        self._nadm_exec: Optional[str] = neural_admixture_path
         logger.debug(f"Using threads: {self.threads}")
         logger.debug(f"Using GPUs: {self.num_gpus}")
 
         # State tracking
         self._model_dir: Optional[Path] = None
         self._model_name: Optional[str] = None
+
+    @property
+    def nadm_exec(self) -> str:
+        """Path to the neural-admixture executable, resolved on first use."""
+        if self._nadm_exec is None:
+            resolver = ToolResolver()
+            self._nadm_exec = resolver.resolve_neural_admixture()
+            logger.debug(f"Using neural-admixture: {self._nadm_exec}")
+        return self._nadm_exec
 
     def _resolve_threads(self, requested_threads: Optional[int]) -> int:
         """

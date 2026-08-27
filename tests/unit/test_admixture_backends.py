@@ -220,3 +220,42 @@ class TestNeuralAdmixtureBackend:
 
     # Additional slow tests would go here
     # These would require actual PLINK data and run neural-admixture
+
+
+class TestNeuralAdmixtureBackendLazyResolution:
+    """The backend must be constructible without the neural-admixture binary.
+
+    Pipelines that inject a different backend, and tests that mock _train/_infer,
+    need to build NeuralAdmixture (which constructs a NeuralAdmixtureBackend by
+    default) with only the core install - no `admixture` extra, no binary.
+    """
+
+    def test_construction_does_not_resolve_binary(self, monkeypatch):
+        from manifold_genetics.admixture.backends import NeuralAdmixtureBackend
+        from manifold_genetics.utils import tools
+
+        def _boom(self):
+            raise tools.ToolNotFoundError("neural-admixture not found")
+
+        monkeypatch.setattr(tools.ToolResolver, "resolve_neural_admixture", _boom)
+
+        backend = NeuralAdmixtureBackend(k_min=2, k_max=3, num_gpus=0)
+        assert backend._nadm_exec is None
+
+        # Resolution (and its failure) happens only on first real use.
+        with pytest.raises(tools.ToolNotFoundError):
+            _ = backend.nadm_exec
+
+    def test_explicit_path_bypasses_resolver(self, monkeypatch):
+        from manifold_genetics.admixture.backends import NeuralAdmixtureBackend
+        from manifold_genetics.utils import tools
+
+        def _boom(self):
+            raise AssertionError("resolver must not be called when a path is given")
+
+        monkeypatch.setattr(tools.ToolResolver, "resolve_neural_admixture", _boom)
+
+        backend = NeuralAdmixtureBackend(
+            k_min=2, k_max=3, neural_admixture_path="/usr/bin/true", num_gpus=0
+        )
+        assert backend.nadm_exec == "/usr/bin/true"
