@@ -17,7 +17,7 @@ A lightweight, batteries-included Python package for genetic analysis with dimen
 - **Visualization**: Publication-ready plots with customizable colormaps
 - **Metrics**: Geographic and admixture preservation metrics
 - **Pipeline**: End-to-end orchestration from PLINK files to visualizations
-- **Auto-downloads tools**: Automatically downloads plink2 and flashPCA on first use
+- **Auto-downloads tools**: A single `manifold-genetics setup` call fetches plink2, flashPCA, and plink v1.9 (run it on a login node — compute nodes have no internet)
 
 ## Quick Start
 
@@ -75,10 +75,10 @@ Run the test suite to confirm everything is working:
 uv sync --frozen --extra dev
 
 # Run tests
-uv run pytest -m "not slow and not network"
+uv run pytest -m "not slow and not integration and not network"
 ```
 
-Expected: **55 tests passing** in ~150 seconds. See [Testing](#testing) section for details.
+Expected: the fast test suite passes in ~2–3 minutes. See the [Testing](#testing) section for details.
 
 ### Step 3: Run HGDP+1KGP Example
 
@@ -103,7 +103,7 @@ bash examples/hgdp_1kgp/prepare_data.sh
 bash examples/hgdp_1kgp/run_pipeline.sh
 ```
 
-**Runtime:** ~A couple of hours on CPU (faster with GPU for admixture)
+**Runtime:** a couple of hours on CPU (faster with GPU for admixture)
 
 **Outputs** saved to `examples/hgdp_1kgp/outputs/`:
 - `pca/` - PCA coordinates (fit: 3,400 samples, project: 4,094 samples)
@@ -181,6 +181,16 @@ uv run manifold-genetics embed \
     --project-output examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --knn 100 --t 3
 
+# 3b) Separate fit / project embeddings (needed for the cross-cohort plots in steps 5-6):
+#     fit PHATE on the fit PCA coordinates, then project the transform PCA coordinates onto it.
+uv run manifold-genetics embed \
+    --method phate \
+    --fit-input examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
+    --project-input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --fit-output examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
+    --project-output examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
+    --knn 100 --t 3
+
 # 4) Visualization
 
 # PCA
@@ -229,8 +239,8 @@ uv run manifold-genetics plot-projection \
     --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
     --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
     --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --fit-colormap examples/colormaps/hgdp_fit.json \
-    --project-colormap examples/colormaps/hgdp_project.json \
+    --fit-colormap examples/colormaps/hgdp_1kgp.json \
+    --project-colormap examples/colormaps/hgdp_1kgp.json \
     --fit-column Genetic_region_merged \
     --project-column Genetic_region_merged \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/projection.png
@@ -246,7 +256,7 @@ uv run manifold-genetics plot-knn-composition \
     --fit-label-column Population \
     --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --project-label-column Genetic_region_merged \
-    --fit-colormap examples/colormaps/hgdp_fit.json \
+    --fit-colormap examples/colormaps/hgdp_1kgp.json \
     --k 10 \
     --output examples/hgdp_1kgp/outputs/figures/embeddings/knn_composition.png
 
