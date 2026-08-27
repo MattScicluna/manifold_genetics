@@ -7,6 +7,7 @@ so the whole module runs in milliseconds with no torch, binaries, or real data.
 """
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -219,6 +220,126 @@ def test_cmd_pca_fit_project(monkeypatch, tmp_path):
     assert rc == 0
     assert out.exists()
     assert ("fit", "fit") in calls
+
+
+def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeAdmix:
+        def __init__(self, **kwargs):
+            calls.append(("init", kwargs))
+
+        def fit(self, prefix, output_dir=None, model_name=None):
+            calls.append(("fit", prefix, model_name))
+
+        def transform(self, prefix, output_prefix=None):
+            calls.append(("transform", prefix))
+            out = Path(output_prefix)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            paths = {}
+            for k in (2, 3):
+                csv = Path(f"{out}.{k}.csv")
+                pd.DataFrame({"sample_id": ["s1"], f"component_{k}": [1.0]}).to_csv(
+                    csv, index=False
+                )
+                paths[k] = csv
+            return paths
+
+    monkeypatch.setattr(mg_cli, "NeuralAdmixture", FakeAdmix)
+    out_dir = tmp_path / "admix"
+    rc = mg_cli.main(
+        [
+            "admixture",
+            "--fit-plink",
+            "fit",
+            "--project-plink",
+            "proj",
+            "--neuraladmixture-output-dir",
+            str(out_dir / "ckpt"),
+            "--fit-output",
+            str(out_dir / "fit"),
+            "--project-output",
+            str(out_dir / "transform"),
+            "--k-min",
+            "2",
+            "--k-max",
+            "3",
+        ]
+    )
+    assert rc == 0
+    assert (out_dir / "transform.3.csv").exists()
+    assert calls[0][0] == "init"
+    assert ("fit", "fit", "fit") in calls
+
+
+def test_cmd_admixture_missing_outputs_returns_1(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(mg_cli, "NeuralAdmixture", lambda **k: None)
+    rc = mg_cli.main(["admixture", "--fit-plink", "fit", "--output", str(tmp_path)])
+    assert rc == 1
+    assert "fit-output" in capsys.readouterr().err
+
+
+def test_cmd_embed_fit_project(monkeypatch, tmp_path, stub_validation):
+    calls = []
+
+    class FakeEmbed:
+        def __init__(self, n_components=2, **kwargs):
+            calls.append(("init", kwargs))
+
+        def fit(self, X):
+            calls.append(("fit", X))
+            return self
+
+        def transform(self, X):
+            calls.append(("transform", X))
+            return pd.DataFrame({"sample_id": ["s1"], "dim_1": [0.1], "dim_2": [0.2]})
+
+    for name in ("PHATE", "UMAP", "TSNE", "DiffusionMap"):
+        monkeypatch.setattr(mg_cli, name, FakeEmbed)
+
+    out = tmp_path / "emb.csv"
+    rc = mg_cli.main(
+        [
+            "embed",
+            "--method",
+            "umap",
+            "--fit-input",
+            str(tmp_path / "fit.csv"),
+            "--project-input",
+            str(tmp_path / "proj.csv"),
+            "--project-output",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    assert out.exists()
+    assert ("fit", str(tmp_path / "fit.csv")) in calls
+    assert ("transform", str(tmp_path / "proj.csv")) in calls
+
+
+def test_cmd_embed_unknown_method_returns_1(monkeypatch, tmp_path, stub_validation, capsys):
+    # argparse restricts --method, so reach cmd_embed's fallback branch directly.
+    import argparse
+
+    args = argparse.Namespace(
+        input=None,
+        fit_input=str(tmp_path / "f.csv"),
+        project_input=None,
+        fit_output=None,
+        project_output=str(tmp_path / "o.csv"),
+        output=None,
+        method="bogus",
+        knn=5,
+        t="auto",
+        n_landmark=None,
+        random_landmarking=False,
+        n_neighbors=15,
+        min_dist=0.1,
+        perplexity=30.0,
+        verbose=False,
+    )
+    assert mg_cli.cmd_embed(args) == 1
+    assert "Unknown method" in capsys.readouterr().out
 
 
 def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_validation):
