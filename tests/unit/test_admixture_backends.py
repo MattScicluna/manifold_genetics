@@ -5,6 +5,7 @@ Tests the interface and behavior of FakeAdmixtureBackend, PrecomputedAdmixtureBa
 and (optionally) NeuralAdmixtureBackend.
 """
 
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -196,6 +197,10 @@ class TestPrecomputedAdmixtureBackend:
 # Optionally test NeuralAdmixtureBackend if marked as slow
 # These tests are skipped by default unless --run-slow is passed
 @pytest.mark.slow
+@pytest.mark.skipif(
+    not shutil.which("neural-admixture"),
+    reason="neural-admixture binary not in PATH — install manifold-genetics[admixture]",
+)
 class TestNeuralAdmixtureBackend:
     """Tests for NeuralAdmixtureBackend (real computation).
 
