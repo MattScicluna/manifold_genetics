@@ -734,8 +734,12 @@ def cmd_pipeline(args):
     return 0
 
 
-def main():
-    """Main CLI entry point."""
+def main(argv: Optional[List[str]] = None):
+    """Main CLI entry point.
+
+    Args:
+        argv: Argument list to parse. Defaults to ``sys.argv[1:]`` when None.
+    """
     parser = argparse.ArgumentParser(
         prog="manifold-genetics",
         description=(
@@ -1444,7 +1448,7 @@ def main():
     pipeline_parser.set_defaults(func=cmd_pipeline)
 
     # Parse and execute
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not hasattr(args, "func"):
         parser.print_help()
