@@ -17,15 +17,16 @@ Outputs:
 import argparse
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 
-def parse_args():
+def parse_args(argv: Optional[List[str]] = None):
     parser = argparse.ArgumentParser(description="Filter duplicate/multi-allelic SNPs")
     parser.add_argument("--bim", required=True, help="PLINK .bim file")
     parser.add_argument("--lmiss", required=True, help="PLINK .lmiss file (from --missing)")
     parser.add_argument("--frq", required=True, help="PLINK .frq file (from --freq)")
     parser.add_argument("--out", required=True, help="Output prefix")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def read_bim(bim_path: Path) -> dict:
@@ -144,8 +145,8 @@ def filter_snps(snp_info: dict, missingness: dict, maf: dict) -> tuple:
     return keep_snps, stats
 
 
-def main():
-    args = parse_args()
+def main(argv: Optional[List[str]] = None):
+    args = parse_args(argv)
 
     bim_path = Path(args.bim)
     lmiss_path = Path(args.lmiss)
