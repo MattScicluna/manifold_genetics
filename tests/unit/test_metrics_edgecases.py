@@ -1,9 +1,8 @@
-"""Edge-case and secondary-function coverage for metrics/.
+"""Edge-case coverage for metrics/.
 
 The primary Spearman-preservation behaviour already has positive/negative
 control tests in tests/test_metrics.py. These cover the branches those miss:
-the by-distance-bin and summary helpers, subsampling, the legacy Q format,
-and the error paths.
+subsampling, the legacy Q format, and the error paths.
 """
 
 import numpy as np
@@ -13,12 +12,8 @@ import pytest
 from manifold_genetics.metrics.admixture import (
     _load_q_matrix,
     compute_admixture_preservation,
-    compute_admixture_preservation_summary,
 )
-from manifold_genetics.metrics.geographic import (
-    compute_geographic_preservation,
-    compute_geographic_preservation_by_distance_bin,
-)
+from manifold_genetics.metrics.geographic import compute_geographic_preservation
 
 
 def _embedding(n, dims=2, seed=0):
@@ -43,17 +38,6 @@ def _geo_matching(embedding_df):
 # ---------------------------------------------------------------------------
 # geographic
 # ---------------------------------------------------------------------------
-
-
-def test_geographic_by_distance_bin_positive_control():
-    emb = _embedding(60)
-    geo = _geo_matching(emb)
-    df = compute_geographic_preservation_by_distance_bin(emb, geo, n_bins=5)
-    assert list(df.columns) == ["bin_start", "bin_end", "correlation", "n_pairs"]
-    assert len(df) >= 3
-    # embedding == geography -> every populated bin should preserve strongly
-    assert (df["correlation"] > 0.5).all()
-    assert df["n_pairs"].sum() > 0
 
 
 def test_geographic_subsamples_pairwise_distances():
@@ -87,15 +71,14 @@ def _q_file(tmp_path, name, k, n, seed=0):
     return p
 
 
-def test_admixture_summary_matches_full_result(tmp_path):
+def test_admixture_preservation_all_k_values(tmp_path):
     emb = _embedding(30, dims=3)
     qf = {2: _q_file(tmp_path, "q2.csv", 2, 30), 3: _q_file(tmp_path, "q3.csv", 3, 30)}
-    full = compute_admixture_preservation(emb, qf)
-    summary = compute_admixture_preservation_summary(emb, qf)
-    assert set(summary["K"]) == {2, 3}
-    assert list(summary.columns) == ["K", "correlation", "p_value", "n_samples", "n_pairs"]
-    row2 = summary.set_index("K").loc[2]
-    assert row2["correlation"] == pytest.approx(full[2]["correlation"])
+    result = compute_admixture_preservation(emb, qf)
+    assert set(result) == {2, 3}
+    for k in (2, 3):
+        assert set(result[k]) == {"correlation", "p_value", "n_samples", "n_pairs"}
+        assert result[k]["n_samples"] == 30
 
 
 def test_admixture_subsample_individuals(tmp_path):

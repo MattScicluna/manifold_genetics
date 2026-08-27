@@ -188,27 +188,3 @@ def _align_matrices(
     embedding_aligned = embedding_df.loc[common_samples]
 
     return q_aligned.values, embedding_aligned.values
-
-
-def compute_admixture_preservation_summary(
-    embedding: Union[pd.DataFrame, str, Path],
-    q_files: Dict[int, Union[str, Path]],
-) -> pd.DataFrame:
-    """
-    Compute admixture preservation for all K values and return summary.
-
-    Args:
-        embedding: DataFrame or path to embedding CSV
-        q_files: Dictionary mapping K values to Q file paths
-
-    Returns:
-        DataFrame with columns: K, correlation, p_value, n_samples, n_pairs
-    """
-    results = compute_admixture_preservation(embedding, q_files)
-
-    # Convert to DataFrame
-    summary_data = []
-    for k, metrics in results.items():
-        summary_data.append({"K": k, **metrics})
-
-    return pd.DataFrame(summary_data)
