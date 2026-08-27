@@ -6,7 +6,6 @@ written to tmp_path. No network, no real binaries.
 """
 
 import gzip
-import subprocess
 import urllib.request
 import zipfile
 from pathlib import Path
