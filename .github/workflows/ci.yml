@@ -48,13 +48,16 @@ jobs:
       
       - name: Run tests
         run: |
-          uv run pytest -m "not slow and not integration and not network" --cov=manifold_genetics --cov-report=term-missing --cov-report=xml
-      
+          uv run pytest -m "not slow and not integration and not network" --cov=manifold_genetics --cov-report=term-missing --cov-report=lcov
+
       - name: Upload coverage to Coveralls
         if: matrix.python-version == '3.12'
         uses: coverallsapp/github-action@v2
         with:
-          file: coverage.xml
+          # LCOV preserves coverage.py's line data exactly; the Cobertura XML
+          # path made Coveralls undercount by ~2 points.
+          file: coverage.lcov
+          format: lcov
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
       
