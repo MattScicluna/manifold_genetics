@@ -150,3 +150,31 @@ examples/_shared/tools/
 examples/hgdp_1kgp/outputs/
 examples/ukbb/*/outputs/
 examples/aou/*/outputs/
+
+# Controlled-access genetic data must never be committed.
+# Binary genotype/dosage formats (PLINK, BGEN) - never belong in git
+*.bed
+*.bim
+*.fam
+*.bgen
+*.pgen
+*.psam
+*.sample
+*.bcf
+*.vcf
+*.vcf.gz
+
+# Local-only data/output staging dirs (e.g. data_old/, outputs_old/, figures/)
+**/data_old/
+**/outputs_old/
+**/data/
+**/figures/
+
+# Files holding real sample IDs / private path mappings
+*_private*
+*mappings_private*
+*_labels.csv
+*_samples.txt
+examples/CaG/
+examples/ukbb/60k_random/data/
+examples/ukbb/60k_random/outputs/
