@@ -45,9 +45,17 @@ uv venv --python python3.11
 # Install dependencies
 uv sync --frozen
 
+# Admixture support (torch + neural-admixture) is an optional extra —
+# add it only if you need the admixture step:
+uv sync --frozen --extra admixture
+
 # For contributors (includes dev tools like pytest, black, etc.)
 uv sync --frozen --extra dev
 ```
+
+The core install is deliberately torch-free so PCA, embeddings, visualization,
+and metrics stay lightweight. `manifold-genetics admixture` (and the admixture
+stage of `pipeline`) require the `admixture` extra.
 
 #### External tools
 
@@ -417,7 +425,10 @@ uv run manifold-genetics pipeline ... \
 - numpy, pandas, scipy, scikit-learn
 - matplotlib, seaborn
 - phate, umap-learn
-- torch, neural-admixture
+
+### Optional: `admixture` extra
+- torch, neural-admixture — install with `uv sync --frozen --extra admixture`
+  (only needed for the admixture step)
 
 ### External Tools (Auto-downloaded)
 - **plink2**: Downloaded to `bin/plink2` (~20MB)

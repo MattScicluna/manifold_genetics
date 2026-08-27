@@ -11,7 +11,12 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-import torch
+try:
+    import torch
+
+    _TORCH_AVAILABLE = True
+except ImportError:
+    _TORCH_AVAILABLE = False
 
 from ...utils.io import _append_extension, get_sample_ids_from_plink, validate_plink_files
 from ...utils.tools import ToolResolver
@@ -56,19 +61,25 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         self.num_gpus = self._resolve_num_gpus(num_gpus)
         self.batch_size = batch_size
 
-        # Resolve neural-admixture path
-        if neural_admixture_path is None:
-            resolver = ToolResolver()
-            neural_admixture_path = resolver.resolve_neural_admixture()
-
-        self.nadm_exec = neural_admixture_path
-        logger.debug(f"Using neural-admixture: {self.nadm_exec}")
+        # neural-admixture path is resolved lazily on first use (see nadm_exec
+        # property) so the backend can be constructed - and its methods mocked
+        # in tests - without the executable installed.
+        self._nadm_exec: Optional[str] = neural_admixture_path
         logger.debug(f"Using threads: {self.threads}")
         logger.debug(f"Using GPUs: {self.num_gpus}")
 
         # State tracking
         self._model_dir: Optional[Path] = None
         self._model_name: Optional[str] = None
+
+    @property
+    def nadm_exec(self) -> str:
+        """Path to the neural-admixture executable, resolved on first use."""
+        if self._nadm_exec is None:
+            resolver = ToolResolver()
+            self._nadm_exec = resolver.resolve_neural_admixture()
+            logger.debug(f"Using neural-admixture: {self._nadm_exec}")
+        return self._nadm_exec
 
     def _resolve_threads(self, requested_threads: Optional[int]) -> int:
         """
@@ -102,6 +113,8 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         """Resolve number of GPUs to use (default: 1 if CUDA available)."""
         if requested_gpus is not None:
             return max(0, requested_gpus)
+        if not _TORCH_AVAILABLE:
+            return 0  # no torch → CPU-only
         return 1 if torch.cuda.is_available() else 0
 
     def fit(

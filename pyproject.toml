@@ -37,12 +37,13 @@ dependencies = [
     "phate>=2.0.0",
     "umap-learn>=0.5.0",
     "llvmlite>=0.40",
-    # Neural admixture
-    "torch>=1.10.0",
-    "neural-admixture==1.6.7",
 ]
 
 [project.optional-dependencies]
+admixture = [
+    "torch>=1.10.0",
+    "neural-admixture==1.6.7",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=3.0.0",
