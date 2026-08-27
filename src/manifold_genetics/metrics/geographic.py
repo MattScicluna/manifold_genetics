@@ -160,8 +160,8 @@ def _haversine_distances(coords: np.ndarray) -> np.ndarray:
 def compute_geographic_preservation_by_distance_bin(
     embedding: Union[pd.DataFrame, str, Path],
     geographic_coords: Union[pd.DataFrame, str, Path],
-    longitude_col: str = "Longitude",
-    latitude_col: str = "Latitude",
+    longitude_col: str = "longitude",
+    latitude_col: str = "latitude",
     n_bins: int = 10,
 ) -> pd.DataFrame:
     """
@@ -189,6 +189,11 @@ def compute_geographic_preservation_by_distance_bin(
         embedding_df = read_embedding_csv(embedding)
     else:
         embedding_df = embedding
+
+    # Ensure embedding is keyed by sample_id for the join (mirrors
+    # compute_geographic_preservation)
+    if "sample_id" in embedding_df.columns:
+        embedding_df = embedding_df.set_index("sample_id")
 
     if isinstance(geographic_coords, (str, Path)):
         geo_df = read_labels_csv(geographic_coords)
