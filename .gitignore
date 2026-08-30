@@ -176,6 +176,9 @@ examples/aou/*/outputs/
 *mappings_private*
 *_labels.csv
 *_samples.txt
+# Synthetic test fixtures (SAMPLE_### IDs, no private data) must stay tracked
+!tests/fixtures/cross_cohort/fit_labels.csv
+!tests/fixtures/cross_cohort/project_labels.csv
 examples/CaG/
 examples/ukbb/60k_random/data/
 examples/ukbb/60k_random/outputs/

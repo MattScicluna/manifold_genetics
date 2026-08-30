@@ -108,6 +108,19 @@ def colormap_json(temp_dir, colormap_data):
 
 
 @pytest.fixture
+def cross_cohort_fixtures():
+    """Paths to the checked-in cross-cohort label/colormap/geographic fixtures."""
+    d = Path(__file__).parent / "fixtures" / "cross_cohort"
+    return {
+        "fit_labels": d / "fit_labels.csv",
+        "project_labels": d / "project_labels.csv",
+        "fit_colormap": d / "fit_colormap.json",
+        "project_colormap": d / "project_colormap.json",
+        "geographic": d / "geographic.csv",
+    }
+
+
+@pytest.fixture
 def numeric_pca_data():
     """PCA dataset with integer (numeric) sample_ids, mimicking FlashPCA IID behavior."""
     np.random.seed(42)
@@ -155,7 +168,7 @@ def _create_plink_files(temp_dir: Path, prefix_name: str):
 
     Args:
         temp_dir: Directory to create files in
-        prefix_name: Name for the PLINK file prefix (e.g., 'dummy', 'fit', 'transform')
+        prefix_name: Name for the PLINK file prefix (e.g., 'dummy', 'fit', 'project')
 
     Returns:
         String path to PLINK prefix
@@ -228,6 +241,6 @@ def fit_plink_files(temp_dir):
 
 
 @pytest.fixture
-def transform_plink_files(temp_dir):
-    """Create PLINK files named 'transform' for precomputed admixture backend tests."""
-    return _create_plink_files(temp_dir, "transform")
+def project_plink_files(temp_dir):
+    """Create PLINK files named 'project' for precomputed admixture backend tests."""
+    return _create_plink_files(temp_dir, "project")

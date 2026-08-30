@@ -103,7 +103,7 @@ class TestVisualization:
         int_ids = np.arange(n_samples, dtype=np.int64)
         str_ids = [str(i) for i in int_ids]
 
-        q_prefix = temp_dir / "admixture" / "transform"
+        q_prefix = temp_dir / "admixture" / "project"
         q_prefix.parent.mkdir(parents=True, exist_ok=True)
 
         for k in [2, 3]:
@@ -141,7 +141,7 @@ class TestVisualization:
         b = 1.0 - a
         c = rng.uniform(0.0, 0.08, n_samples)  # New component introduced at K=3.
 
-        q_prefix = temp_dir / "admixture" / "transform"
+        q_prefix = temp_dir / "admixture" / "project"
         q_prefix.parent.mkdir(parents=True, exist_ok=True)
 
         k2 = pd.DataFrame(

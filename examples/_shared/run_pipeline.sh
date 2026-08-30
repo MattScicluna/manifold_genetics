@@ -119,12 +119,11 @@ RANDOM_LANDMARKING=""
 ADMIXTURE_GROUP_COLUMN=""
 ADMIXTURE_WITHIN_GROUP_ORDER="chron"
 PROJECTION_PLOT_FIT_COLUMN=""
-PROJECTION_PLOT_TRANSFORM_COLUMN=""
+PROJECTION_PLOT_PROJECT_COLUMN=""
 THREADS=""
 NUM_GPUS=""
 NEURALADMIXTURE_BATCH_SIZE=""
 EMBED_BATCH_SIZE=""
-FLASHPCA_OUTPUT_DIR=""
 SKIP_METRICS=false
 SKIP_PCA=false
 SKIP_ADMIXTURE=false
@@ -228,8 +227,8 @@ while [[ $# -gt 0 ]]; do
             PROJECTION_PLOT_FIT_COLUMN="$2"
             shift 2
             ;;
-        --projection-plot-transform-column)
-            PROJECTION_PLOT_TRANSFORM_COLUMN="$2"
+        --projection-plot-project-column)
+            PROJECTION_PLOT_PROJECT_COLUMN="$2"
             shift 2
             ;;
         --threads)
@@ -246,10 +245,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --embed-batch-size)
             EMBED_BATCH_SIZE="$2"
-            shift 2
-            ;;
-        --flashpca-output-dir)
-            FLASHPCA_OUTPUT_DIR="$2"
             shift 2
             ;;
         --skip-metrics)
@@ -419,12 +414,11 @@ CMD="$CMD --knn $KNN --t $T"
 [[ -n "$ADMIXTURE_GROUP_COLUMN" ]] && CMD="$CMD --admixture-group-column $ADMIXTURE_GROUP_COLUMN"
 CMD="$CMD --admixture-within-group-order $ADMIXTURE_WITHIN_GROUP_ORDER"
 [[ -n "$PROJECTION_PLOT_FIT_COLUMN" ]] && CMD="$CMD --projection-plot-fit-column $PROJECTION_PLOT_FIT_COLUMN"
-[[ -n "$PROJECTION_PLOT_TRANSFORM_COLUMN" ]] && CMD="$CMD --projection-plot-transform-column $PROJECTION_PLOT_TRANSFORM_COLUMN"
+[[ -n "$PROJECTION_PLOT_PROJECT_COLUMN" ]] && CMD="$CMD --projection-plot-project-column $PROJECTION_PLOT_PROJECT_COLUMN"
 [[ -n "$THREADS" ]] && CMD="$CMD --threads $THREADS"
 [[ -n "$NUM_GPUS" ]] && CMD="$CMD --num-gpus $NUM_GPUS"
 [[ -n "$NEURALADMIXTURE_BATCH_SIZE" ]] && CMD="$CMD --neuraladmixture-batch-size $NEURALADMIXTURE_BATCH_SIZE"
 [[ -n "$EMBED_BATCH_SIZE" ]] && CMD="$CMD --embed-batch-size $EMBED_BATCH_SIZE"
-[[ -n "$FLASHPCA_OUTPUT_DIR" ]] && CMD="$CMD --flashpca-output-dir \"$FLASHPCA_OUTPUT_DIR\""
 [[ "$SKIP_METRICS" == "true" ]] && CMD="$CMD --skip-metrics"
 [[ "$SKIP_PCA" == "true" ]] && CMD="$CMD --skip-pca"
 [[ "$SKIP_ADMIXTURE" == "true" ]] && CMD="$CMD --skip-admixture"

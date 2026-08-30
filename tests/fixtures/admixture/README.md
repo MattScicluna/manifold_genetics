@@ -6,8 +6,8 @@ This directory contains precomputed admixture proportions for testing.
 
 - `fit.2.csv` - Admixture proportions for K=2 (fit subset, 50 samples)
 - `fit.3.csv` - Admixture proportions for K=3 (fit subset, 50 samples)
-- `transform.2.csv` - Admixture proportions for K=2 (transform subset, 50 samples)
-- `transform.3.csv` - Admixture proportions for K=3 (transform subset, 50 samples)
+- `project.2.csv` - Admixture proportions for K=2 (project subset, 50 samples)
+- `project.3.csv` - Admixture proportions for K=3 (project subset, 50 samples)
 
 ## Format
 
@@ -49,7 +49,7 @@ from manifold_genetics.admixture import NeuralAdmixture
 admix = NeuralAdmixture(k_min=2, k_max=3)
 admix.fit("path/to/fit.plink", output_dir="temp/")
 fit_q = admix.transform("path/to/fit.plink", output_prefix="temp/fit")
-transform_q = admix.transform("path/to/transform.plink", output_prefix="temp/transform")
+project_q = admix.transform("path/to/project.plink", output_prefix="temp/project")
 
 # Copy to fixtures directory
 # fit_q[2] -> tests/fixtures/admixture/fit.2.csv

@@ -606,7 +606,7 @@ def cmd_pipeline(args):
     # Validate specific columns when provided
     admix_group_col = getattr(args, "admixture_group_column", None)
     proj_fit_col = getattr(args, "projection_plot_fit_column", None)
-    proj_transform_col = getattr(args, "projection_plot_transform_column", None)
+    proj_project_col = getattr(args, "projection_plot_project_column", None)
 
     if admix_group_col:
         # admixture group column uses shared labels/colormap or fit variants
@@ -618,13 +618,9 @@ def cmd_pipeline(args):
         validate_label_column(
             proj_fit_col, fit_labels or args.labels, fit_colormap or args.colormap
         )
-    if (
-        proj_transform_col
-        and (project_labels or args.labels)
-        and (project_colormap or args.colormap)
-    ):
+    if proj_project_col and (project_labels or args.labels) and (project_colormap or args.colormap):
         validate_label_column(
-            proj_transform_col,
+            proj_project_col,
             project_labels or args.labels,
             project_colormap or args.colormap,
         )
@@ -677,7 +673,7 @@ def cmd_pipeline(args):
 
     # Handle projection column args
     projection_plot_fit_column = getattr(args, "projection_plot_fit_column", None)
-    projection_plot_transform_column = getattr(args, "projection_plot_transform_column", None)
+    projection_plot_project_column = getattr(args, "projection_plot_project_column", None)
 
     # Use the canonical run_pipeline function
     results = run_pipeline(
@@ -692,7 +688,6 @@ def cmd_pipeline(args):
         project_colormap=project_colormap,
         geographic_coords=args.geographic if hasattr(args, "geographic") else None,
         n_pcs=args.n_pcs,
-        flashpca_output_dir=args.flashpca_output_dir,
         k_min=args.k_min,
         k_max=args.k_max,
         admix_threads=args.threads,
@@ -708,7 +703,7 @@ def cmd_pipeline(args):
             else args.admixture_within_group_order
         ),
         projection_plot_fit_column=projection_plot_fit_column,
-        projection_plot_transform_column=projection_plot_transform_column,
+        projection_plot_project_column=projection_plot_project_column,
         skip_pca=args.skip_pca,
         skip_admixture=args.skip_admixture,
         skip_embedding=args.skip_embedding,
@@ -773,7 +768,7 @@ def main(argv: Optional[List[str]] = None):
             "  manifold-genetics pca \\\n"
             "      --fit-plink data/fit --project-plink data/project \\\n"
             "      --fit-output results/pca/fit_pca_50.csv \\\n"
-            "      --project-output results/pca/transform_pca_50.csv \\\n"
+            "      --project-output results/pca/project_pca_50.csv \\\n"
             "      --flashpca-output-dir results/pca/flashpca_outputs \\\n"
             "      --n-pcs 50"
         ),
@@ -825,7 +820,7 @@ def main(argv: Optional[List[str]] = None):
             "      --fit-plink data/fit --project-plink data/project \\\n"
             "      --neuraladmixture-output-dir results/admixture/checkpoints \\\n"
             "      --fit-output results/admixture/fit \\\n"
-            "      --project-output results/admixture/transform \\\n"
+            "      --project-output results/admixture/project \\\n"
             "      --k-min 2 --k-max 10 --threads 8\n\n"
             "  # With GPU and large-dataset batch size\n"
             "  manifold-genetics admixture ... --num-gpus 1 --neuraladmixture-batch-size 400"
@@ -1050,14 +1045,14 @@ def main(argv: Optional[List[str]] = None):
             "  # PHATE: fit on fit set, project the project set\n"
             "  manifold-genetics embed \\\n"
             "      --fit-input results/pca/fit_pca_50.csv \\\n"
-            "      --project-input results/pca/transform_pca_50.csv \\\n"
+            "      --project-input results/pca/project_pca_50.csv \\\n"
             "      --project-output results/embeddings/phate_2d.csv \\\n"
             "      --method phate --knn 100 --t 3\n\n"
             "  # PHATE with landmarking for large datasets (>10K samples)\n"
             "  manifold-genetics embed ... --n-landmark 10000 --random-landmarking\n\n"
             "  # UMAP\n"
             "  manifold-genetics embed \\\n"
-            "      --fit-input results/pca/transform_pca_50.csv \\\n"
+            "      --fit-input results/pca/project_pca_50.csv \\\n"
             "      --project-output results/embeddings/umap_2d.csv \\\n"
             "      --method umap --n-neighbors 15 --min-dist 0.1"
         ),
@@ -1260,7 +1255,7 @@ def main(argv: Optional[List[str]] = None):
     admix_metrics_parser.add_argument(
         "--admixture-output",
         required=True,
-        help="Prefix for admixture CSVs (<prefix>.K.csv, e.g., path/to/transform)",
+        help="Prefix for admixture CSVs (<prefix>.K.csv, e.g., path/to/project)",
     )
     admix_metrics_parser.add_argument("--output", required=True, help="Output JSON path")
     admix_metrics_parser.add_argument(
@@ -1331,7 +1326,7 @@ def main(argv: Optional[List[str]] = None):
     pipeline_parser.add_argument(
         "--project-plink",
         required=True,
-        help="PLINK prefix to project/apply the fitted models (transform subset)",
+        help="PLINK prefix to project/apply the fitted models (project subset)",
     )
     pipeline_parser.add_argument(
         "--labels",
@@ -1358,10 +1353,6 @@ def main(argv: Optional[List[str]] = None):
     )
     pipeline_parser.add_argument("--output", required=True, help="Output directory")
     pipeline_parser.add_argument("--geographic", help="Geographic coordinates CSV")
-    pipeline_parser.add_argument(
-        "--flashpca-output-dir",
-        help="Directory for flashpca intermediate outputs (defaults to ./pca_outputs)",
-    )
     pipeline_parser.add_argument(
         "--threads",
         type=int,
@@ -1440,7 +1431,7 @@ def main(argv: Optional[List[str]] = None):
         help="Column from fit colormap to use for projection plot (e.g., Genetic_region_merged)",
     )
     pipeline_parser.add_argument(
-        "--projection-plot-transform-column",
+        "--projection-plot-project-column",
         help="Column from project colormap to use for projection plot (e.g., race_ethnicity)",
     )
     pipeline_parser.add_argument("--skip-metrics", action="store_true", help="Skip metrics")

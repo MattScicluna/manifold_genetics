@@ -169,7 +169,7 @@ uv run manifold-genetics pca \
     --fit-plink examples/hgdp_1kgp/data/fit_subset \
     --project-plink examples/hgdp_1kgp/data/project_subset \
     --fit-output examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
-    --project-output examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --project-output examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
     --flashpca-output-dir examples/hgdp_1kgp/outputs/pca/flashpca_outputs \
     --n-pcs 50
 
@@ -179,23 +179,23 @@ uv run manifold-genetics admixture \
     --project-plink examples/hgdp_1kgp/data/project_subset \
     --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
     --fit-output examples/hgdp_1kgp/outputs/admixture/fit \
-    --project-output examples/hgdp_1kgp/outputs/admixture/transform \
+    --project-output examples/hgdp_1kgp/outputs/admixture/project \
     --k-min 2 --k-max 5 --threads 8
-# Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and transform.{K}.csv
+# Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and project.{K}.csv
 
-# 3) Embedding (PHATE): fit and transform on projected (transform) PCA coordinates
+# 3) Embedding (PHATE): fit + transform on the project PCA coordinates
 uv run manifold-genetics embed \
     --method phate \
-    --fit-input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --fit-input examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
     --project-output examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
     --knn 100 --t 3
 
 # 3b) Separate fit / project embeddings (needed for the cross-cohort plots in steps 5-6):
-#     fit PHATE on the fit PCA coordinates, then project the transform PCA coordinates onto it.
+#     fit PHATE on the fit PCA coordinates, then apply it to the project PCA coordinates.
 uv run manifold-genetics embed \
     --method phate \
     --fit-input examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
-    --project-input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --project-input examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
     --fit-output examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
     --project-output examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
     --knn 100 --t 3
@@ -204,7 +204,7 @@ uv run manifold-genetics embed \
 
 # PCA
 uv run manifold-genetics plot-pca \
-    --input examples/hgdp_1kgp/outputs/pca/transform_pca_50.csv \
+    --input examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --colormap examples/colormaps/hgdp_1kgp.json \
     --output examples/hgdp_1kgp/outputs/figures/pca \
@@ -221,12 +221,12 @@ uv run manifold-genetics plot \
 # Use --component-colors-output to save the component colour assignments to JSON.
 # This lets plot-admixture-embedding use the same colours as the bar chart.
 uv run manifold-genetics plot-admixture \
-    --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
+    --q-prefix examples/hgdp_1kgp/outputs/admixture/project \
     --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
     --group-column Genetic_region_merged \
     --colormap examples/colormaps/hgdp_1kgp.json \
     --k-min 2 --k-max 5 \
-    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_bars.png \
+    --output examples/hgdp_1kgp/outputs/figures/admixture/project_bars.png \
     --component-colors-output examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
 # Admixture embedding grid — coloured by admixture component proportion.
@@ -234,9 +234,9 @@ uv run manifold-genetics plot-admixture \
 # subplot uses a white-to-component-colour gradient that matches the bar chart.
 uv run manifold-genetics plot-admixture-embedding \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --q-prefix examples/hgdp_1kgp/outputs/admixture/transform \
+    --q-prefix examples/hgdp_1kgp/outputs/admixture/project \
     --k-min 2 --k-max 5 \
-    --output examples/hgdp_1kgp/outputs/figures/admixture/transform_embedding.png \
+    --output examples/hgdp_1kgp/outputs/figures/admixture/project_embedding.png \
     --component-colormap examples/hgdp_1kgp/outputs/admixture/component_colors.json
 
 # 5) Overlay reference (fit) and target (project) embeddings (cross-cohort comparison)
@@ -278,7 +278,7 @@ uv run manifold-genetics metrics-geographic \
 
 uv run manifold-genetics metrics-admixture \
     --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --admixture-output examples/hgdp_1kgp/outputs/admixture/transform \
+    --admixture-output examples/hgdp_1kgp/outputs/admixture/project \
     --output examples/hgdp_1kgp/outputs/metrics/admixture.json \
     --k-min 2 --k-max 5 \
     --num-dists-sampled 50000
@@ -328,7 +328,7 @@ Required columns: `sample_id`, `latitude`, `longitude`. Used with `--geographic`
 
 ### Output Files
 
-**PCA** (`fit_pca_N.csv`, `transform_pca_N.csv`) - Principal component coordinates:
+**PCA** (`fit_pca_N.csv`, `project_pca_N.csv`) - Principal component coordinates:
 ```csv
 sample_id,dim_1,dim_2,...,dim_N
 HGDP00001,0.073308,0.212584,-0.012974,...
@@ -336,7 +336,7 @@ HGDP00002,0.073231,0.210938,-0.012130,...
 ```
 Where N = `--n-pcs` (default 50). Each row is a sample, columns are PC coordinates.
 
-**Admixture** (`fit.K.csv`, `transform.K.csv`) - Ancestry proportions:
+**Admixture** (`fit.K.csv`, `project.K.csv`) - Ancestry proportions:
 ```csv
 sample_id,component_1,component_2,...,component_K
 HGDP00001,0.9996,0.0004
