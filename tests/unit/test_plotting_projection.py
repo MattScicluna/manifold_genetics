@@ -211,7 +211,7 @@ def test_projection_reads_from_paths(projection_inputs, tmp_path):
 
 def _write_q_files(tmp_path, ids, ks=(2, 3), seed=0):
     rng = np.random.default_rng(seed)
-    prefix = tmp_path / "q" / "transform"
+    prefix = tmp_path / "q" / "project"
     prefix.parent.mkdir(parents=True, exist_ok=True)
     frames = {}
     for k in ks:

@@ -27,7 +27,7 @@ from manifold_genetics.pipeline.orchestrator import Pipeline
 def make_pipeline(tmp_path, **kwargs) -> Pipeline:
     defaults = dict(
         fit_plink_prefix="fit",
-        transform_plink_prefix="project",
+        project_plink_prefix="project",
         labels="labels.csv",
         colormap="cmap.json",
         output_dir=tmp_path / "out",
@@ -104,7 +104,7 @@ class TestPipelineInit:
         """Separate fit/project labels with no shared: labels attr must be None."""
         p = Pipeline(
             fit_plink_prefix="fit",
-            transform_plink_prefix="project",
+            project_plink_prefix="project",
             fit_labels="fit.csv",
             project_labels="project.csv",
             colormap="cmap.json",
@@ -122,7 +122,7 @@ class TestPipelineInit:
         with pytest.raises(ValueError, match="fit_labels|project_labels"):
             Pipeline(
                 fit_plink_prefix="fit",
-                transform_plink_prefix="project",
+                project_plink_prefix="project",
                 fit_labels="fit.csv",
                 colormap="cmap.json",
                 output_dir=tmp_path / "out",
@@ -136,7 +136,7 @@ class TestPipelineInit:
         with pytest.raises(ValueError, match="colormap"):
             Pipeline(
                 fit_plink_prefix="fit",
-                transform_plink_prefix="project",
+                project_plink_prefix="project",
                 labels="labels.csv",
                 project_colormap="project.json",
                 output_dir=tmp_path / "out",
@@ -158,7 +158,7 @@ class TestPipelineInit:
 
 
 class TestPipelineRunPCAForce:
-    """The PCA step inspects the cached transform_pca_{n}.csv before running.
+    """The PCA step inspects the cached project_pca_{n}.csv before running.
     If the existing file has a different number of dim_ columns than n_pcs,
     --force is appended to recompute from scratch.
 
@@ -166,12 +166,12 @@ class TestPipelineRunPCAForce:
     to all downstream embedding and metric computations.
     """
 
-    def _run_pca_step(self, pipeline, n_pcs, monkeypatch, transform_pca_path):
+    def _run_pca_step(self, pipeline, n_pcs, monkeypatch, project_pca_path):
         """Run only the PCA step; fake subprocess writes the expected output file."""
 
         def on_call(cmd):
             if "pca" in cmd:
-                write_pca_csv(transform_pca_path, n_pcs)
+                write_pca_csv(project_pca_path, n_pcs)
 
         return capture_subprocess(monkeypatch, on_call=on_call)
 
@@ -181,10 +181,10 @@ class TestPipelineRunPCAForce:
         """Existing file has 10 dim_ columns; n_pcs=50 → --force must appear."""
         pipeline = make_pipeline(tmp_path)
         n_pcs = 50
-        transform_pca = pipeline.output_dir / "pca" / f"transform_pca_{n_pcs}.csv"
-        write_pca_csv(transform_pca, n_dims=10)  # 10 != 50
+        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
+        write_pca_csv(project_pca, n_dims=10)  # 10 != 50
 
-        calls = self._run_pca_step(pipeline, n_pcs, monkeypatch, transform_pca)
+        calls = self._run_pca_step(pipeline, n_pcs, monkeypatch, project_pca)
         pipeline.run(
             n_pcs=n_pcs,
             skip_admixture=True,
@@ -205,8 +205,8 @@ class TestPipelineRunPCAForce:
         """
         pipeline = make_pipeline(tmp_path)
         n_pcs = 50
-        transform_pca = pipeline.output_dir / "pca" / f"transform_pca_{n_pcs}.csv"
-        write_pca_csv(transform_pca, n_dims=50)  # correct count
+        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
+        write_pca_csv(project_pca, n_dims=50)  # correct count
 
         calls = capture_subprocess(monkeypatch)
         pipeline.run(
@@ -230,11 +230,11 @@ class TestPipelineRunPCAForce:
         """No cached file → first-time run must not include --force."""
         pipeline = make_pipeline(tmp_path)
         n_pcs = 50
-        transform_pca = pipeline.output_dir / "pca" / f"transform_pca_{n_pcs}.csv"
+        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
 
         def on_call(cmd):
             if "pca" in cmd:
-                write_pca_csv(transform_pca, n_pcs)
+                write_pca_csv(project_pca, n_pcs)
 
         calls = capture_subprocess(monkeypatch, on_call=on_call)
         pipeline.run(
@@ -260,7 +260,7 @@ class TestPipelineRunEmbeddingInputMode:
     to the embedding CLI command.
 
     'fit':    embed fit PCA standalone (fit_transform only, no --project-input)
-    'project': embed project PCA standalone (using transform PCA as --input)
+    'project': embed project PCA standalone (using project PCA as --input)
     'both':   fit embedding on fit PCA, project embedding on project PCA
               (--project-input present, separate --fit-output written)
 
@@ -268,13 +268,13 @@ class TestPipelineRunEmbeddingInputMode:
     """
 
     def _setup(self, pipeline, n_pcs):
-        """Write both PCA files and return (fit_path, transform_path)."""
+        """Write both PCA files and return (fit_path, project_path)."""
         pca_dir = pipeline.output_dir / "pca"
         fit_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-        transform_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+        project_file = pca_dir / f"project_pca_{n_pcs}.csv"
         write_pca_csv(fit_file, n_pcs)
-        write_pca_csv(transform_file, n_pcs)
-        return fit_file, transform_file
+        write_pca_csv(project_file, n_pcs)
+        return fit_file, project_file
 
     def _run_embedding_only(self, pipeline, monkeypatch, n_pcs, mode, method="phate"):
         embedding_dir = pipeline.output_dir / "embeddings"
@@ -301,12 +301,12 @@ class TestPipelineRunEmbeddingInputMode:
         return embed_calls(calls)
 
     def test_mode_both_includes_project_input_and_fit_output(self, tmp_path, monkeypatch):
-        """Mode 'both': --project-input (transform PCA) and --fit-output must both appear.
+        """Mode 'both': --project-input (project PCA) and --fit-output must both appear.
         Without --project-input, only the fit dataset gets embedded; project data is lost.
         """
         pipeline = make_pipeline(tmp_path)
         n_pcs = 10
-        fit_file, transform_file = self._setup(pipeline, n_pcs)
+        fit_file, project_file = self._setup(pipeline, n_pcs)
 
         cmds = self._run_embedding_only(pipeline, monkeypatch, n_pcs, "both")
         assert len(cmds) == 1, f"Expected one embed call, got {len(cmds)}"
@@ -314,7 +314,7 @@ class TestPipelineRunEmbeddingInputMode:
 
         assert (
             "--project-input" in cmd
-        ), f"Mode 'both' must include --project-input for the transform dataset. Got: {cmd}"
+        ), f"Mode 'both' must include --project-input for the project dataset. Got: {cmd}"
         assert (
             "--fit-output" in cmd
         ), f"Mode 'both' must include --fit-output to save fit embedding. Got: {cmd}"
@@ -326,8 +326,8 @@ class TestPipelineRunEmbeddingInputMode:
 
         project_input_val = cmd[cmd.index("--project-input") + 1]
         assert (
-            "transform_pca" in project_input_val
-        ), f"Mode 'both': --project-input should be transform PCA, got: {project_input_val}"
+            "project_pca" in project_input_val
+        ), f"Mode 'both': --project-input should be project PCA, got: {project_input_val}"
 
     def test_mode_fit_omits_project_input(self, tmp_path, monkeypatch):
         """Mode 'fit': standalone fit_transform — no --project-input flag."""
@@ -345,8 +345,8 @@ class TestPipelineRunEmbeddingInputMode:
         input_val = cmd[cmd.index("--input") + 1]
         assert "fit_pca" in input_val
 
-    def test_mode_project_uses_transform_pca_as_primary_input(self, tmp_path, monkeypatch):
-        """Mode 'project': the transform/project PCA feeds --input (not fit PCA).
+    def test_mode_project_uses_project_pca_as_primary_input(self, tmp_path, monkeypatch):
+        """Mode 'project': the project PCA feeds --input (not fit PCA).
         If the fit PCA were passed instead, project samples would be embedded using
         fit-cohort geometry.
         """
@@ -360,8 +360,8 @@ class TestPipelineRunEmbeddingInputMode:
 
         input_val = cmd[cmd.index("--input") + 1]
         assert (
-            "transform_pca" in input_val
-        ), f"Mode 'project': --input should be transform PCA, got: {input_val}"
+            "project_pca" in input_val
+        ), f"Mode 'project': --input should be project PCA, got: {input_val}"
         assert "--project-input" not in cmd
 
 
@@ -394,9 +394,9 @@ class TestPipelineRunMissingPCA:
         pipeline = make_pipeline(tmp_path)
         n_pcs = 10
         fit_pca = pipeline.output_dir / "pca" / f"fit_pca_{n_pcs}.csv"
-        transform_pca = pipeline.output_dir / "pca" / f"transform_pca_{n_pcs}.csv"
+        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
         write_pca_csv(fit_pca, n_pcs)
-        write_pca_csv(transform_pca, n_pcs)
+        write_pca_csv(project_pca, n_pcs)
 
         embedding_file = pipeline.output_dir / "embeddings" / "phate_2d.csv"
         fit_embedding_file = pipeline.output_dir / "embeddings" / "phate_fit_2d.csv"
@@ -598,7 +598,7 @@ class TestPipelineRunFullFlow:
         def on_call(cmd):
             if "pca" in cmd:
                 write_pca_csv(pca_dir / f"fit_pca_{n_pcs}.csv", n_pcs)
-                write_pca_csv(pca_dir / f"transform_pca_{n_pcs}.csv", n_pcs)
+                write_pca_csv(pca_dir / f"project_pca_{n_pcs}.csv", n_pcs)
             elif "embed" in cmd:
                 write_pca_csv(emb_dir / f"{method}_2d.csv", 2)
                 write_pca_csv(emb_dir / f"{method}_fit_2d.csv", 2)
@@ -618,7 +618,7 @@ class TestPipelineRunFullFlow:
             tmp_path,
             geographic_coords="geo.csv",
             projection_plot_fit_column="Population",
-            projection_plot_transform_column="Population",
+            projection_plot_project_column="Population",
             fit_labels="fl.csv",
             project_labels="pl.csv",
             fit_colormap="fc.json",
@@ -691,7 +691,7 @@ class TestPipelineRunFullFlow:
     def test_pca_viz_warns_when_pca_file_absent(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)
         pipeline = make_pipeline(tmp_path)
-        # subprocess writes nothing -> transform_pca file never appears
+        # subprocess writes nothing -> project_pca file never appears
         capture_subprocess(monkeypatch)
 
         results = pipeline.run(

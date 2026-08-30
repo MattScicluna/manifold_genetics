@@ -66,7 +66,7 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --embedding "phate" \
     --admixture-group-column "race" \
     --projection-plot-fit-column "Population" \
-    --projection-plot-transform-column "race_ethnicity" \
+    --projection-plot-project-column "race_ethnicity" \
     --threads "$CLUSTER_CPUS" \
     --embed-batch-size 60000 \
     ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
