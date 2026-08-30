@@ -145,8 +145,6 @@ class Pipeline:
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
         admix_batch_size: Optional[int] = None,
-        flashpca_output_dir: Optional[Union[str, Path]] = None,
-        neuraladmixture_output_dir: Optional[Union[str, Path]] = None,
     ) -> Dict:
         """
         Run full pipeline.

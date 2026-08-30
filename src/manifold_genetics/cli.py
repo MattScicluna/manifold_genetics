@@ -692,7 +692,6 @@ def cmd_pipeline(args):
         project_colormap=project_colormap,
         geographic_coords=args.geographic if hasattr(args, "geographic") else None,
         n_pcs=args.n_pcs,
-        flashpca_output_dir=args.flashpca_output_dir,
         k_min=args.k_min,
         k_max=args.k_max,
         admix_threads=args.threads,
@@ -1358,10 +1357,6 @@ def main(argv: Optional[List[str]] = None):
     )
     pipeline_parser.add_argument("--output", required=True, help="Output directory")
     pipeline_parser.add_argument("--geographic", help="Geographic coordinates CSV")
-    pipeline_parser.add_argument(
-        "--flashpca-output-dir",
-        help="Directory for flashpca intermediate outputs (defaults to ./pca_outputs)",
-    )
     pipeline_parser.add_argument(
         "--threads",
         type=int,
