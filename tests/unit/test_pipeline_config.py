@@ -13,6 +13,7 @@ from manifold_genetics.pipeline.config import (
     PipelineConfigs,
     SkipConfig,
     VizConfig,
+    build_configs,
 )
 
 
@@ -76,3 +77,114 @@ class TestSubConfigs:
         )
         assert isinstance(pc.io, IOConfig)
         assert isinstance(pc.skips, SkipConfig)
+
+
+def _required(**overrides):
+    base = dict(
+        fit_plink="data/fit",
+        project_plink="data/project",
+        output_dir="out",
+        labels="labels.csv",
+        colormap="cmap.json",
+    )
+    base.update(overrides)
+    return base
+
+
+class TestBuildConfigs:
+    def test_shared_labels_and_colormap_fan_out_to_both_cohorts(self):
+        pc = build_configs(**_required())
+        assert pc.io.fit_labels == Path("labels.csv")
+        assert pc.io.project_labels == Path("labels.csv")
+        assert pc.io.fit_colormap == Path("cmap.json")
+        assert pc.io.project_colormap == Path("cmap.json")
+
+    def test_separate_labels_and_colormaps_pass_through(self):
+        pc = build_configs(
+            fit_plink="f",
+            project_plink="p",
+            output_dir="out",
+            fit_labels="fl.csv",
+            project_labels="pl.csv",
+            fit_colormap="fc.json",
+            project_colormap="pc.json",
+        )
+        assert pc.io.fit_labels == Path("fl.csv")
+        assert pc.io.project_labels == Path("pl.csv")
+        assert pc.io.fit_colormap == Path("fc.json")
+        assert pc.io.project_colormap == Path("pc.json")
+
+    def test_str_paths_become_path_objects(self):
+        pc = build_configs(**_required())
+        assert isinstance(pc.io.fit_plink, Path)
+        assert isinstance(pc.io.output_dir, Path)
+
+    def test_geographic_coords_optional(self):
+        assert build_configs(**_required()).io.geographic_coords is None
+        pc = build_configs(**_required(geographic_coords="geo.csv"))
+        assert pc.io.geographic_coords == Path("geo.csv")
+
+    def test_scalar_params_land_in_the_right_sub_config(self):
+        pc = build_configs(
+            **_required(
+                n_pcs=30,
+                force_pca=True,
+                k_min=3,
+                k_max=6,
+                admix_threads=8,
+                admix_gpus=1,
+                admix_batch_size=400,
+                embedding="umap",
+                embedding_input="fit",
+                embedding_params={"n_neighbors": 20},
+                admix_group_column="region",
+                projection_plot_fit_column="Population",
+                projection_plot_project_column="ancestry",
+                skip_metrics=True,
+            )
+        )
+        assert (pc.pca.n_pcs, pc.pca.force) == (30, True)
+        assert (pc.admixture.k_min, pc.admixture.k_max) == (3, 6)
+        assert pc.admixture.threads == 8
+        assert pc.admixture.num_gpus == 1
+        assert pc.admixture.batch_size == 400
+        assert pc.embedding.method == "umap"
+        assert pc.embedding.input_mode == "fit"
+        assert pc.embedding.params == {"n_neighbors": 20}
+        assert pc.viz.admix_group_column == "region"
+        assert pc.viz.projection_plot_project_column == "ancestry"
+        assert pc.skips.skip_metrics is True
+
+    def test_missing_labels_raises_with_the_current_message(self):
+        with pytest.raises(ValueError, match="Must provide either 'labels'"):
+            build_configs(fit_plink="f", project_plink="p", output_dir="out", colormap="c.json")
+
+    def test_only_one_of_fit_project_labels_raises(self):
+        with pytest.raises(ValueError, match="only one of 'fit_labels'"):
+            build_configs(
+                fit_plink="f",
+                project_plink="p",
+                output_dir="out",
+                fit_labels="fl.csv",
+                colormap="c.json",
+            )
+
+    def test_missing_colormap_raises(self):
+        with pytest.raises(ValueError, match="Must provide either 'colormap'"):
+            build_configs(fit_plink="f", project_plink="p", output_dir="out", labels="l.csv")
+
+    def test_unknown_embedding_method_raises(self):
+        with pytest.raises(ValueError, match="Unknown embedding method: 'wavelet'"):
+            build_configs(**_required(embedding="wavelet"))
+
+    def test_unknown_embedding_input_mode_raises(self):
+        with pytest.raises(ValueError, match="embedding_input"):
+            build_configs(**_required(embedding_input="sideways"))
+
+    def test_k_min_greater_than_k_max_raises(self):
+        with pytest.raises(ValueError, match="k_min .* k_max"):
+            build_configs(**_required(k_min=8, k_max=3))
+
+    def test_non_positive_n_pcs_raises(self):
+        with pytest.raises(ValueError, match="n_pcs"):
+            build_configs(**_required(n_pcs=0))
