@@ -5,7 +5,10 @@ and the pipeline's own checkpoint logic depend on them. If a path here changes,
 that is a deliberate, breaking decision.
 """
 
+import json
 from pathlib import Path
+
+import pandas as pd
 
 from manifold_genetics.pipeline.config import (
     AdmixtureConfig,
@@ -97,3 +100,37 @@ def test_helpers_do_no_io(tmp_path):
     embedding_output_paths(io, EmbeddingConfig())
     metrics_output_paths(io)
     assert not (tmp_path / "never_created").exists()
+
+
+class TestCrossCohortFixtures:
+    def test_fixture_provides_five_readable_paths(self, cross_cohort_fixtures):
+        assert set(cross_cohort_fixtures) == {
+            "fit_labels",
+            "project_labels",
+            "fit_colormap",
+            "project_colormap",
+            "geographic",
+        }
+        for p in cross_cohort_fixtures.values():
+            assert p.exists(), p
+
+    def test_labels_have_sample_id_and_distinct_group_columns(self, cross_cohort_fixtures):
+        fit = pd.read_csv(cross_cohort_fixtures["fit_labels"])
+        proj = pd.read_csv(cross_cohort_fixtures["project_labels"])
+        assert "sample_id" in fit.columns and "sample_id" in proj.columns
+        # fit uses "Population"; project uses "self_described_ancestry" — mirrors the
+        # HGDP -> UKBB projection example.
+        assert "Population" in fit.columns
+        assert "self_described_ancestry" in proj.columns
+        assert len(fit) == 50 and len(proj) == 50
+
+    def test_colormaps_key_on_their_cohort_label_column(self, cross_cohort_fixtures):
+        fit_cmap = json.loads(cross_cohort_fixtures["fit_colormap"].read_text())
+        proj_cmap = json.loads(cross_cohort_fixtures["project_colormap"].read_text())
+        assert "Population" in fit_cmap
+        assert "self_described_ancestry" in proj_cmap
+
+    def test_geographic_has_coords_for_project_samples(self, cross_cohort_fixtures):
+        geo = pd.read_csv(cross_cohort_fixtures["geographic"])
+        assert {"sample_id", "latitude", "longitude"} <= set(geo.columns)
+        assert len(geo) == 50
