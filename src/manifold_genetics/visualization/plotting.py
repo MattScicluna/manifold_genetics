@@ -380,7 +380,7 @@ def visualize(
         colormap: Dict or path to colormap JSON
         output_dir: Directory to save plots (default: current directory)
         output_prefix: Prefix for output filenames
-        dataset_prefix: Prefix for dataset type (e.g., "fit_" or "transform_")
+        dataset_prefix: Prefix for dataset type (e.g., "fit_" or "project_")
 
     Returns:
         List of paths to saved figures
@@ -1374,7 +1374,7 @@ def plot_projection(
                 framealpha=0.9,
                 loc="center left",
                 bbox_to_anchor=(1.02, 0.5),
-                title=f"▲ fit: {fit_label_column}\n● transform: {project_label_column}",
+                title=f"▲ fit: {fit_label_column}\n● project: {project_label_column}",
             )
 
     # Remove ticks, tick labels, axis labels, and titles

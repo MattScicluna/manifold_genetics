@@ -259,7 +259,7 @@ def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
             "--fit-output",
             str(out_dir / "fit"),
             "--project-output",
-            str(out_dir / "transform"),
+            str(out_dir / "project"),
             "--k-min",
             "2",
             "--k-max",
@@ -267,7 +267,7 @@ def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
         ]
     )
     assert rc == 0
-    assert (out_dir / "transform.3.csv").exists()
+    assert (out_dir / "project.3.csv").exists()
     assert calls[0][0] == "init"
     assert ("fit", "fit", "fit") in calls
 
