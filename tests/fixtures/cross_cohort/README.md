@@ -9,4 +9,4 @@ pipeline contract test (`test_pipeline_output_layout`, PR 5). Sample IDs
 - `fit_colormap.json` / `project_colormap.json` — keyed on the above columns
 - `geographic.csv` — `sample_id`, `latitude`, `longitude`
 
-Regenerate with the throwaway script in the PR-1 plan (Task 4, Step 3).
+Regenerate: `python tests/fixtures/cross_cohort/generate.py`

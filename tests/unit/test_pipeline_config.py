@@ -138,6 +138,7 @@ class TestBuildConfigs:
                 embedding_input="fit",
                 embedding_params={"n_neighbors": 20},
                 admix_group_column="region",
+                admix_within_group_order="tree",
                 projection_plot_fit_column="Population",
                 projection_plot_project_column="ancestry",
                 skip_metrics=True,
@@ -152,6 +153,8 @@ class TestBuildConfigs:
         assert pc.embedding.input_mode == "fit"
         assert pc.embedding.params == {"n_neighbors": 20}
         assert pc.viz.admix_group_column == "region"
+        assert pc.viz.projection_plot_fit_column == "Population"
+        assert pc.viz.admix_within_group_order == "tree"
         assert pc.viz.projection_plot_project_column == "ancestry"
         assert pc.skips.skip_metrics is True
 
@@ -188,3 +191,38 @@ class TestBuildConfigs:
     def test_non_positive_n_pcs_raises(self):
         with pytest.raises(ValueError, match="n_pcs"):
             build_configs(**_required(n_pcs=0))
+
+    def test_unknown_within_group_order_raises(self):
+        with pytest.raises(ValueError, match="admix_within_group_order"):
+            build_configs(**_required(admix_within_group_order="sideways"))
+
+    def test_empty_string_labels_raises(self):
+        with pytest.raises(ValueError, match="Must provide either 'labels'"):
+            build_configs(
+                fit_plink="f",
+                project_plink="p",
+                output_dir="out",
+                labels="",
+                colormap="c.json",
+            )
+
+    def test_empty_string_one_of_fit_project_labels_raises(self):
+        with pytest.raises(ValueError, match="only one of 'fit_labels'"):
+            build_configs(
+                fit_plink="f",
+                project_plink="p",
+                output_dir="out",
+                fit_labels="",
+                project_labels="pl.csv",
+                colormap="c.json",
+            )
+
+    def test_empty_string_colormap_raises(self):
+        with pytest.raises(ValueError, match="Must provide either 'colormap'"):
+            build_configs(
+                fit_plink="f",
+                project_plink="p",
+                output_dir="out",
+                labels="l.csv",
+                colormap="",
+            )

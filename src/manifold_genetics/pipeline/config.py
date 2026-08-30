@@ -13,6 +13,7 @@ from typing import Optional
 
 _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
+_WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 
 
 @dataclass(frozen=True)
@@ -127,10 +128,10 @@ def build_configs(
     Argument-shape validation only; no filesystem access.
     """
     # --- labels: shared OR both separate ---
-    if labels is not None:
+    if labels:
         eff_fit_labels = fit_labels if fit_labels is not None else labels
         eff_project_labels = project_labels if project_labels is not None else labels
-    elif fit_labels is not None and project_labels is not None:
+    elif fit_labels and project_labels:
         eff_fit_labels, eff_project_labels = fit_labels, project_labels
     else:
         raise ValueError(
@@ -140,10 +141,10 @@ def build_configs(
         )
 
     # --- colormap: shared OR both separate ---
-    if colormap is not None:
+    if colormap:
         eff_fit_colormap = fit_colormap if fit_colormap is not None else colormap
         eff_project_colormap = project_colormap if project_colormap is not None else colormap
-    elif fit_colormap is not None and project_colormap is not None:
+    elif fit_colormap and project_colormap:
         eff_fit_colormap, eff_project_colormap = fit_colormap, project_colormap
     else:
         raise ValueError(
@@ -162,6 +163,11 @@ def build_configs(
         raise ValueError(
             f"Unknown embedding_input: {embedding_input!r}. "
             f"Choose from: {', '.join(_EMBEDDING_INPUT_MODES)}"
+        )
+    if admix_within_group_order not in _WITHIN_GROUP_ORDERS:
+        raise ValueError(
+            f"Unknown admix_within_group_order: {admix_within_group_order!r}. "
+            f"Choose from: chron, tree, none"
         )
     if k_min > k_max:
         raise ValueError(f"k_min ({k_min}) must be <= k_max ({k_max})")

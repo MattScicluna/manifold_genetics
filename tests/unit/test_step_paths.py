@@ -61,9 +61,14 @@ def test_admixture_paths_match_documented_layout():
 
 def test_admixture_per_k_csv_derives_from_project_prefix():
     p = admixture_output_paths(_io(), AdmixtureConfig(k_min=2, k_max=3))
-    prefix = p["project_prefix"]
-    k3 = prefix.parent / f"{prefix.name}.3.csv"
-    assert k3 == OUT / "admixture" / "project.3.csv"
+    assert p["project_q_files"][3] == OUT / "admixture" / "project.3.csv"
+    assert p["fit_q_files"][3] == OUT / "admixture" / "fit.3.csv"
+
+
+def test_admixture_per_k_dict_keys_bounded_by_k_min_k_max():
+    p = admixture_output_paths(_io(), AdmixtureConfig(k_min=2, k_max=5))
+    assert set(p["project_q_files"]) == {2, 3, 4, 5}
+    assert set(p["fit_q_files"]) == {2, 3, 4, 5}
 
 
 def test_embedding_paths_both_mode_has_fit_embedding():

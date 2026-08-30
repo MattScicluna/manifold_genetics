@@ -20,13 +20,15 @@ def pca_output_paths(io: IOConfig, pca: PCAConfig) -> Dict[str, Path]:
     }
 
 
-def admixture_output_paths(io: IOConfig, admix: AdmixtureConfig) -> Dict[str, Path]:
+def admixture_output_paths(io: IOConfig, admix: AdmixtureConfig) -> Dict[str, object]:
     d = io.output_dir / "admixture"
     return {
         "dir": d,
         "checkpoints_dir": d / "checkpoints",
         "fit_prefix": d / "fit",
         "project_prefix": d / "project",
+        "fit_q_files": {k: d / f"fit.{k}.csv" for k in range(admix.k_min, admix.k_max + 1)},
+        "project_q_files": {k: d / f"project.{k}.csv" for k in range(admix.k_min, admix.k_max + 1)},
     }
 
 
