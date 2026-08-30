@@ -12,7 +12,7 @@
 #
 # The PCA CSV used for geosketch is from the 10k_WB_5K_Irish pipeline
 # (PCA fit on 10K WB + 5K Irish, projected to all UKBB samples):
-#   examples/ukbb/10k_WB_5K_Irish/outputs/pca/transform_pca_20.csv
+#   examples/ukbb/10k_WB_5K_Irish/outputs/pca/project_pca_20.csv
 #
 # The same PCA coordinates are written to outputs/pca/fit_pca_20.csv (for the
 # selected samples) so that run_pipeline.sh --skip-pca uses the correct space.
@@ -43,7 +43,7 @@ INTERSECTED_UKBB="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
 # PCA CSV for geosketch: 10k_WB_5K_Irish projected PCA coordinates for all UKBB samples
 # This matches Shuang's manylatents approach (same PCA space used for geosketch and PHATE)
-PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../10k_WB_5K_Irish/outputs/pca/transform_pca_20.csv}"
+PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../10k_WB_5K_Irish/outputs/pca/project_pca_20.csv}"
 
 # Labels source from hgdp_1kgp_proj
 UKBB_LABELS_SOURCE="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_labels.csv"

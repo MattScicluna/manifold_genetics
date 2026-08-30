@@ -148,9 +148,9 @@ class PCA:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Use dataset-specific prefix so we don't reuse a cached projection from
-        # a different PLINK dataset (e.g., fit vs. transform subset).
+        # a different PLINK dataset (e.g., fit vs. project subset).
         dataset_name = Path(plink_prefix).name
-        output_prefix = output_dir / f"transform_{dataset_name}"
+        output_prefix = output_dir / f"project_{dataset_name}"
         pc_file = self._run_flashpca_project(plink_prefix, output_prefix)
 
         # Convert to manylatents format

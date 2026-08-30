@@ -31,7 +31,7 @@ class Pipeline:
         >>> # Full pipeline
         >>> pipeline = Pipeline(
         ...     fit_plink_prefix="data/fit_subset",
-        ...     transform_plink_prefix="data/transform_subset",
+        ...     project_plink_prefix="data/project_subset",
         ...     labels="labels.csv",
         ...     colormap="colormap.json",
         ...     output_dir="results/"
@@ -46,7 +46,7 @@ class Pipeline:
     def __init__(
         self,
         fit_plink_prefix: Union[str, Path],
-        transform_plink_prefix: Union[str, Path],
+        project_plink_prefix: Union[str, Path],
         labels: Optional[Union[str, Path]] = None,
         colormap: Optional[Union[str, Path]] = None,
         output_dir: Union[str, Path] = None,
@@ -57,14 +57,14 @@ class Pipeline:
         project_colormap: Optional[Union[str, Path]] = None,
         admixture_backend: Optional[object] = None,
         projection_plot_fit_column: Optional[str] = None,
-        projection_plot_transform_column: Optional[str] = None,
+        projection_plot_project_column: Optional[str] = None,
     ):
         """
         Initialize pipeline.
 
         Args:
             fit_plink_prefix: Path to fit subset PLINK files
-            transform_plink_prefix: Path to transform subset PLINK files
+            project_plink_prefix: Path to project subset PLINK files
             labels: Path to labels CSV (used for both fit and project if not overridden)
             colormap: Path to colormap JSON (used for both fit and project if not overridden)
             output_dir: Directory for outputs
@@ -76,13 +76,13 @@ class Pipeline:
             admixture_backend: Optional AdmixtureBackend instance for testing
                               (if None, uses neural-admixture via CLI)
             projection_plot_fit_column: Column from fit colormap to use for projection plot
-            projection_plot_transform_column: Column from project colormap to use for projection plot
+            projection_plot_project_column: Column from project colormap to use for projection plot
 
         Note:
             Must provide either (labels + colormap) OR (fit_labels + project_labels + fit_colormap + project_colormap)
         """
         self.fit_plink_prefix = Path(fit_plink_prefix)
-        self.transform_plink_prefix = Path(transform_plink_prefix)
+        self.project_plink_prefix = Path(project_plink_prefix)
         self.output_dir = Path(output_dir)
         self.geographic_coords = Path(geographic_coords) if geographic_coords else None
 
@@ -123,7 +123,7 @@ class Pipeline:
 
         # Store projection column settings
         self.projection_plot_fit_column = projection_plot_fit_column
-        self.projection_plot_transform_column = projection_plot_transform_column
+        self.projection_plot_project_column = projection_plot_project_column
 
     def run(
         self,
@@ -184,15 +184,15 @@ class Pipeline:
             pca_dir.mkdir(exist_ok=True)
 
             fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-            transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+            project_pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
             flashpca_dir = pca_dir / "flashpca_outputs"
             flashpca_dir.mkdir(parents=True, exist_ok=True)
 
             # Check if existing PCA outputs have correct number of components
             force_pca = False
-            if transform_pca_file.exists():
+            if project_pca_file.exists():
                 try:
-                    existing_pca = pd.read_csv(transform_pca_file, nrows=1)
+                    existing_pca = pd.read_csv(project_pca_file, nrows=1)
                     # Count dimension columns (dim_1, dim_2, ...)
                     existing_n_pcs = len(
                         [col for col in existing_pca.columns if col.startswith("dim_")]
@@ -208,7 +208,7 @@ class Pipeline:
                     force_pca = True
 
             logger.info(
-                f"Running PCA via CLI (fit: {self.fit_plink_prefix}, project: {self.transform_plink_prefix})"
+                f"Running PCA via CLI (fit: {self.fit_plink_prefix}, project: {self.project_plink_prefix})"
             )
             pca_cmd = [
                 "manifold-genetics",
@@ -216,11 +216,11 @@ class Pipeline:
                 "--fit-plink",
                 str(self.fit_plink_prefix),
                 "--project-plink",
-                str(self.transform_plink_prefix),
+                str(self.project_plink_prefix),
                 "--fit-output",
                 str(fit_pca_file),
                 "--project-output",
-                str(transform_pca_file),
+                str(project_pca_file),
                 "--flashpca-output-dir",
                 str(flashpca_dir),
                 "--n-pcs",
@@ -231,23 +231,23 @@ class Pipeline:
 
             subprocess.run(pca_cmd, check=True)
 
-            pca_coords = pd.read_csv(transform_pca_file)
+            pca_coords = pd.read_csv(project_pca_file)
 
             results["fit_pca_file"] = fit_pca_file
-            results["transform_pca_file"] = transform_pca_file
-            results["pca_file"] = transform_pca_file
+            results["project_pca_file"] = project_pca_file
+            results["pca_file"] = project_pca_file
             results["pca_coords"] = pca_coords
 
         else:
             # PCA skipped — resolve expected paths so embedding can still run
             pca_dir = self.output_dir / "pca"
             fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-            transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+            project_pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
             if fit_pca_file.exists():
                 results["fit_pca_file"] = fit_pca_file
-            if transform_pca_file.exists():
-                results["transform_pca_file"] = transform_pca_file
-                results["pca_file"] = transform_pca_file
+            if project_pca_file.exists():
+                results["project_pca_file"] = project_pca_file
+                results["pca_file"] = project_pca_file
 
         # Step 1.5: PCA Visualization (independent of PCA computation)
         if not skip_pca_visualization:
@@ -256,7 +256,7 @@ class Pipeline:
             logger.info("=" * 70)
 
             pca_dir = self.output_dir / "pca"
-            pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+            pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
 
             if pca_file.exists():
                 pca_figures_dir = self.output_dir / "figures" / "pca"
@@ -309,13 +309,13 @@ class Pipeline:
                     str(self.fit_plink_prefix), str(admix_checkpoints_dir), model_name="fit"
                 )
 
-                # Transform on both fit and project datasets
+                # Apply to both fit and project datasets
                 fit_q_files_from_backend = self.admixture_backend.fit_transform(
                     str(self.fit_plink_prefix), str(admix_dir / "fit")
                 )
 
-                transform_q_files_from_backend = self.admixture_backend.transform(
-                    str(self.transform_plink_prefix), str(admix_dir / "transform")
+                project_q_files_from_backend = self.admixture_backend.transform(
+                    str(self.project_plink_prefix), str(admix_dir / "project")
                 )
 
                 logger.info(f"✓ Admixture complete using {type(self.admixture_backend).__name__}")
@@ -327,13 +327,13 @@ class Pipeline:
                     "--fit-plink",
                     str(self.fit_plink_prefix),
                     "--project-plink",
-                    str(self.transform_plink_prefix),
+                    str(self.project_plink_prefix),
                     "--neuraladmixture-output-dir",
                     str(admix_checkpoints_dir),
                     "--fit-output",
                     str(admix_dir / "fit"),
                     "--project-output",
-                    str(admix_dir / "transform"),
+                    str(admix_dir / "project"),
                     "--k-min",
                     str(k_min),
                     "--k-max",
@@ -349,15 +349,13 @@ class Pipeline:
                 subprocess.run(admix_cmd, check=True)
 
             fit_q_files = {k: admix_dir / f"fit.{k}.csv" for k in range(k_min, k_max + 1)}
-            transform_q_files = {
-                k: admix_dir / f"transform.{k}.csv" for k in range(k_min, k_max + 1)
-            }
+            project_q_files = {k: admix_dir / f"project.{k}.csv" for k in range(k_min, k_max + 1)}
 
             results["admixture_dir"] = admix_dir
             results["admixture_checkpoints_dir"] = admix_checkpoints_dir
             results["fit_q_files"] = fit_q_files
-            results["transform_q_files"] = transform_q_files
-            results["q_files"] = transform_q_files
+            results["project_q_files"] = project_q_files
+            results["q_files"] = project_q_files
 
             # Admixture bar plot (placed in figures/admixture/)
             if not skip_admixture_visualization:
@@ -370,10 +368,10 @@ class Pipeline:
                 if not group_col:
                     group_col = next(iter(cmap_dict.keys()))
 
-                # Bar plot (using transform set by default)
-                bar_plot_path = admix_figures_dir / "transform_bars.png"
+                # Bar plot (using project set by default)
+                bar_plot_path = admix_figures_dir / "project_bars.png"
                 plot_admixture_bar_grid(
-                    q_prefix=admix_dir / "transform",
+                    q_prefix=admix_dir / "project",
                     labels=self.project_labels,
                     group_column=group_col,
                     k_values=range(k_min, k_max + 1),
@@ -391,10 +389,10 @@ class Pipeline:
             logger.info(f"STEP 3: EMBEDDING ({embedding.upper()})")
             logger.info("=" * 70)
 
-            if "fit_pca_file" not in results and "transform_pca_file" not in results:
+            if "fit_pca_file" not in results and "project_pca_file" not in results:
                 raise RuntimeError(
                     "No PCA files found. Run without --skip-pca, or ensure "
-                    f"{self.output_dir / 'pca'} contains fit_pca_{{n}}.csv / transform_pca_{{n}}.csv."
+                    f"{self.output_dir / 'pca'} contains fit_pca_{{n}}.csv / project_pca_{{n}}.csv."
                 )
 
             embedding_dir = self.output_dir / "embeddings"
@@ -403,20 +401,20 @@ class Pipeline:
 
             # Determine which PCA coordinates to embed based on embedding_input mode
             if embedding_input == "fit":
-                # Mode 1: Fit+transform embedding on fit PCA coordinates only
+                # Mode 1: fit_transform embedding on fit PCA coordinates only
                 logger.info(f"Embedding fit PCA coordinates only (mode: fit-only)")
                 fit_input = results["fit_pca_file"]
                 project_input = None
             elif embedding_input == "project":
-                # Mode 2: Fit+transform embedding on project PCA coordinates only
+                # Mode 2: fit_transform embedding on project PCA coordinates only
                 logger.info(f"Embedding project PCA coordinates only (mode: project-only)")
-                fit_input = results["transform_pca_file"]
+                fit_input = results["project_pca_file"]
                 project_input = None
             else:  # embedding_input == "both"
-                # Mode 3: Fit embedding on fit PCA, transform on project PCA
-                logger.info(f"Embedding: fit on fit PCA, transform on project PCA (mode: both)")
+                # Mode 3: fit embedding on fit PCA, apply it to project PCA
+                logger.info("Embedding: fit on fit PCA, apply to project PCA (mode: both)")
                 fit_input = results["fit_pca_file"]
-                project_input = results["transform_pca_file"]
+                project_input = results["project_pca_file"]
 
             embed_cmd = [
                 "manifold-genetics",
@@ -433,7 +431,7 @@ class Pipeline:
                 # Modes 1 & 2: fit_transform only (output goes to main embedding file)
                 embed_cmd.extend(["--project-output", str(embedding_file)])
             else:
-                # Mode 3: fit on one dataset, transform on another
+                # Mode 3: fit on one dataset, apply to another
                 fit_embedding_file = embedding_dir / f"{embedding}_fit_2d.csv"
                 embed_cmd.extend(
                     [
@@ -508,30 +506,30 @@ class Pipeline:
                 results["fit_embedding_figures"] = fit_figure_paths
                 logger.info(f"Created {len(fit_figure_paths)} fit embedding figures")
 
-            # Step 4.2: Generate TRANSFORM visualizations (for all columns in project_colormap)
-            logger.info("Creating transform embedding visualizations...")
-            transform_figure_paths = visualize(
+            # Step 4.2: Generate PROJECT visualizations (for all columns in project_colormap)
+            logger.info("Creating project embedding visualizations...")
+            project_figure_paths = visualize(
                 embedding=embedding_file,
                 labels=self.project_labels,
                 colormap=self.project_colormap,
                 output_dir=embedding_figures_dir,
                 output_prefix=embedding,
-                dataset_prefix="transform_",
+                dataset_prefix="project_",
             )
-            results["embedding_figures"] = transform_figure_paths
-            logger.info(f"Created {len(transform_figure_paths)} transform embedding figures")
+            results["embedding_figures"] = project_figure_paths
+            logger.info(f"Created {len(project_figure_paths)} project embedding figures")
 
             # Step 4.3: Projection Plot (fit + project together) if cross-projection mode
             if (
                 "fit_embedding_file" in results
                 and self.projection_plot_fit_column
-                and self.projection_plot_transform_column
+                and self.projection_plot_project_column
             ):
                 logger.info("Creating projection plot (fit + project together)...")
 
                 projection_plot_path = (
                     embedding_figures_dir
-                    / f"{embedding}_projection_fit_{self.projection_plot_fit_column}_transform_{self.projection_plot_transform_column}.png"
+                    / f"{embedding}_projection_fit_{self.projection_plot_fit_column}_project_{self.projection_plot_project_column}.png"
                 )
 
                 try:
@@ -544,7 +542,7 @@ class Pipeline:
                         project_colormap=self.project_colormap,
                         output_path=projection_plot_path,
                         fit_label_column=self.projection_plot_fit_column,
-                        project_label_column=self.projection_plot_transform_column,
+                        project_label_column=self.projection_plot_project_column,
                     )
 
                     results["projection_plot"] = projection_plot_path
@@ -563,10 +561,10 @@ class Pipeline:
                 admix_figures_dir.mkdir(parents=True, exist_ok=True)
 
                 # Admixture-colored embedding grid plot
-                emb_plot_path = admix_figures_dir / "transform_admixture_colored_embedding.png"
+                emb_plot_path = admix_figures_dir / "project_admixture_colored_embedding.png"
                 plot_admixture_embedding_grid(
                     embedding=results["embedding_file"],
-                    q_prefix=results["admixture_dir"] / "transform",
+                    q_prefix=results["admixture_dir"] / "project",
                     k_values=range(k_min, k_max + 1),
                     output_path=emb_plot_path,
                 )
@@ -612,7 +610,7 @@ class Pipeline:
             if not skip_admixture and "admixture_dir" in results:
                 logger.info("Computing admixture preservation via CLI...")
                 admix_out = metrics_dir / "admixture.json"
-                admix_prefix = results["admixture_dir"] / "transform"
+                admix_prefix = results["admixture_dir"] / "project"
                 admix_cmd = [
                     "manifold-genetics",
                     "metrics-admixture",

@@ -66,7 +66,7 @@ def pipeline_outputs(tmp_path_factory):
         "--fit-output",
         out / "fit_pca.csv",
         "--project-output",
-        out / "transform_pca.csv",
+        out / "project_pca.csv",
         "--flashpca-output-dir",
         out / "flashpca",
         "--n-pcs",
@@ -77,7 +77,7 @@ def pipeline_outputs(tmp_path_factory):
         "--method",
         "phate",
         "--fit-input",
-        out / "transform_pca.csv",
+        out / "project_pca.csv",
         "--project-output",
         out / "phate_2d.csv",
         "--knn",
@@ -114,8 +114,8 @@ def test_pca_fit_output_shape(pipeline_outputs):
     assert set(df["sample_id"].astype(str)) == _fam_ids(DATA / "fit_subset")
 
 
-def test_pca_transform_output_shape(pipeline_outputs):
-    df = pd.read_csv(pipeline_outputs / "transform_pca.csv")
+def test_pca_project_output_shape(pipeline_outputs):
+    df = pd.read_csv(pipeline_outputs / "project_pca.csv")
     assert len(df) == PROJECT_N
     assert set(df["sample_id"].astype(str)) == _fam_ids(DATA / "project_subset")
 
@@ -126,7 +126,7 @@ def test_pca_transform_output_shape(pipeline_outputs):
 
 
 def test_pca_recovers_continental_structure(pipeline_outputs):
-    pca = pd.read_csv(pipeline_outputs / "transform_pca.csv")
+    pca = pd.read_csv(pipeline_outputs / "project_pca.csv")
     labels = pd.read_csv(DATA / "hgdp_project_labels.csv")
     m = pca.merge(labels, on="sample_id")
     assert len(m) == PROJECT_N
