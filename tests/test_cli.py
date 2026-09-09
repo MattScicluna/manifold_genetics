@@ -32,7 +32,7 @@ def test_cli_pca_fit_project(monkeypatch, tmp_path):
         def fit_transform(self, *args, **kwargs):
             raise AssertionError("fit_transform should not be called in fit+project mode")
 
-    monkeypatch.setattr(mg_cli, "PCA", FakePCA)
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
 
     fit_out = tmp_path / "fit.csv"
     proj_out = tmp_path / "proj.csv"

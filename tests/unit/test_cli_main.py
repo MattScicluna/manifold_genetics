@@ -186,10 +186,11 @@ def test_cmd_setup_skip_plink1(monkeypatch):
 
 
 def test_cmd_pca_fit_project(monkeypatch, tmp_path):
+    """--fit-plink + --project-plink fits one dataset and projects the other."""
     calls = []
 
     class FakePCA:
-        def __init__(self, n_components, force):
+        def __init__(self, n_components, force=False):
             calls.append(("init", n_components, force))
 
         def fit(self, prefix, output_dir=None):
@@ -202,7 +203,7 @@ def test_cmd_pca_fit_project(monkeypatch, tmp_path):
                 df.to_csv(output_path, index=False)
             return df
 
-    monkeypatch.setattr(mg_cli, "PCA", FakePCA)
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
     out = tmp_path / "proj.csv"
     rc = mg_cli.main(
         [
@@ -220,6 +221,67 @@ def test_cmd_pca_fit_project(monkeypatch, tmp_path):
     assert rc == 0
     assert out.exists()
     assert ("fit", "fit") in calls
+    assert ("project", "proj") in calls
+
+
+def test_cmd_pca_single_input_uses_fit_transform(monkeypatch, tmp_path):
+    """`pca --input X --output Y` fits and projects the same dataset."""
+    calls = []
+
+    class FakePCA:
+        def __init__(self, n_components, force=False):
+            calls.append(("init", n_components, force))
+
+        def fit_transform(self, prefix, output_path=None):
+            calls.append(("fit_transform", prefix))
+            df = pd.DataFrame({"sample_id": ["s1"], "dim_1": [0.1]})
+            if output_path:
+                df.to_csv(output_path, index=False)
+            return df
+
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
+    out = tmp_path / "all.csv"
+    rc = mg_cli.main(["pca", "--input", "all", "--output", str(out), "--n-pcs", "1"])
+    assert rc == 0
+    assert out.exists()
+    assert ("fit_transform", "all") in calls
+
+
+def test_cmd_pca_flashpca_output_dir_overrides_model_dir(monkeypatch, tmp_path):
+    """--flashpca-output-dir wins over --model-dir (both name the same thing)."""
+    seen = {}
+
+    class FakePCA:
+        def __init__(self, n_components, force=False):
+            pass
+
+        def fit(self, prefix, output_dir=None):
+            seen["output_dir"] = output_dir
+
+        def project(self, prefix, output_path=None):
+            df = pd.DataFrame({"sample_id": ["s1"], "dim_1": [0.1]})
+            if output_path:
+                df.to_csv(output_path, index=False)
+            return df
+
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
+    rc = mg_cli.main(
+        [
+            "pca",
+            "--fit-plink",
+            "fit",
+            "--project-plink",
+            "proj",
+            "--project-output",
+            str(tmp_path / "p.csv"),
+            "--model-dir",
+            str(tmp_path / "ignored"),
+            "--flashpca-output-dir",
+            str(tmp_path / "flash"),
+        ]
+    )
+    assert rc == 0
+    assert seen["output_dir"] == tmp_path / "flash"
 
 
 def test_cmd_admixture_fit_project(monkeypatch, tmp_path):

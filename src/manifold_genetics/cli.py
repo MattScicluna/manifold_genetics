@@ -14,8 +14,8 @@ from typing import List, Optional
 from .admixture import NeuralAdmixture
 from .embeddings import PHATE, TSNE, UMAP, DiffusionMap
 from .metrics import compute_admixture_preservation, compute_geographic_preservation
-from .pca import PCA
 from .pipeline import run_pipeline
+from .pipeline.steps import run_pca
 from .utils.io import read_colormap
 from .utils.tools import ToolResolver
 from .utils.validation import (
@@ -78,17 +78,12 @@ def cmd_pca(args):
     """Run PCA command."""
     setup_logging(args.verbose)
 
-    # Resolve fit/project prefixes
+    # Resolve fit prefix and outputs (CLI-shape concerns stay here)
     fit_prefix = args.fit_plink or args.input
-    project_prefix = args.project_plink or fit_prefix
-
     if fit_prefix is None:
         raise ValueError("Please provide --input or --fit-plink for PCA fitting.")
 
-    # Determine outputs
-    fit_output = args.fit_output
     project_output = args.project_output or args.output
-
     if project_output is None:
         raise ValueError("Please provide --output or --project-output for PCA projection.")
 
@@ -96,21 +91,22 @@ def cmd_pca(args):
     if args.flashpca_output_dir:
         model_dir = Path(args.flashpca_output_dir)
 
-    pca = PCA(n_components=args.n_pcs, force=args.force)
+    pca_coords = run_pca(
+        fit_prefix,
+        args.project_plink,
+        fit_output=args.fit_output,
+        project_output=project_output,
+        flashpca_dir=model_dir,
+        n_pcs=args.n_pcs,
+        force=args.force,
+    )
 
     if args.project_plink:
-        # Fit on one dataset, project another
-        pca.fit(fit_prefix, output_dir=model_dir)
-        if fit_output:
-            pca.project(fit_prefix, output_path=fit_output)
-        pca_coords = pca.project(project_prefix, output_path=project_output)
-        print(f"PCA fit on {fit_prefix} and projected {project_prefix}")
-        if fit_output:
-            print(f"Fit PCA coords: {fit_output}")
+        print(f"PCA fit on {fit_prefix} and projected {args.project_plink}")
+        if args.fit_output:
+            print(f"Fit PCA coords: {args.fit_output}")
         print(f"Projected PCA coords: {project_output}")
     else:
-        # Fit and project on the same dataset
-        pca_coords = pca.fit_transform(fit_prefix, output_path=project_output)
         print(f"PCA complete: {project_output}")
 
     # Report shape excluding sample_id column
