@@ -97,7 +97,7 @@ def test_flashpca_fit_tolerates_missing_outputs(monkeypatch, tmp_path):
 
 def test_flashpca_project_builds_command(monkeypatch, tmp_path):
     calls = []
-    prefix = tmp_path / "transform_ds"
+    prefix = tmp_path / "project_ds"
     monkeypatch.setattr(subprocess, "run", make_runner(calls, creates=[f"{prefix}.PC"]))
     pca = _pca()
     pca._loadings_path = tmp_path / "fit.loadings"
@@ -112,8 +112,8 @@ def test_flashpca_project_builds_command(monkeypatch, tmp_path):
 
 def test_flashpca_project_skips_when_checkpoint_present(monkeypatch, tmp_path):
     calls = []
-    prefix = tmp_path / "transform_ds"
-    (tmp_path / "transform_ds.PC").write_text("x")
+    prefix = tmp_path / "project_ds"
+    (tmp_path / "project_ds.PC").write_text("x")
     monkeypatch.setattr(subprocess, "run", make_runner(calls))
 
     pca = PCA(n_components=3, flashpca_path="/fake/flashpca", force=False)
@@ -129,7 +129,7 @@ def test_flashpca_project_raises_if_output_missing(monkeypatch, tmp_path):
     pca._loadings_path = tmp_path / "l"
     pca._meansd_path = tmp_path / "m"
     with pytest.raises(FileNotFoundError):
-        pca._run_flashpca_project(Path("data/target"), tmp_path / "transform_ds")
+        pca._run_flashpca_project(Path("data/target"), tmp_path / "project_ds")
 
 
 def test_flashpca_project_wraps_subprocess_error(monkeypatch, tmp_path):
@@ -138,7 +138,7 @@ def test_flashpca_project_wraps_subprocess_error(monkeypatch, tmp_path):
     pca._loadings_path = tmp_path / "l"
     pca._meansd_path = tmp_path / "m"
     with pytest.raises(RuntimeError, match="FlashPCA project failed"):
-        pca._run_flashpca_project(Path("data/target"), tmp_path / "transform_ds")
+        pca._run_flashpca_project(Path("data/target"), tmp_path / "project_ds")
 
 
 # ---------------------------------------------------------------------------

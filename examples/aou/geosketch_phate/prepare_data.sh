@@ -12,7 +12,7 @@
 #
 # The PCA CSV used for geosketch is from the 10k_WBH pipeline
 # (PCA fit on 10K WBH, projected to all AoU samples):
-#   examples/aou/10k_WBH/outputs/pca/transform_pca_20.csv
+#   examples/aou/10k_WBH/outputs/pca/project_pca_20.csv
 #
 # The same PCA coordinates are written to outputs/pca/fit_pca_20.csv (for the
 # selected samples) so that run_pipeline.sh --skip-pca uses the correct space.
@@ -43,7 +43,7 @@ INTERSECTED_AOU="${SCRIPT_DIR}/../hgdp_1kgp_proj/data/project_subset"
 
 # PCA CSV for geosketch: 10k_WBH projected PCA coordinates for all AoU samples
 # This matches the approach used for UKBB (same PCA space for geosketch and PHATE)
-PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../10k_WBH/outputs/pca/transform_pca_20.csv}"
+PCA_CSV="${PCA_CSV:-${SCRIPT_DIR}/../10k_WBH/outputs/pca/project_pca_20.csv}"
 
 # Geosketch parameters
 N_SKETCH="${N_SKETCH:-60000}"

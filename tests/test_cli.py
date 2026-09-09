@@ -95,7 +95,7 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
         output=str(out_dir),
         model_name="fit",
         fit_output=str(out_dir / "fit"),
-        project_output=str(out_dir / "transform"),
+        project_output=str(out_dir / "project"),
         k_min=2,
         k_max=3,
         force=False,
@@ -109,14 +109,14 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
     mg_cli.cmd_admixture(args)
 
     expected_fit = out_dir / "fit.2.csv"
-    expected_proj = out_dir / "transform.3.csv"
+    expected_proj = out_dir / "project.3.csv"
     assert expected_fit.exists()
     assert expected_proj.exists()
     # Verify call order: init -> fit -> transform fit -> transform project
     assert calls[0][0] == "init"
     assert ("fit", "fit_prefix", out_dir, "fit") in calls
     assert ("transform", "fit_prefix", out_dir / "fit") in calls
-    assert ("transform", "project_prefix", out_dir / "transform") in calls
+    assert ("transform", "project_prefix", out_dir / "project") in calls
 
 
 def test_cli_embed_fit_project(monkeypatch, tmp_path):

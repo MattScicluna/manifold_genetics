@@ -45,7 +45,7 @@ def run_pipeline(
     admix_group_column: Optional[str] = None,
     admix_within_group_order: Optional[str] = "chron",
     projection_plot_fit_column: Optional[str] = None,
-    projection_plot_transform_column: Optional[str] = None,
+    projection_plot_project_column: Optional[str] = None,
     # Skip flags
     skip_pca: bool = False,
     skip_admixture: bool = False,
@@ -86,7 +86,7 @@ def run_pipeline(
         admix_group_column: Column for grouping in admixture barplots (None = use first colormap key)
         admix_within_group_order: Method for ordering samples within groups ('chron', 'tree', or None)
         projection_plot_fit_column: Column from fit colormap to use for projection plot
-        projection_plot_transform_column: Column from project colormap to use for projection plot
+        projection_plot_project_column: Column from project colormap to use for projection plot
         skip_pca: Skip PCA step
         skip_admixture: Skip admixture step
         skip_embedding: Skip embedding step
@@ -98,11 +98,11 @@ def run_pipeline(
     Returns:
         Dictionary with paths to outputs and computed metrics. Keys include:
         - fit_pca_file: Path to fit PCA coordinates CSV
-        - transform_pca_file: Path to project PCA coordinates CSV
+        - project_pca_file: Path to project PCA coordinates CSV
         - pca_coords: pandas DataFrame with PCA coordinates
         - admixture_dir: Path to admixture output directory
         - fit_q_files: Dict mapping K -> fit admixture CSV path
-        - transform_q_files: Dict mapping K -> project admixture CSV path
+        - project_q_files: Dict mapping K -> project admixture CSV path
         - embedding_file: Path to embedding coordinates CSV
         - embedding_coords: pandas DataFrame with embedding coordinates
         - pca_figures: List of PCA plot paths
@@ -172,7 +172,7 @@ def run_pipeline(
     # Create Pipeline instance
     pipeline = Pipeline(
         fit_plink_prefix=fit_plink,
-        transform_plink_prefix=project_plink,
+        project_plink_prefix=project_plink,
         labels=labels,
         colormap=colormap,
         output_dir=output_dir,
@@ -183,7 +183,7 @@ def run_pipeline(
         project_colormap=project_colormap,
         admixture_backend=admixture_backend,
         projection_plot_fit_column=projection_plot_fit_column,
-        projection_plot_transform_column=projection_plot_transform_column,
+        projection_plot_project_column=projection_plot_project_column,
     )
 
     # Run pipeline with all parameters

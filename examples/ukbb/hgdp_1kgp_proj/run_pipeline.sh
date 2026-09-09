@@ -66,7 +66,7 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --embedding "phate" \
     --admixture-group-column "self_described_ancestry" \
     --projection-plot-fit-column "Population" \
-    --projection-plot-transform-column "self_described_ancestry" \
+    --projection-plot-project-column "self_described_ancestry" \
     --threads "$CLUSTER_CPUS" \
     --neuraladmixture-batch-size 400 \
     --embed-batch-size 60000 \

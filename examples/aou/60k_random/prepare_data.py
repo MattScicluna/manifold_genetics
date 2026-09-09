@@ -7,7 +7,7 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR / "../../.."
 
-SRC_PCA = PROJECT_ROOT / "examples/aou/10k_WBH/outputs/pca/transform_pca_20.csv"
+SRC_PCA = PROJECT_ROOT / "examples/aou/10k_WBH/outputs/pca/project_pca_20.csv"
 SRC_LABELS = PROJECT_ROOT / "examples/aou/10k_WBH/data/project_labels.csv"
 OUT_DIR = SCRIPT_DIR / "data"
 

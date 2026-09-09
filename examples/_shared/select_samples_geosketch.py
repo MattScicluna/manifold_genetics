@@ -12,7 +12,7 @@ Reference:
 
 Examples:
     python select_samples_geosketch.py \
-        --pca hgdp_1kgp_proj/outputs/pca/transform_pca_20.csv \
+        --pca hgdp_1kgp_proj/outputs/pca/project_pca_20.csv \
         --fam hgdp_1kgp_proj/data/project_subset.fam \
         --output geosketch_phate/data/fit_samples.txt \
         --n-samples 50000

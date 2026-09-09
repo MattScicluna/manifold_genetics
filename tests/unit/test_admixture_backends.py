@@ -156,7 +156,7 @@ class TestPrecomputedAdmixtureBackend:
             assert "sample_id" in df.columns
             assert len(df.columns) == k + 1
 
-    def test_fit_and_transform_separately(self, fit_plink_files, transform_plink_files, temp_dir):
+    def test_fit_and_transform_separately(self, fit_plink_files, project_plink_files, temp_dir):
         """Test that fit() and transform() work separately."""
         tests_dir = Path(__file__).parent.parent
         fixtures_dir = tests_dir / "fixtures" / "admixture"
@@ -168,17 +168,17 @@ class TestPrecomputedAdmixtureBackend:
         output_dir.mkdir()
         backend.fit(fit_plink_files, str(output_dir), "model")
 
-        # Transform on "transform" subset
-        output_prefix = temp_dir / "transform_out"
-        q_files = backend.transform(transform_plink_files, str(output_prefix))
+        # Apply the fitted model to the "project" subset
+        output_prefix = temp_dir / "project_out"
+        q_files = backend.transform(project_plink_files, str(output_prefix))
 
-        # Check transform output
+        # Check project output
         assert len(q_files) == 2
         for k, filepath in q_files.items():
             assert Path(filepath).exists()
             df = pd.read_csv(filepath)
 
-            # Verify it's the transform subset (50 samples)
+            # Verify it's the project subset (50 samples)
             assert len(df) == 50
 
     def test_missing_fixtures_raises_error(self, dummy_plink_files, temp_dir):

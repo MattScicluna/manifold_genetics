@@ -155,7 +155,7 @@ def _create_plink_files(temp_dir: Path, prefix_name: str):
 
     Args:
         temp_dir: Directory to create files in
-        prefix_name: Name for the PLINK file prefix (e.g., 'dummy', 'fit', 'transform')
+        prefix_name: Name for the PLINK file prefix (e.g., 'dummy', 'fit', 'project')
 
     Returns:
         String path to PLINK prefix
@@ -228,6 +228,6 @@ def fit_plink_files(temp_dir):
 
 
 @pytest.fixture
-def transform_plink_files(temp_dir):
-    """Create PLINK files named 'transform' for precomputed admixture backend tests."""
-    return _create_plink_files(temp_dir, "transform")
+def project_plink_files(temp_dir):
+    """Create PLINK files named 'project' for precomputed admixture backend tests."""
+    return _create_plink_files(temp_dir, "project")

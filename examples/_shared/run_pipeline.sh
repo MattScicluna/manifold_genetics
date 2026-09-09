@@ -119,7 +119,7 @@ RANDOM_LANDMARKING=""
 ADMIXTURE_GROUP_COLUMN=""
 ADMIXTURE_WITHIN_GROUP_ORDER="chron"
 PROJECTION_PLOT_FIT_COLUMN=""
-PROJECTION_PLOT_TRANSFORM_COLUMN=""
+PROJECTION_PLOT_PROJECT_COLUMN=""
 THREADS=""
 NUM_GPUS=""
 NEURALADMIXTURE_BATCH_SIZE=""
@@ -227,8 +227,8 @@ while [[ $# -gt 0 ]]; do
             PROJECTION_PLOT_FIT_COLUMN="$2"
             shift 2
             ;;
-        --projection-plot-transform-column)
-            PROJECTION_PLOT_TRANSFORM_COLUMN="$2"
+        --projection-plot-project-column)
+            PROJECTION_PLOT_PROJECT_COLUMN="$2"
             shift 2
             ;;
         --threads)
@@ -414,7 +414,7 @@ CMD="$CMD --knn $KNN --t $T"
 [[ -n "$ADMIXTURE_GROUP_COLUMN" ]] && CMD="$CMD --admixture-group-column $ADMIXTURE_GROUP_COLUMN"
 CMD="$CMD --admixture-within-group-order $ADMIXTURE_WITHIN_GROUP_ORDER"
 [[ -n "$PROJECTION_PLOT_FIT_COLUMN" ]] && CMD="$CMD --projection-plot-fit-column $PROJECTION_PLOT_FIT_COLUMN"
-[[ -n "$PROJECTION_PLOT_TRANSFORM_COLUMN" ]] && CMD="$CMD --projection-plot-transform-column $PROJECTION_PLOT_TRANSFORM_COLUMN"
+[[ -n "$PROJECTION_PLOT_PROJECT_COLUMN" ]] && CMD="$CMD --projection-plot-project-column $PROJECTION_PLOT_PROJECT_COLUMN"
 [[ -n "$THREADS" ]] && CMD="$CMD --threads $THREADS"
 [[ -n "$NUM_GPUS" ]] && CMD="$CMD --num-gpus $NUM_GPUS"
 [[ -n "$NEURALADMIXTURE_BATCH_SIZE" ]] && CMD="$CMD --neuraladmixture-batch-size $NEURALADMIXTURE_BATCH_SIZE"

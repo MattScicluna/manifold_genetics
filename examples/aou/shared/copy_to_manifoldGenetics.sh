@@ -80,7 +80,7 @@ copy_experiment() {
 
     # Copy PCA outputs
     echo "Copying PCA outputs..."
-    for file in fit_pca_20.csv transform_pca_20.csv; do
+    for file in fit_pca_20.csv project_pca_20.csv; do
         if [ -f "$src_dir/outputs/pca/$file" ]; then
             cp -v "$src_dir/outputs/pca/$file" "$dest_dir/outputs/pca/"
         fi
@@ -89,7 +89,7 @@ copy_experiment() {
     # Copy admixture outputs
     echo "Copying admixture outputs..."
     for k in 2 3 4 5 6 7 8 9 10; do
-        for prefix in fit transform; do
+        for prefix in fit project; do
             if [ -f "$src_dir/outputs/admixture/${prefix}.${k}.csv" ]; then
                 cp -v "$src_dir/outputs/admixture/${prefix}.${k}.csv" "$dest_dir/outputs/admixture/"
             fi

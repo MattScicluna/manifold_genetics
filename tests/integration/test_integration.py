@@ -21,8 +21,8 @@ def test_fixtures_exist():
     admix_dir = fixtures_dir / "admixture"
     assert (admix_dir / "fit.2.csv").exists(), "Missing fit.2.csv fixture"
     assert (admix_dir / "fit.3.csv").exists(), "Missing fit.3.csv fixture"
-    assert (admix_dir / "transform.2.csv").exists(), "Missing transform.2.csv fixture"
-    assert (admix_dir / "transform.3.csv").exists(), "Missing transform.3.csv fixture"
+    assert (admix_dir / "project.2.csv").exists(), "Missing project.2.csv fixture"
+    assert (admix_dir / "project.3.csv").exists(), "Missing project.3.csv fixture"
 
     # Verify fixture format
     fit_2 = pd.read_csv(admix_dir / "fit.2.csv")
@@ -43,7 +43,7 @@ def test_precomputed_admixture_format():
     fixtures_dir = Path(__file__).parent.parent / "fixtures" / "admixture"
 
     for k in [2, 3]:
-        for subset in ["fit", "transform"]:
+        for subset in ["fit", "project"]:
             filepath = fixtures_dir / f"{subset}.{k}.csv"
             df = pd.read_csv(filepath)
 
@@ -73,23 +73,23 @@ def test_sample_ids_consistent():
     # Load all fixture files
     fit_2 = pd.read_csv(fixtures_dir / "fit.2.csv")
     fit_3 = pd.read_csv(fixtures_dir / "fit.3.csv")
-    transform_2 = pd.read_csv(fixtures_dir / "transform.2.csv")
-    transform_3 = pd.read_csv(fixtures_dir / "transform.3.csv")
+    project_2 = pd.read_csv(fixtures_dir / "project.2.csv")
+    project_3 = pd.read_csv(fixtures_dir / "project.3.csv")
 
     # Check fit subset has consistent sample IDs
     assert list(fit_2["sample_id"]) == list(
         fit_3["sample_id"]
     ), "Fit subset should have same sample IDs across K values"
 
-    # Check transform subset has consistent sample IDs
-    assert list(transform_2["sample_id"]) == list(
-        transform_3["sample_id"]
-    ), "Transform subset should have same sample IDs across K values"
+    # Check project subset has consistent sample IDs
+    assert list(project_2["sample_id"]) == list(
+        project_3["sample_id"]
+    ), "Project subset should have same sample IDs across K values"
 
     # Check expected sample ID format
     expected_ids = [f"SAMPLE_{i:03d}" for i in range(50)]
     assert list(fit_2["sample_id"]) == expected_ids
-    assert list(transform_2["sample_id"]) == expected_ids
+    assert list(project_2["sample_id"]) == expected_ids
 
 
 # TODO: Add integration test with actual pipeline run once admixture backend interface is implemented

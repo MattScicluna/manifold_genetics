@@ -17,7 +17,7 @@ from manifold_genetics.pipeline import run_pipeline
 @pytest.mark.integration
 def test_generic_pipeline_with_precomputed_admixture(
     fit_plink_files,
-    transform_plink_files,
+    project_plink_files,
     labels_csv,
     colormap_json,
     temp_dir,
@@ -46,7 +46,7 @@ def test_generic_pipeline_with_precomputed_admixture(
     try:
         results = run_pipeline(
             fit_plink=fit_plink_files,
-            project_plink=transform_plink_files,
+            project_plink=project_plink_files,
             output_dir=str(output_dir),
             labels=str(labels_csv),
             colormap=str(colormap_json),
@@ -79,7 +79,7 @@ def test_generic_pipeline_with_precomputed_admixture(
             pca_df = pd.read_csv(pca_file)
 
         assert "sample_id" in pca_df.columns
-        assert len(pca_df) == 50  # Transform subset has 50 samples
+        assert len(pca_df) == 50  # Project subset has 50 samples
         assert len(pca_df.columns) == 11  # sample_id + 10 PCs
 
         # Validate admixture outputs
@@ -90,9 +90,9 @@ def test_generic_pipeline_with_precomputed_admixture(
         # Check that Q files were created for K=2,3
         for k in [2, 3]:
             fit_q_file = admix_dir / f"fit.{k}.csv"
-            transform_q_file = admix_dir / f"transform.{k}.csv"
+            project_q_file = admix_dir / f"project.{k}.csv"
             assert fit_q_file.exists(), f"Fit Q file for K={k} should exist"
-            assert transform_q_file.exists(), f"Transform Q file for K={k} should exist"
+            assert project_q_file.exists(), f"Project Q file for K={k} should exist"
 
             # Validate format
             fit_q_df = pd.read_csv(fit_q_file)
@@ -126,7 +126,7 @@ def test_generic_pipeline_with_precomputed_admixture(
 @pytest.mark.integration
 def test_pipeline_output_structure(
     fit_plink_files,
-    transform_plink_files,
+    project_plink_files,
     labels_csv,
     colormap_json,
     temp_dir,
@@ -139,7 +139,7 @@ def test_pipeline_output_structure(
 
     results = run_pipeline(
         fit_plink=fit_plink_files,
-        project_plink=transform_plink_files,
+        project_plink=project_plink_files,
         output_dir=str(output_dir),
         labels=str(labels_csv),
         colormap=str(colormap_json),
@@ -158,9 +158,7 @@ def test_pipeline_output_structure(
     assert (output_dir / "embeddings").exists(), "Embeddings directory should exist"
 
     # Check specific files
-    assert (
-        output_dir / "pca" / "transform_pca_5.csv"
-    ).exists(), "PCA transform output should exist"
+    assert (output_dir / "pca" / "project_pca_5.csv").exists(), "PCA project output should exist"
     assert (output_dir / "embeddings" / "phate_2d.csv").exists(), "Embedding output should exist"
 
 
@@ -197,10 +195,10 @@ def test_pipeline_with_fit_only(
     assert results["pca_coords"] is not None
     assert results["embedding_coords"] is not None
 
-    # Check that fit and transform outputs exist
+    # Check that fit and project outputs exist
     pca_dir = output_dir / "pca"
     assert (pca_dir / "fit_pca_5.csv").exists(), "Fit PCA should exist"
-    assert (pca_dir / "transform_pca_5.csv").exists(), "Transform PCA should exist"
+    assert (pca_dir / "project_pca_5.csv").exists(), "Project PCA should exist"
 
 
 @pytest.mark.integration
@@ -225,9 +223,9 @@ def test_skip_pca_resolves_existing_pca_files(
     n_pcs = 10
 
     fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-    transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+    project_pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
     small_pca_data.to_csv(fit_pca_file, index=False)
-    small_pca_data.to_csv(transform_pca_file, index=False)
+    small_pca_data.to_csv(project_pca_file, index=False)
 
     results = run_pipeline(
         fit_plink=fit_plink_files,
@@ -246,9 +244,9 @@ def test_skip_pca_resolves_existing_pca_files(
     )
 
     assert "fit_pca_file" in results, "fit_pca_file should be resolved from pre-existing file"
-    assert "pca_file" in results, "pca_file should be resolved from pre-existing transform file"
+    assert "pca_file" in results, "pca_file should be resolved from pre-existing project file"
     assert results["fit_pca_file"] == fit_pca_file
-    assert results["pca_file"] == transform_pca_file
+    assert results["pca_file"] == project_pca_file
 
 
 @pytest.mark.integration
@@ -303,9 +301,9 @@ def test_skip_pca_runs_embedding_with_existing_pca_files(
     n_pcs = 10
 
     fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-    transform_pca_file = pca_dir / f"transform_pca_{n_pcs}.csv"
+    project_pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
     small_pca_data.to_csv(fit_pca_file, index=False)
-    small_pca_data.to_csv(transform_pca_file, index=False)
+    small_pca_data.to_csv(project_pca_file, index=False)
 
     results = run_pipeline(
         fit_plink=fit_plink_files,
