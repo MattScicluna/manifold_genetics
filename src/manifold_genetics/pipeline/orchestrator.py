@@ -19,6 +19,9 @@ from ..visualization import (
     plot_projection,
     visualize,
 )
+from .config import IOConfig, PCAConfig
+from .steps.paths import pca_output_paths
+from .steps.pca import run_pca_step
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,23 @@ class Pipeline:
         self.projection_plot_fit_column = projection_plot_fit_column
         self.projection_plot_project_column = projection_plot_project_column
 
+    def _io_config(self) -> IOConfig:
+        """Adapt the pipeline's loose attributes to the step layer's IOConfig.
+
+        Transitional: PR 5 wires ``build_configs()`` into ``__init__`` and drops
+        this. ``__init__`` has already guaranteed every field is set.
+        """
+        return IOConfig(
+            fit_plink=self.fit_plink_prefix,
+            project_plink=self.project_plink_prefix,
+            output_dir=self.output_dir,
+            fit_labels=self.fit_labels,
+            project_labels=self.project_labels,
+            fit_colormap=self.fit_colormap,
+            project_colormap=self.project_colormap,
+            geographic_coords=self.geographic_coords,
+        )
+
     def run(
         self,
         n_pcs: int = 50,
@@ -172,80 +192,30 @@ class Pipeline:
         """
         results = {}
 
+        io = self._io_config()
+        pca_cfg = PCAConfig(n_pcs=n_pcs)
+        pca_paths = pca_output_paths(io, pca_cfg)
+
         # Step 1: PCA
         if not skip_pca:
             logger.info("=" * 70)
             logger.info("STEP 1: PCA")
             logger.info("=" * 70)
 
-            pca_dir = self.output_dir / "pca"
-            pca_dir.mkdir(exist_ok=True)
+            pca_result = run_pca_step(io, pca_cfg)
 
-            fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-            project_pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
-            flashpca_dir = pca_dir / "flashpca_outputs"
-            flashpca_dir.mkdir(parents=True, exist_ok=True)
-
-            # Check if existing PCA outputs have correct number of components
-            force_pca = False
-            if project_pca_file.exists():
-                try:
-                    existing_pca = pd.read_csv(project_pca_file, nrows=1)
-                    # Count dimension columns (dim_1, dim_2, ...)
-                    existing_n_pcs = len(
-                        [col for col in existing_pca.columns if col.startswith("dim_")]
-                    )
-                    if existing_n_pcs != n_pcs:
-                        logger.info(
-                            f"PCA component mismatch: existing={existing_n_pcs}, requested={n_pcs}"
-                        )
-                        logger.info("Forcing PCA recomputation...")
-                        force_pca = True
-                except Exception as e:
-                    logger.warning(f"Could not check existing PCA file: {e}")
-                    force_pca = True
-
-            logger.info(
-                f"Running PCA via CLI (fit: {self.fit_plink_prefix}, project: {self.project_plink_prefix})"
-            )
-            pca_cmd = [
-                "manifold-genetics",
-                "pca",
-                "--fit-plink",
-                str(self.fit_plink_prefix),
-                "--project-plink",
-                str(self.project_plink_prefix),
-                "--fit-output",
-                str(fit_pca_file),
-                "--project-output",
-                str(project_pca_file),
-                "--flashpca-output-dir",
-                str(flashpca_dir),
-                "--n-pcs",
-                str(n_pcs),
-            ]
-            if force_pca:
-                pca_cmd.append("--force")
-
-            subprocess.run(pca_cmd, check=True)
-
-            pca_coords = pd.read_csv(project_pca_file)
-
-            results["fit_pca_file"] = fit_pca_file
-            results["project_pca_file"] = project_pca_file
-            results["pca_file"] = project_pca_file
-            results["pca_coords"] = pca_coords
+            results["fit_pca_file"] = pca_result.fit_pca
+            results["project_pca_file"] = pca_result.project_pca
+            results["pca_file"] = pca_result.project_pca
+            results["pca_coords"] = pca_result.coords_df
 
         else:
             # PCA skipped — resolve expected paths so embedding can still run
-            pca_dir = self.output_dir / "pca"
-            fit_pca_file = pca_dir / f"fit_pca_{n_pcs}.csv"
-            project_pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
-            if fit_pca_file.exists():
-                results["fit_pca_file"] = fit_pca_file
-            if project_pca_file.exists():
-                results["project_pca_file"] = project_pca_file
-                results["pca_file"] = project_pca_file
+            if pca_paths["fit_pca"].exists():
+                results["fit_pca_file"] = pca_paths["fit_pca"]
+            if pca_paths["project_pca"].exists():
+                results["project_pca_file"] = pca_paths["project_pca"]
+                results["pca_file"] = pca_paths["project_pca"]
 
         # Step 1.5: PCA Visualization (independent of PCA computation)
         if not skip_pca_visualization:
@@ -253,8 +223,7 @@ class Pipeline:
             logger.info("STEP 1.5: PCA VISUALIZATION")
             logger.info("=" * 70)
 
-            pca_dir = self.output_dir / "pca"
-            pca_file = pca_dir / f"project_pca_{n_pcs}.csv"
+            pca_file = pca_paths["project_pca"]
 
             if pca_file.exists():
                 pca_figures_dir = self.output_dir / "figures" / "pca"
