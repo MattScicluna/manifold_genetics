@@ -84,6 +84,29 @@ def stub_pca_step(monkeypatch, n_pcs):
     return calls
 
 
+def stub_metrics_steps(monkeypatch, geo=None, admix=None):
+    """Stub the metric computations and validators inside steps.metrics so the
+    real step code (JSON write + reload) runs against fake inputs."""
+    import manifold_genetics.pipeline.steps.metrics as m
+
+    for name in (
+        "validate_embedding_csv",
+        "validate_geographic_csv",
+        "validate_admixture_csv",
+        "validate_sample_id_overlap",
+    ):
+        monkeypatch.setattr(m, name, lambda *a, **k: None)
+
+    monkeypatch.setattr(
+        m, "compute_geographic_preservation", lambda **k: geo or {"correlation": 0.9}
+    )
+    # int keys on purpose: the JSON round-trip inside the step is what turns
+    # them into the string keys run_pipeline() has always returned.
+    monkeypatch.setattr(
+        m, "compute_admixture_preservation", lambda **k: admix or {2: {"correlation": 0.5}}
+    )
+
+
 def pca_calls(calls):
     return [c for c in calls if "manifold-genetics" in c and "pca" in c]
 
@@ -520,18 +543,11 @@ class TestPipelineRunFullFlow:
 
     def _writer(self, pipeline, n_pcs, method="phate"):
         emb_dir = pipeline.output_dir / "embeddings"
-        metrics_dir = pipeline.output_dir / "metrics"
 
         def on_call(cmd):
             if "embed" in cmd:
                 write_pca_csv(emb_dir / f"{method}_2d.csv", 2)
                 write_pca_csv(emb_dir / f"{method}_fit_2d.csv", 2)
-            elif "metrics-geographic" in cmd:
-                metrics_dir.mkdir(parents=True, exist_ok=True)
-                (metrics_dir / "geographic.json").write_text('{"correlation": 0.9}')
-            elif "metrics-admixture" in cmd:
-                metrics_dir.mkdir(parents=True, exist_ok=True)
-                (metrics_dir / "admixture.json").write_text('{"2": {"correlation": 0.5}}')
 
         return on_call
 
@@ -553,6 +569,7 @@ class TestPipelineRunFullFlow:
         calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
 
         stub_pca_step(monkeypatch, n_pcs)
+        stub_metrics_steps(monkeypatch)
         results = pipeline.run(
             n_pcs=n_pcs,
             k_min=2,
@@ -571,6 +588,33 @@ class TestPipelineRunFullFlow:
         assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
         # no admixture CLI call — backend was used
         assert admix_calls(calls) == []
+        # Metrics ran in-process and landed at the documented paths (constraint B)
+        assert (pipeline.output_dir / "metrics" / "geographic.json").exists()
+        assert (pipeline.output_dir / "metrics" / "admixture.json").exists()
+        assert [c for c in calls if "metrics-geographic" in c] == []
+        assert [c for c in calls if "metrics-admixture" in c] == []
+
+    def test_metrics_skipped_when_no_geographic_coords(self, tmp_path, monkeypatch):
+        """Without geographic_coords the geographic metric must not run, but the
+        admixture metric still must."""
+        self._stub_plots(monkeypatch)
+        stub_metrics_steps(monkeypatch)
+        pipeline = make_pipeline(tmp_path, admixture_backend=_FakeBackend())
+        n_pcs = 3
+        stub_pca_step(monkeypatch, n_pcs)
+        capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+
+        results = pipeline.run(
+            n_pcs=n_pcs,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            embedding_params={"knn": 5},
+        )
+
+        assert "geographic" not in results["metrics"]
+        assert not (pipeline.output_dir / "metrics" / "geographic.json").exists()
+        assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
 
     def test_full_run_via_cli_admixture(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)

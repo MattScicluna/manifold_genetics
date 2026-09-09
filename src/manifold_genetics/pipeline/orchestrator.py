@@ -4,7 +4,6 @@ Pipeline orchestrator for end-to-end genetic analysis.
 Coordinates PCA, Admixture, Embeddings, Visualization, and Metrics.
 """
 
-import json
 import logging
 import subprocess
 from pathlib import Path
@@ -20,7 +19,8 @@ from ..visualization import (
     visualize,
 )
 from .config import IOConfig, PCAConfig
-from .steps.paths import pca_output_paths
+from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
+from .steps.paths import metrics_output_paths, pca_output_paths
 from .steps.pca import run_pca_step
 
 logger = logging.getLogger(__name__)
@@ -554,47 +554,26 @@ class Pipeline:
 
             metrics_dir = self.output_dir / "metrics"
             metrics_dir.mkdir(parents=True, exist_ok=True)
+            metrics_paths = metrics_output_paths(io)
 
-            # Geographic preservation via CLI
+            # Geographic preservation
             if self.geographic_coords:
-                logger.info("Computing geographic preservation via CLI...")
-                geo_out = metrics_dir / "geographic.json"
-                geo_cmd = [
-                    "manifold-genetics",
-                    "metrics-geographic",
-                    "--embedding",
-                    str(embedding_file),
-                    "--geographic",
-                    str(self.geographic_coords),
-                    "--output",
-                    str(geo_out),
-                ]
-                subprocess.run(geo_cmd, check=True)
-                with open(geo_out) as f:
-                    metrics["geographic"] = json.load(f)
+                geo_result = run_geographic_metrics_step(
+                    embedding_file,
+                    self.geographic_coords,
+                    metrics_paths["geographic"],
+                )
+                metrics["geographic"] = geo_result.values
 
-            # Admixture preservation via CLI
+            # Admixture preservation
             if not skip_admixture and "admixture_dir" in results:
-                logger.info("Computing admixture preservation via CLI...")
-                admix_out = metrics_dir / "admixture.json"
-                admix_prefix = results["admixture_dir"] / "project"
-                admix_cmd = [
-                    "manifold-genetics",
-                    "metrics-admixture",
-                    "--embedding",
-                    str(embedding_file),
-                    "--admixture-output",
-                    str(admix_prefix),
-                    "--output",
-                    str(admix_out),
-                    "--k-min",
-                    str(k_min),
-                    "--k-max",
-                    str(k_max),
-                ]
-                subprocess.run(admix_cmd, check=True)
-                with open(admix_out) as f:
-                    metrics["admixture"] = json.load(f)
+                admix_result = run_admixture_metrics_step(
+                    embedding_file,
+                    results["admixture_dir"] / "project",
+                    range(k_min, k_max + 1),
+                    metrics_paths["admixture"],
+                )
+                metrics["admixture"] = admix_result.values
 
             results["metrics"] = metrics
 
