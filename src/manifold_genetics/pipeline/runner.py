@@ -30,14 +30,12 @@ def run_pipeline(
     geographic_coords: Optional[Union[str, Path]] = None,
     # PCA parameters
     n_pcs: int = 50,
-    flashpca_output_dir: Optional[Union[str, Path]] = None,
     # Admixture parameters
     k_min: int = 2,
     k_max: int = 10,
     admix_threads: Optional[int] = None,
     admix_gpus: Optional[int] = None,
     admix_batch_size: Optional[int] = None,
-    neuraladmixture_output_dir: Optional[Union[str, Path]] = None,
     admixture_backend: Optional[object] = None,
     # Embedding parameters
     embedding: str = "phate",
@@ -75,13 +73,11 @@ def run_pipeline(
         project_colormap: Optional override colormap JSON for project dataset
         geographic_coords: Optional path to geographic coordinates CSV for metrics
         n_pcs: Number of principal components (default: 50)
-        flashpca_output_dir: Directory for flashPCA intermediate outputs
         k_min: Minimum K for admixture (default: 2)
         k_max: Maximum K for admixture (default: 10)
         admix_threads: Number of threads for neural admixture (None = auto-detect)
         admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
         admix_batch_size: Batch size for neural admixture training
-        neuraladmixture_output_dir: Directory for neural admixture checkpoints
         admixture_backend: Optional AdmixtureBackend instance for testing
                           (if None, uses neural-admixture via CLI)
         embedding: Embedding method - 'phate', 'umap', 'tsne', or 'diffusion_map' (default: 'phate')
@@ -210,8 +206,6 @@ def run_pipeline(
         admix_threads=admix_threads,
         admix_gpus=admix_gpus,
         admix_batch_size=admix_batch_size,
-        flashpca_output_dir=flashpca_output_dir,
-        neuraladmixture_output_dir=neuraladmixture_output_dir,
     )
 
     logger.info("Pipeline execution complete")
