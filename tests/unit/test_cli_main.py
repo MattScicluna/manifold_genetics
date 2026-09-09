@@ -404,10 +404,24 @@ def test_cmd_embed_unknown_method_returns_1(monkeypatch, tmp_path, stub_validati
     assert "Unknown method" in capsys.readouterr().out
 
 
-def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_validation):
+_STEP_METRICS = "manifold_genetics.pipeline.steps.metrics"
+
+
+@pytest.fixture
+def stub_step_metrics_validation(monkeypatch):
+    """Turn every validator used by the metrics steps into a no-op."""
+    for name in (
+        "validate_embedding_csv",
+        "validate_geographic_csv",
+        "validate_admixture_csv",
+        "validate_sample_id_overlap",
+    ):
+        monkeypatch.setattr(f"{_STEP_METRICS}.{name}", lambda *a, **k: None)
+
+
+def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_step_metrics_validation):
     monkeypatch.setattr(
-        mg_cli,
-        "compute_geographic_preservation",
+        f"{_STEP_METRICS}.compute_geographic_preservation",
         lambda **k: {"correlation": 0.9, "p_value": 1e-3},
     )
     out = tmp_path / "geo.json"
@@ -426,10 +440,9 @@ def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_validati
     assert json.loads(out.read_text())["correlation"] == 0.9
 
 
-def test_cmd_metrics_admixture_writes_json(monkeypatch, tmp_path, stub_validation):
+def test_cmd_metrics_admixture_writes_json(monkeypatch, tmp_path, stub_step_metrics_validation):
     monkeypatch.setattr(
-        mg_cli,
-        "compute_admixture_preservation",
+        f"{_STEP_METRICS}.compute_admixture_preservation",
         lambda **k: {"2": {"correlation": 0.5}},
     )
     out = tmp_path / "adm.json"
@@ -450,6 +463,37 @@ def test_cmd_metrics_admixture_writes_json(monkeypatch, tmp_path, stub_validatio
     )
     assert rc == 0
     assert json.loads(out.read_text())["2"]["correlation"] == 0.5
+
+
+def test_cmd_metrics_admixture_forwards_subsample(
+    monkeypatch, tmp_path, stub_step_metrics_validation
+):
+    """--subsample must reach compute_admixture_preservation; dropping it would
+    silently run full pairwise distances on a large cohort."""
+    seen = {}
+    monkeypatch.setattr(
+        f"{_STEP_METRICS}.compute_admixture_preservation",
+        lambda **k: seen.update(k) or {"2": {"correlation": 0.5}},
+    )
+    rc = mg_cli.main(
+        [
+            "metrics-admixture",
+            "--embedding",
+            "emb.csv",
+            "--admixture-output",
+            str(tmp_path / "q"),
+            "--k-min",
+            "2",
+            "--k-max",
+            "2",
+            "--output",
+            str(tmp_path / "a.json"),
+            "--subsample",
+            "500",
+        ]
+    )
+    assert rc == 0
+    assert seen["subsample"] == 500
 
 
 def test_cmd_plot_dispatch(monkeypatch, tmp_path, stub_validation):

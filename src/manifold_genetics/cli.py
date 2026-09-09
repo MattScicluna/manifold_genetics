@@ -13,9 +13,8 @@ from typing import List, Optional
 
 from .admixture import NeuralAdmixture
 from .embeddings import PHATE, TSNE, UMAP, DiffusionMap
-from .metrics import compute_admixture_preservation, compute_geographic_preservation
 from .pipeline import run_pipeline
-from .pipeline.steps import run_pca
+from .pipeline.steps import run_admixture_metrics_step, run_geographic_metrics_step, run_pca
 from .utils.io import read_colormap
 from .utils.tools import ToolResolver
 from .utils.validation import (
@@ -403,28 +402,17 @@ def cmd_metrics_geographic(args):
     """Compute geographic preservation metrics."""
     setup_logging(args.verbose)
 
-    # Validate inputs
-    validate_embedding_csv(args.embedding)
-    validate_geographic_csv(args.geographic, args.longitude_col, args.latitude_col)
-    validate_sample_id_overlap(
-        args.embedding, args.geographic, "embedding", "geographic coordinates"
-    )
-
-    result = compute_geographic_preservation(
-        embedding=args.embedding,
-        geographic_coords=args.geographic,
+    result = run_geographic_metrics_step(
+        args.embedding,
+        args.geographic,
+        Path(args.output),
         longitude_col=args.longitude_col,
         latitude_col=args.latitude_col,
         num_samples=args.num_dists_sampled,
         ignore_missing=not args.keep_missing,
     )
 
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(result, f, indent=2)
-
-    print(f"Geographic metrics saved to: {output_path}")
+    print(f"Geographic metrics saved to: {result.path}")
     return 0
 
 
@@ -432,37 +420,17 @@ def cmd_metrics_admixture(args):
     """Compute admixture preservation metrics."""
     setup_logging(args.verbose)
 
-    admixture_prefix = Path(args.admixture_output)
-    k_values = list(range(args.k_min, args.k_max + 1))
-
-    # Validate inputs
-    validate_embedding_csv(args.embedding)
-    validate_admixture_csv(str(admixture_prefix), k_values)
-    first_q = f"{admixture_prefix}.{args.k_min}.csv"
-    validate_sample_id_overlap(args.embedding, first_q, "embedding", "admixture")
-
-    # Build Q files dict from prefix: {k: path/to/prefix.k.csv}
-    q_files = {}
-    for k in k_values:
-        q_files[k] = Path(f"{admixture_prefix}.{k}.csv")
-
-    if not q_files:
-        raise ValueError(f"No admixture files found for K={args.k_min} to {args.k_max}")
-
-    metrics = compute_admixture_preservation(
-        embedding=args.embedding,
-        q_files=q_files,
+    result = run_admixture_metrics_step(
+        args.embedding,
+        Path(args.admixture_output),
+        range(args.k_min, args.k_max + 1),
+        Path(args.output),
         k_value=args.k_value,
         num_samples=args.num_dists_sampled,
         subsample=args.subsample,
     )
 
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(metrics, f, indent=2)
-
-    print(f"Admixture metrics saved to: {output_path}")
+    print(f"Admixture metrics saved to: {result.path}")
     return 0
 
 
