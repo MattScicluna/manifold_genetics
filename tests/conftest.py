@@ -108,6 +108,19 @@ def colormap_json(temp_dir, colormap_data):
 
 
 @pytest.fixture
+def cross_cohort_fixtures():
+    """Paths to the checked-in cross-cohort label/colormap/geographic fixtures."""
+    d = Path(__file__).parent / "fixtures" / "cross_cohort"
+    return {
+        "fit_labels": d / "fit_labels.csv",
+        "project_labels": d / "project_labels.csv",
+        "fit_colormap": d / "fit_colormap.json",
+        "project_colormap": d / "project_colormap.json",
+        "geographic": d / "geographic.csv",
+    }
+
+
+@pytest.fixture
 def numeric_pca_data():
     """PCA dataset with integer (numeric) sample_ids, mimicking FlashPCA IID behavior."""
     np.random.seed(42)
