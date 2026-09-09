@@ -552,9 +552,10 @@ class Pipeline:
 
             metrics = {}
 
-            metrics_dir = self.output_dir / "metrics"
-            metrics_dir.mkdir(parents=True, exist_ok=True)
             metrics_paths = metrics_output_paths(io)
+            # Created unconditionally: the output tree has always contained metrics/
+            # even when neither metric runs.
+            metrics_paths["geographic"].parent.mkdir(parents=True, exist_ok=True)
 
             # Geographic preservation
             if self.geographic_coords:

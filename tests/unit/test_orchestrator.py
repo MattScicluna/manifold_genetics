@@ -1,10 +1,13 @@
-"""Tests for pipeline/orchestrator.py — Pipeline init routing, PCA force logic,
-embedding input modes, admixture CLI flags, and _get_embedding_model dispatch.
+"""Tests for pipeline/orchestrator.py — Pipeline init routing, embedding input
+modes, admixture CLI flags, in-process PCA dispatch, and _get_embedding_model
+dispatch.
 
-Strategy: mock subprocess.run at the module level to capture CLI commands without
-executing them. Real CSV files are written to tmp_path where the orchestrator reads
-them back (PCA component-count check, post-run result loading). This exercises real
-pandas and path logic without needing any external binaries.
+Strategy: PCA now runs in-process, so it is stubbed via `stub_pca_step()`, which
+replaces `run_pca_step()` with a fake that writes real CSVs to tmp_path (the
+orchestrator reads these back for post-run result loading). Admixture and
+embedding still shell out, so `subprocess.run` is mocked at the module level to
+capture CLI commands without executing them. This exercises real pandas and path
+logic without needing any external binaries.
 
 Tests are organised around failure modes: each test documents what would break in
 production if the assertion failed.
