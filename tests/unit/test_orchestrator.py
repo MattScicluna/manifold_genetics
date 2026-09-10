@@ -406,6 +406,43 @@ class TestPipelineRunMissingPCA:
         )
         assert "embedding_file" in results
 
+    def test_error_names_flag_and_expected_paths(self, tmp_path):
+        """Spec constraint C: the error must name which skip flag was set and
+        which files were expected, not just say 'PCA' vaguely."""
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        pca_dir = pipeline.output_dir / "pca"
+        expected_fit = pca_dir / f"fit_pca_{n_pcs}.csv"
+        expected_project = pca_dir / f"project_pca_{n_pcs}.csv"
+
+        with pytest.raises(RuntimeError) as exc_info:
+            pipeline.run(
+                n_pcs=n_pcs,
+                skip_pca=True,
+                skip_admixture=True,
+                skip_pca_visualization=True,
+                skip_metrics=True,
+            )
+
+        message = str(exc_info.value)
+        assert "--skip-pca" in message
+        assert str(expected_fit) in message
+        assert str(expected_project) in message
+
+    def test_error_still_says_no_pca_files_found(self, tmp_path):
+        """Locks in the leading phrase integration tests match on
+        (tests/integration/test_generic_pipeline.py::test_skip_pca_raises_when_no_pca_files
+        asserts match="No PCA files found") alongside the clearer path/flag detail."""
+        pipeline = make_pipeline(tmp_path)
+
+        with pytest.raises(RuntimeError, match="No PCA files found"):
+            pipeline.run(
+                skip_pca=True,
+                skip_admixture=True,
+                skip_pca_visualization=True,
+                skip_metrics=True,
+            )
+
 
 # ---------------------------------------------------------------------------
 # TestGetEmbeddingModel — method dispatch and parameter forwarding

@@ -4,12 +4,13 @@ Pipeline orchestrator for end-to-end genetic analysis.
 Coordinates PCA, Admixture, Embeddings, Visualization, and Metrics.
 """
 
+import dataclasses
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Union
 
 from ..embeddings import PHATE, TSNE, UMAP, DiffusionMap
-from .config import AdmixtureConfig, EmbeddingConfig, IOConfig, PCAConfig, VizConfig
+from .config import AdmixtureConfig, EmbeddingConfig, PCAConfig, build_configs
 from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
@@ -38,6 +39,20 @@ def _run_viz(name: str, failed: list, fn):
         logger.warning(f"Visualization step {name!r} failed: {e}", exc_info=True)
         failed.append(name)
         return None
+
+
+def _resolve_skipped_pca(io, pca: PCAConfig) -> PCAStepResult:
+    """Build a ``PCAStepResult`` from cached PCA output when ``--skip-pca`` is set.
+
+    Populates whichever of the fit/project CSVs exist on disk and leaves the
+    other ``None``. Never raises: callers that actually need one of these
+    paths for a step that is about to run must check the result themselves
+    and fail with their own clear message (spec constraint C).
+    """
+    paths = pca_output_paths(io, pca)
+    fit_pca = paths["fit_pca"] if paths["fit_pca"].exists() else None
+    project_pca = paths["project_pca"] if paths["project_pca"].exists() else None
+    return PCAStepResult(fit_pca=fit_pca, project_pca=project_pca, skipped=True)
 
 
 class Pipeline:
@@ -99,40 +114,48 @@ class Pipeline:
         Note:
             Must provide either (labels + colormap) OR (fit_labels + project_labels + fit_colormap + project_colormap)
         """
-        self.fit_plink_prefix = Path(fit_plink_prefix)
-        self.project_plink_prefix = Path(project_plink_prefix)
-        self.output_dir = Path(output_dir)
-        self.geographic_coords = Path(geographic_coords) if geographic_coords else None
+        # build_configs() performs all labels/colormap argument-shape validation
+        # (no filesystem access) and must run before output_dir is created below —
+        # tests/unit/test_runner.py::test_validation_fires_before_output_dir_created
+        # guards exactly this ordering.
+        #
+        # __init__ only receives the IO and viz-relevant arguments; run()-time
+        # parameters (n_pcs, k_min/k_max, embedding, the skip flags, and the two
+        # admixture-viz ordering knobs) are not passed here, so the pca/admixture/
+        # embedding/skips configs this call produces are built from defaults and
+        # discarded — run() builds its own from its own arguments, exactly as
+        # before. This keeps `Pipeline(...)` and `run_pipeline(...)` signatures
+        # unchanged and avoids storing per-run state on the instance.
+        configs = build_configs(
+            fit_plink=fit_plink_prefix,
+            project_plink=project_plink_prefix,
+            output_dir=output_dir,
+            labels=labels,
+            colormap=colormap,
+            fit_labels=fit_labels,
+            project_labels=project_labels,
+            fit_colormap=fit_colormap,
+            project_colormap=project_colormap,
+            geographic_coords=geographic_coords,
+            projection_plot_fit_column=projection_plot_fit_column,
+            projection_plot_project_column=projection_plot_project_column,
+        )
 
-        # Handle labels: either use shared labels or separate fit/project labels
-        if labels is not None:
-            self.labels = Path(labels)
-            self.fit_labels = Path(fit_labels) if fit_labels else self.labels
-            self.project_labels = Path(project_labels) if project_labels else self.labels
-        else:
-            # No shared labels provided, must have separate fit/project labels
-            if not fit_labels or not project_labels:
-                raise ValueError(
-                    "Must provide either 'labels' OR both 'fit_labels' and 'project_labels'"
-                )
-            self.labels = None
-            self.fit_labels = Path(fit_labels)
-            self.project_labels = Path(project_labels)
+        self._io_config = configs.io
+        self._viz_config = configs.viz
 
-        # Handle colormap: either use shared colormap or separate fit/project colormaps
-        if colormap is not None:
-            self.colormap = Path(colormap)
-            self.fit_colormap = Path(fit_colormap) if fit_colormap else self.colormap
-            self.project_colormap = Path(project_colormap) if project_colormap else self.colormap
-        else:
-            # No shared colormap provided, must have separate fit/project colormaps
-            if not fit_colormap or not project_colormap:
-                raise ValueError(
-                    "Must provide either 'colormap' OR both 'fit_colormap' and 'project_colormap'"
-                )
-            self.colormap = None
-            self.fit_colormap = Path(fit_colormap)
-            self.project_colormap = Path(project_colormap)
+        # Loose attributes kept for backward compatibility (existing callers and
+        # tests read these directly off the Pipeline instance).
+        self.fit_plink_prefix = configs.io.fit_plink
+        self.project_plink_prefix = configs.io.project_plink
+        self.output_dir = configs.io.output_dir
+        self.geographic_coords = configs.io.geographic_coords
+        self.fit_labels = configs.io.fit_labels
+        self.project_labels = configs.io.project_labels
+        self.fit_colormap = configs.io.fit_colormap
+        self.project_colormap = configs.io.project_colormap
+        self.labels = Path(labels) if labels else None
+        self.colormap = Path(colormap) if colormap else None
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -142,23 +165,6 @@ class Pipeline:
         # Store projection column settings
         self.projection_plot_fit_column = projection_plot_fit_column
         self.projection_plot_project_column = projection_plot_project_column
-
-    def _io_config(self) -> IOConfig:
-        """Adapt the pipeline's loose attributes to the step layer's IOConfig.
-
-        Transitional: PR 5b wires ``build_configs()`` into ``__init__`` and drops
-        this. ``__init__`` has already guaranteed every field is set.
-        """
-        return IOConfig(
-            fit_plink=self.fit_plink_prefix,
-            project_plink=self.project_plink_prefix,
-            output_dir=self.output_dir,
-            fit_labels=self.fit_labels,
-            project_labels=self.project_labels,
-            fit_colormap=self.fit_colormap,
-            project_colormap=self.project_colormap,
-            geographic_coords=self.geographic_coords,
-        )
 
     def run(
         self,
@@ -208,14 +214,18 @@ class Pipeline:
         results = {}
         failed = []
 
-        io = self._io_config()
+        io = self._io_config
         pca_cfg = PCAConfig(n_pcs=n_pcs)
         pca_paths = pca_output_paths(io, pca_cfg)
-        viz_cfg = VizConfig(
+        # admix_group_column / admix_within_group_order are run()-time parameters,
+        # not init-time ones — self._viz_config only carries the init-time
+        # projection-plot columns, so those two fields are overridden per call.
+        # Two run() calls with different values must not interfere with each
+        # other, which a stored, mutated VizConfig on self would risk.
+        viz_cfg = dataclasses.replace(
+            self._viz_config,
             admix_group_column=admix_group_column,
             admix_within_group_order=admix_within_group_order,
-            projection_plot_fit_column=self.projection_plot_fit_column,
-            projection_plot_project_column=self.projection_plot_project_column,
         )
 
         # Step 1: PCA
@@ -233,11 +243,12 @@ class Pipeline:
 
         else:
             # PCA skipped — resolve expected paths so embedding can still run
-            if pca_paths["fit_pca"].exists():
-                results["fit_pca_file"] = pca_paths["fit_pca"]
-            if pca_paths["project_pca"].exists():
-                results["project_pca_file"] = pca_paths["project_pca"]
-                results["pca_file"] = pca_paths["project_pca"]
+            pca_result = _resolve_skipped_pca(io, pca_cfg)
+            if pca_result.fit_pca is not None:
+                results["fit_pca_file"] = pca_result.fit_pca
+            if pca_result.project_pca is not None:
+                results["project_pca_file"] = pca_result.project_pca
+                results["pca_file"] = pca_result.project_pca
 
         # Step 1.5: PCA Visualization (independent of PCA computation)
         if not skip_pca_visualization:
@@ -302,8 +313,10 @@ class Pipeline:
 
             if "fit_pca_file" not in results and "project_pca_file" not in results:
                 raise RuntimeError(
-                    "No PCA files found. Run without --skip-pca, or ensure "
-                    f"{self.output_dir / 'pca'} contains fit_pca_{{n}}.csv / project_pca_{{n}}.csv."
+                    "No PCA files found. PCA was skipped (--skip-pca) and no cached "
+                    f"output exists at {pca_paths['fit_pca']} or "
+                    f"{pca_paths['project_pca']}. Re-run without --skip-pca to "
+                    "compute PCA, or place existing PCA CSVs at those paths."
                 )
 
             emb_cfg = EmbeddingConfig(

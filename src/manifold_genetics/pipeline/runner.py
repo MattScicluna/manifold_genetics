@@ -156,19 +156,10 @@ def run_pipeline(
         * Separate values for all of `fit_labels`, `project_labels`, `fit_colormap`,
           and `project_colormap` for cross-cohort analysis.
     """
-    # Validate labels/colormap arguments
-    if not labels and not (fit_labels and project_labels):
-        raise ValueError(
-            "Must provide either 'labels' (used for both fit and project) OR both "
-            "'fit_labels' and 'project_labels'. Providing only one of 'fit_labels' or "
-            "'project_labels' without 'labels' is not allowed."
-        )
-    if not colormap and not (fit_colormap and project_colormap):
-        raise ValueError(
-            "Must provide either 'colormap' (used for both fit and project) OR both "
-            "'fit_colormap' and 'project_colormap'. Providing only one of "
-            "'fit_colormap' or 'project_colormap' without 'colormap' is not allowed."
-        )
+    # Labels/colormap argument-shape validation now lives in Pipeline.__init__
+    # (via build_configs()), which runs before output_dir is created — no need
+    # to duplicate it here, and duplicating it would risk the two messages
+    # drifting apart.
 
     # Create Pipeline instance
     pipeline = Pipeline(
