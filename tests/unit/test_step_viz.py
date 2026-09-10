@@ -16,12 +16,7 @@ from pathlib import Path
 import pytest
 
 from manifold_genetics import cli as mg_cli
-from manifold_genetics.pipeline.config import (
-    AdmixtureConfig,
-    EmbeddingConfig,
-    IOConfig,
-    VizConfig,
-)
+from manifold_genetics.pipeline.config import IOConfig, VizConfig
 from manifold_genetics.pipeline.steps.admixture import AdmixtureStepResult
 from manifold_genetics.pipeline.steps.embedding import EmbeddingStepResult
 from manifold_genetics.pipeline.steps.paths import figure_output_paths
