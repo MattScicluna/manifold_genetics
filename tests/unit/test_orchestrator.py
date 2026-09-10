@@ -620,15 +620,43 @@ class TestPipelineRunFullFlow:
         )
         assert "pca_figures" not in results
 
-    def test_pipeline_makes_no_subprocess_calls(self, tmp_path, monkeypatch):
-        """After PR 4 no stage shells out to our own CLI. subprocess.run is gone
-        from orchestrator.py entirely, so patching it is no longer even possible —
-        assert instead that the module no longer imports it."""
-        import manifold_genetics.pipeline.orchestrator as orch
 
-        assert not hasattr(
-            orch, "subprocess"
-        ), "orchestrator must no longer import subprocess — every stage runs in-process"
+# ---------------------------------------------------------------------------
+# No stage spawns this project's own CLI — PR 4 milestone guard
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_never_spawns_own_cli():
+    """After PR 4 no stage shells out to our own CLI. subprocess.run is gone from
+    orchestrator.py entirely, so patching it is no longer even possible — assert
+    instead that the module no longer imports it. That alone would miss a
+    regression that imports subprocess differently (e.g. `from subprocess import
+    run`) or moves the hop into a steps/ module, so also scan every source file
+    under pipeline/ for the argv marker that would spawn `manifold-genetics`
+    itself as a subcommand."""
+    import manifold_genetics.pipeline.orchestrator as orch
+
+    assert not hasattr(
+        orch, "subprocess"
+    ), "orchestrator must no longer import subprocess — every stage runs in-process"
+
+    # The old CLI hop built its argv as a Python list literal, e.g.
+    # `["manifold-genetics", "admixture", ...]` — so the quoted string literal is
+    # the marker of an actual subprocess invocation. Several live docstrings
+    # mention the ``manifold-genetics`` command by name (in RST double-backticks,
+    # not Python quotes) purely as documentation; matching only the quoted forms
+    # avoids flagging those while still catching a reintroduced argv list.
+    markers = ('"manifold-genetics"', "'manifold-genetics'")
+    pipeline_dir = Path(orch.__file__).parent
+    for path in pipeline_dir.rglob("*.py"):
+        if ".ipynb_checkpoints" in path.parts:
+            continue  # stale Jupyter checkpoints of old source, not live code
+        text = path.read_text()
+        assert not any(marker in text for marker in markers), (
+            f"{path} contains a quoted 'manifold-genetics' argv literal — a pipeline "
+            "stage must have started shelling out to this project's own CLI again, "
+            "restoring the API -> CLI -> API inversion this refactor removed"
+        )
 
 
 # ---------------------------------------------------------------------------

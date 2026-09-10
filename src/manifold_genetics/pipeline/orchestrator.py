@@ -76,7 +76,8 @@ class Pipeline:
             fit_colormap: Optional override colormap JSON for fit dataset
             project_colormap: Optional override colormap JSON for project dataset
             admixture_backend: Optional AdmixtureBackend instance for testing
-                              (if None, uses neural-admixture via CLI)
+                              (if None, constructs a real NeuralAdmixtureBackend, which
+                              runs neural-admixture in its own child process)
             projection_plot_fit_column: Column from fit colormap to use for projection plot
             projection_plot_project_column: Column from project colormap to use for projection plot
 
