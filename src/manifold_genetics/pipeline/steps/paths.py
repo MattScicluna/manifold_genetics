@@ -43,3 +43,17 @@ def embedding_output_paths(io: IOConfig, emb: EmbeddingConfig) -> Dict[str, Path
 def metrics_output_paths(io: IOConfig) -> Dict[str, Path]:
     d = io.output_dir / "metrics"
     return {"geographic": d / "geographic.json", "admixture": d / "admixture.json"}
+
+
+def figure_output_paths(io: IOConfig) -> Dict[str, Path]:
+    """Where each figure family is written. Pure; creates nothing."""
+    root = io.output_dir / "figures"
+    admixture = root / "admixture"
+    return {
+        "root": root,
+        "pca": root / "pca",
+        "embeddings": root / "embeddings",
+        "admixture": admixture,
+        "admixture_bars": admixture / "project_bars.png",
+        "admixture_colored_embedding": admixture / "project_admixture_colored_embedding.png",
+    }

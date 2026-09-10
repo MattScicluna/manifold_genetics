@@ -491,6 +491,38 @@ class _FakeBackend:
         return {}
 
 
+def stub_viz_steps(monkeypatch, **overrides):
+    """Patch the four viz step functions directly, rather than the plotting
+    functions they call. run() only ever talks to the step layer now.
+
+    Pass e.g. ``run_admixture_viz_step=boom`` to override one step with a
+    fake of the caller's choosing (typically one that raises).
+    """
+    import manifold_genetics.pipeline.orchestrator as orch
+    from manifold_genetics.pipeline.steps.viz import VizStepResult
+
+    defaults = {
+        "run_pca_viz_step": lambda io, viz, *, pca_file, n_pcs: VizStepResult(
+            figures=(Path("pca_pairs.png"),)
+        ),
+        "run_admixture_viz_step": lambda io, viz, *, admixture: VizStepResult(
+            figures=(Path("bars.png"),)
+        ),
+        "run_embedding_viz_step": lambda io, viz, *, embedding, method: VizStepResult(
+            figures=(Path("fit.png"), Path("project.png"), Path("proj.png")),
+            fit_figures=(Path("fit.png"),),
+            project_figures=(Path("project.png"),),
+            projection_plot=Path("proj.png"),
+        ),
+        "run_admixture_embedding_viz_step": lambda io, *, embedding, admixture: VizStepResult(
+            figures=(Path("admix_emb.png"),)
+        ),
+    }
+    defaults.update(overrides)
+    for name, fn in defaults.items():
+        monkeypatch.setattr(orch, name, fn)
+
+
 class TestPipelineRunFullFlow:
     """PCA viz, admixture (backend + real step), bar plot, embedding viz,
     admixture-colored embedding, and metrics all run when their skip flags are
@@ -498,23 +530,7 @@ class TestPipelineRunFullFlow:
     the orchestrator reads back."""
 
     def _stub_plots(self, monkeypatch):
-        import manifold_genetics.pipeline.orchestrator as orch
-
-        for name in (
-            "visualize",
-            "plot_admixture_bar_grid",
-            "plot_admixture_embedding_grid",
-            "plot_projection",
-        ):
-            monkeypatch.setattr(orch, name, lambda *a, **k: ["fig.png"])
-        monkeypatch.setattr(
-            "manifold_genetics.visualization.plot_pca_pairs",
-            lambda **k: Path("pca_pairs.png"),
-        )
-        monkeypatch.setattr(
-            "manifold_genetics.utils.io.read_colormap",
-            lambda p: {"Population": {"A": "#000000"}},
-        )
+        stub_viz_steps(monkeypatch)
 
     def test_full_run_with_backend_and_metrics(self, tmp_path, monkeypatch):
         """The admixture step itself is NOT stubbed here on purpose: this is the
@@ -619,6 +635,150 @@ class TestPipelineRunFullFlow:
             skip_metrics=True,
         )
         assert "pca_figures" not in results
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineVizIsNonFatal — spec constraint D
+# ---------------------------------------------------------------------------
+
+
+def _boom(*args, **kwargs):
+    raise RuntimeError("viz exploded")
+
+
+class TestPipelineVizIsNonFatal:
+    """Spec constraint D: a broken plot must not fail the pipeline, and must not
+    vanish silently either. Before this PR only plot_projection was guarded."""
+
+    def _run_with_one_failing_step(self, tmp_path, monkeypatch, failing_step):
+        stub_pca_step(monkeypatch, 3)
+        stub_embedding_step(monkeypatch)
+        stub_admixture_step(monkeypatch)
+        stub_viz_steps(monkeypatch, **{failing_step: _boom})
+
+        pipeline = make_pipeline(tmp_path)
+        return pipeline.run(
+            n_pcs=3,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            skip_metrics=True,
+        )
+
+    def test_failing_viz_step_does_not_fail_the_pipeline(self, tmp_path, monkeypatch):
+        results = self._run_with_one_failing_step(tmp_path, monkeypatch, "run_admixture_viz_step")
+
+        # The pipeline returned normally (no exception propagated), and the
+        # compute outputs the failing viz step depended on are still present.
+        assert "embedding_file" in results
+        assert "admixture_dir" in results
+
+    def test_failure_is_recorded_in_results(self, tmp_path, monkeypatch):
+        results = self._run_with_one_failing_step(tmp_path, monkeypatch, "run_admixture_viz_step")
+
+        assert results["failed_viz_steps"] == ("admixture_viz",)
+
+    def test_a_warning_is_logged(self, tmp_path, monkeypatch, caplog):
+        with caplog.at_level("WARNING"):
+            self._run_with_one_failing_step(tmp_path, monkeypatch, "run_admixture_viz_step")
+
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("admixture_viz" in r.getMessage() for r in warnings)
+
+    def test_other_viz_steps_still_run_after_one_fails(self, tmp_path, monkeypatch):
+        results = self._run_with_one_failing_step(tmp_path, monkeypatch, "run_admixture_viz_step")
+
+        # admixture_viz's own "bars" key never got set, but the other three viz
+        # steps (pca_viz, embedding_viz, admixture_embedding_viz) all ran fine.
+        assert "pca_figures" in results
+        assert "embedding_figures" in results
+        assert "fit_embedding_figures" in results
+        assert "projection_plot" in results
+        assert "bars" not in results.get("admixture_figures", {})
+        assert "admixture_colored_embedding" in results["admixture_figures"]
+
+    def test_no_failures_yields_an_empty_tuple(self, tmp_path, monkeypatch):
+        stub_pca_step(monkeypatch, 3)
+        stub_embedding_step(monkeypatch)
+        stub_admixture_step(monkeypatch)
+        stub_viz_steps(monkeypatch)
+
+        pipeline = make_pipeline(tmp_path)
+        results = pipeline.run(
+            n_pcs=3,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            skip_metrics=True,
+        )
+
+        assert results["failed_viz_steps"] == ()
+
+    def test_projection_plot_substep_failure_is_recorded(self, tmp_path, monkeypatch):
+        """A projection-plot failure is a sub-step failure inside an otherwise-
+        successful embedding_viz step (VizStepResult.failed_substeps), not a
+        whole-step failure — but it must still reach failed_viz_steps under its
+        own name, and the run must complete normally."""
+        from manifold_genetics.pipeline.steps.viz import VizStepResult
+
+        stub_pca_step(monkeypatch, 3)
+        stub_embedding_step(monkeypatch)
+        stub_admixture_step(monkeypatch)
+        stub_viz_steps(
+            monkeypatch,
+            run_embedding_viz_step=lambda io, viz, *, embedding, method: VizStepResult(
+                figures=(Path("fit.png"), Path("project.png")),
+                fit_figures=(Path("fit.png"),),
+                project_figures=(Path("project.png"),),
+                projection_plot=None,
+                failed_substeps=("projection_plot",),
+            ),
+        )
+
+        pipeline = make_pipeline(tmp_path)
+        results = pipeline.run(
+            n_pcs=3,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            skip_metrics=True,
+        )
+
+        assert "projection_plot" in results["failed_viz_steps"]
+        assert "embedding_viz" not in results["failed_viz_steps"]
+        assert "embedding_file" in results
+        assert "projection_plot" not in results
+
+
+def test_skip_pca_visualization_with_admixture_visualization_on(tmp_path, monkeypatch):
+    """Regression, issue #72: read_colormap used to be imported inside the PCA-viz
+    branch, making it function-local for all of run(); the admixture bar-plot block
+    then raised UnboundLocalError for this flag combination.
+
+    Drives the real run_admixture_viz_step (not stubbed) with only its plotting
+    layer faked, so the code path that used to crash actually executes.
+    """
+    import manifold_genetics.pipeline.steps.viz as viz_mod
+
+    monkeypatch.setattr(viz_mod, "read_colormap", lambda p: {"Population": {"A": "#000000"}})
+    monkeypatch.setattr(viz_mod, "plot_admixture_bar_grid", lambda **k: None)
+
+    stub_admixture_step(monkeypatch)
+    pipeline = make_pipeline(tmp_path)
+
+    results = pipeline.run(
+        n_pcs=3,
+        k_min=2,
+        k_max=3,
+        skip_pca=True,
+        skip_pca_visualization=True,
+        skip_admixture_visualization=False,
+        skip_embedding=True,
+        skip_metrics=True,
+    )
+
+    assert results["failed_viz_steps"] == ()
+    assert results["admixture_figures"]["bars"].name == "project_bars.png"
 
 
 # ---------------------------------------------------------------------------

@@ -23,25 +23,40 @@ from .metrics import (
     run_admixture_metrics_step,
     run_geographic_metrics_step,
 )
-from .paths import admixture_output_paths, embedding_output_paths
+from .paths import admixture_output_paths, embedding_output_paths, figure_output_paths
 from .pca import PCAStepResult, pca_output_paths, run_pca, run_pca_step
+from .viz import (
+    VizStepResult,
+    plot_pca_pair_grids,
+    run_admixture_embedding_viz_step,
+    run_admixture_viz_step,
+    run_embedding_viz_step,
+    run_pca_viz_step,
+)
 
 __all__ = [
     "AdmixtureStepResult",
     "EmbeddingStepResult",
     "MetricsStepResult",
     "PCAStepResult",
+    "VizStepResult",
     "admixture_output_paths",
     "build_embedding_model",
     "embedding_output_paths",
+    "figure_output_paths",
     "metrics_output_paths",
     "pca_output_paths",
+    "plot_pca_pair_grids",
     "run_admixture",
+    "run_admixture_embedding_viz_step",
     "run_admixture_metrics_step",
     "run_admixture_step",
+    "run_admixture_viz_step",
     "run_embedding",
     "run_embedding_step",
+    "run_embedding_viz_step",
     "run_geographic_metrics_step",
     "run_pca",
     "run_pca_step",
+    "run_pca_viz_step",
 ]
