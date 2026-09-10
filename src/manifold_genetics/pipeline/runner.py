@@ -79,7 +79,8 @@ def run_pipeline(
         admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
         admix_batch_size: Batch size for neural admixture training
         admixture_backend: Optional AdmixtureBackend instance for testing
-                          (if None, uses neural-admixture via CLI)
+                          (if None, constructs a real NeuralAdmixtureBackend, which
+                          runs neural-admixture in its own child process)
         embedding: Embedding method - 'phate', 'umap', 'tsne', or 'diffusion_map' (default: 'phate')
         embedding_params: Optional dictionary of embedding-specific parameters
         embedding_input: Which dataset to embed - 'fit', 'project', or 'both' (default: 'both')

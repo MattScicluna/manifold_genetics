@@ -293,6 +293,9 @@ def test_cmd_pca_flashpca_output_dir_overrides_model_dir(monkeypatch, tmp_path):
     assert seen["output_dir"] == tmp_path / "flash"
 
 
+_STEP_ADMIXTURE = "manifold_genetics.pipeline.steps.admixture"
+
+
 def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
     calls = []
 
@@ -316,7 +319,7 @@ def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
                 paths[k] = csv
             return paths
 
-    monkeypatch.setattr(mg_cli, "NeuralAdmixture", FakeAdmix)
+    monkeypatch.setattr(f"{_STEP_ADMIXTURE}.NeuralAdmixture", FakeAdmix)
     out_dir = tmp_path / "admix"
     rc = mg_cli.main(
         [
@@ -343,8 +346,53 @@ def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
     assert ("fit", "fit", "fit") in calls
 
 
+def test_cmd_admixture_forwards_cluster_resources(monkeypatch, tmp_path):
+    """Constraint E: --threads / --num-gpus / --neuraladmixture-batch-size must
+    reach the backend; detect_cluster.sh feeds them."""
+    seen = {}
+
+    class FakeAdmix:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+        def fit(self, *a, **k):
+            pass
+
+        def transform(self, plink_prefix, output_prefix=None):
+            return {2: Path(f"{output_prefix}.2.csv")}
+
+    monkeypatch.setattr(f"{_STEP_ADMIXTURE}.NeuralAdmixture", FakeAdmix)
+    rc = mg_cli.main(
+        [
+            "admixture",
+            "--fit-plink",
+            "fit",
+            "--project-plink",
+            "proj",
+            "--fit-output",
+            str(tmp_path / "fit"),
+            "--project-output",
+            str(tmp_path / "project"),
+            "--k-min",
+            "2",
+            "--k-max",
+            "3",
+            "--threads",
+            "8",
+            "--num-gpus",
+            "0",
+            "--neuraladmixture-batch-size",
+            "256",
+        ]
+    )
+    assert rc == 0
+    assert seen["threads"] == 8
+    assert seen["num_gpus"] == 0
+    assert seen["batch_size"] == 256
+
+
 def test_cmd_admixture_missing_outputs_returns_1(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(mg_cli, "NeuralAdmixture", lambda **k: None)
+    monkeypatch.setattr(f"{_STEP_ADMIXTURE}.NeuralAdmixture", lambda **k: None)
     rc = mg_cli.main(["admixture", "--fit-plink", "fit", "--output", str(tmp_path)])
     assert rc == 1
     assert "fit-output" in capsys.readouterr().err

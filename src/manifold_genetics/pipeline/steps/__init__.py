@@ -6,6 +6,11 @@ Each compute step lives in its own module and exposes a pure
 and the pipeline orchestrator call these directly, in-process.
 """
 
+from .admixture import (
+    AdmixtureStepResult,
+    run_admixture,
+    run_admixture_step,
+)
 from .embedding import (
     EmbeddingStepResult,
     build_embedding_model,
@@ -22,6 +27,7 @@ from .paths import admixture_output_paths, embedding_output_paths
 from .pca import PCAStepResult, pca_output_paths, run_pca, run_pca_step
 
 __all__ = [
+    "AdmixtureStepResult",
     "EmbeddingStepResult",
     "MetricsStepResult",
     "PCAStepResult",
@@ -30,7 +36,9 @@ __all__ = [
     "embedding_output_paths",
     "metrics_output_paths",
     "pca_output_paths",
+    "run_admixture",
     "run_admixture_metrics_step",
+    "run_admixture_step",
     "run_embedding",
     "run_embedding_step",
     "run_geographic_metrics_step",

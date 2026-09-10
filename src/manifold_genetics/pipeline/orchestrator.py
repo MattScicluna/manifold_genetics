@@ -5,7 +5,6 @@ Coordinates PCA, Admixture, Embeddings, Visualization, and Metrics.
 """
 
 import logging
-import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union
 
@@ -16,7 +15,8 @@ from ..visualization import (
     plot_projection,
     visualize,
 )
-from .config import EmbeddingConfig, IOConfig, PCAConfig
+from .config import AdmixtureConfig, EmbeddingConfig, IOConfig, PCAConfig
+from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
 from .steps.paths import metrics_output_paths, pca_output_paths
@@ -76,7 +76,8 @@ class Pipeline:
             fit_colormap: Optional override colormap JSON for fit dataset
             project_colormap: Optional override colormap JSON for project dataset
             admixture_backend: Optional AdmixtureBackend instance for testing
-                              (if None, uses neural-admixture via CLI)
+                              (if None, constructs a real NeuralAdmixtureBackend, which
+                              runs neural-admixture in its own child process)
             projection_plot_fit_column: Column from fit colormap to use for projection plot
             projection_plot_project_column: Column from project colormap to use for projection plot
 
@@ -261,67 +262,22 @@ class Pipeline:
             logger.info("STEP 2: ADMIXTURE")
             logger.info("=" * 70)
 
-            admix_dir = self.output_dir / "admixture"
-            admix_dir.mkdir(exist_ok=True)
-            admix_checkpoints_dir = admix_dir / "checkpoints"
-            admix_checkpoints_dir.mkdir(parents=True, exist_ok=True)
+            admix_cfg = AdmixtureConfig(
+                k_min=k_min,
+                k_max=k_max,
+                threads=admix_threads,
+                num_gpus=admix_gpus,
+                batch_size=admix_batch_size,
+            )
 
-            # Use provided backend or fall back to CLI
-            if self.admixture_backend is not None:
-                logger.info("Running admixture with provided backend (testing mode)")
+            admix_result = run_admixture_step(io, admix_cfg, backend=self.admixture_backend)
 
-                # Fit on fit dataset
-                self.admixture_backend.fit(
-                    str(self.fit_plink_prefix), str(admix_checkpoints_dir), model_name="fit"
-                )
-
-                # Apply to both fit and project datasets
-                fit_q_files_from_backend = self.admixture_backend.fit_transform(
-                    str(self.fit_plink_prefix), str(admix_dir / "fit")
-                )
-
-                project_q_files_from_backend = self.admixture_backend.transform(
-                    str(self.project_plink_prefix), str(admix_dir / "project")
-                )
-
-                logger.info(f"✓ Admixture complete using {type(self.admixture_backend).__name__}")
-            else:
-                logger.info("Running admixture via CLI")
-                admix_cmd = [
-                    "manifold-genetics",
-                    "admixture",
-                    "--fit-plink",
-                    str(self.fit_plink_prefix),
-                    "--project-plink",
-                    str(self.project_plink_prefix),
-                    "--neuraladmixture-output-dir",
-                    str(admix_checkpoints_dir),
-                    "--fit-output",
-                    str(admix_dir / "fit"),
-                    "--project-output",
-                    str(admix_dir / "project"),
-                    "--k-min",
-                    str(k_min),
-                    "--k-max",
-                    str(k_max),
-                ]
-                if admix_threads:
-                    admix_cmd.extend(["--threads", str(admix_threads)])
-                if admix_gpus is not None:
-                    admix_cmd.extend(["--num-gpus", str(admix_gpus)])
-                if admix_batch_size is not None:
-                    admix_cmd.extend(["--neuraladmixture-batch-size", str(admix_batch_size)])
-
-                subprocess.run(admix_cmd, check=True)
-
-            fit_q_files = {k: admix_dir / f"fit.{k}.csv" for k in range(k_min, k_max + 1)}
-            project_q_files = {k: admix_dir / f"project.{k}.csv" for k in range(k_min, k_max + 1)}
-
+            admix_dir = admix_result.dir
             results["admixture_dir"] = admix_dir
-            results["admixture_checkpoints_dir"] = admix_checkpoints_dir
-            results["fit_q_files"] = fit_q_files
-            results["project_q_files"] = project_q_files
-            results["q_files"] = project_q_files
+            results["admixture_checkpoints_dir"] = admix_result.checkpoints_dir
+            results["fit_q_files"] = admix_result.fit_q_files
+            results["project_q_files"] = admix_result.project_q_files
+            results["q_files"] = admix_result.project_q_files
 
             # Admixture bar plot (placed in figures/admixture/)
             if not skip_admixture_visualization:
