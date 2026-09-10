@@ -599,7 +599,7 @@ def cmd_pipeline(args):
     projection_plot_project_column = getattr(args, "projection_plot_project_column", None)
 
     # Use the canonical run_pipeline function
-    results = run_pipeline(
+    result = run_pipeline(
         fit_plink=args.fit_plink,
         project_plink=args.project_plink,
         output_dir=args.output,
@@ -639,19 +639,19 @@ def cmd_pipeline(args):
     print(f"Pipeline complete!")
     print(f"Output directory: {args.output}")
 
-    if "metrics" in results:
+    if result.metrics:
         print("\nMetrics:")
-        if "geographic" in results["metrics"]:
-            geo = results["metrics"]["geographic"]
+        if "geographic" in result.metrics:
+            geo = result.metrics["geographic"]
             print(f"  Geographic preservation: {geo['correlation']:.4f} (p={geo['p_value']:.2e})")
-        if "admixture" in results["metrics"]:
+        if "admixture" in result.metrics:
             print("  Admixture preservation:")
-            for k, metrics in results["metrics"]["admixture"].items():
+            for k, metrics in result.metrics["admixture"].items():
                 print(f"    K={k}: {metrics['correlation']:.4f}")
 
-    if results.get("failed_viz_steps"):
-        names = ", ".join(results["failed_viz_steps"])
-        print(f"\n⚠ {len(results['failed_viz_steps'])} visualization step(s) failed: {names}")
+    if result.failed_steps:
+        names = ", ".join(result.failed_steps)
+        print(f"\n⚠ {len(result.failed_steps)} visualization step(s) failed: {names}")
 
     return 0
 

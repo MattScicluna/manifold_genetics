@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 
 from .orchestrator import Pipeline
+from .result import PipelineResult
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def run_pipeline(
     skip_pca_visualization: bool = False,
     skip_admixture_visualization: bool = False,
     skip_metrics: bool = False,
-) -> Dict:
+) -> PipelineResult:
     """
     Run the complete manifold-genetics pipeline.
 
@@ -97,19 +98,11 @@ def run_pipeline(
         skip_metrics: Skip metrics computation
 
     Returns:
-        Dictionary with paths to outputs and computed metrics. Keys include:
-        - fit_pca_file: Path to fit PCA coordinates CSV
-        - project_pca_file: Path to project PCA coordinates CSV
-        - pca_coords: pandas DataFrame with PCA coordinates
-        - admixture_dir: Path to admixture output directory
-        - fit_q_files: Dict mapping K -> fit admixture CSV path
-        - project_q_files: Dict mapping K -> project admixture CSV path
-        - embedding_file: Path to embedding coordinates CSV
-        - embedding_coords: pandas DataFrame with embedding coordinates
-        - pca_figures: List of PCA plot paths
-        - embedding_figures: List of embedding plot paths
-        - admixture_figures: Dict with admixture plot paths
-        - metrics: Dict with geographic and admixture preservation metrics
+        PipelineResult with the typed outputs of every stage that ran (PCA,
+        admixture, embedding results; figure families; geographic/admixture
+        metrics results; and any visualization steps whose failure was
+        tolerated). A stage that was skipped leaves its field None (or its
+        figure family empty).
 
     Examples:
         >>> # Basic usage with shared labels/colormap

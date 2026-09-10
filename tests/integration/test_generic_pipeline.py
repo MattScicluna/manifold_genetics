@@ -67,24 +67,16 @@ def test_generic_pipeline_with_precomputed_admixture(
         )
 
         # Validate PCA outputs
-        assert "pca_coords" in results
-        assert results["pca_coords"] is not None
-
-        # Handle both DataFrame and string path returns
-        if isinstance(results["pca_coords"], pd.DataFrame):
-            pca_df = results["pca_coords"]
-        else:
-            pca_file = Path(results["pca_coords"])
-            assert pca_file.exists(), "PCA output file should exist"
-            pca_df = pd.read_csv(pca_file)
+        assert results.pca.coords_df is not None
+        pca_df = results.pca.coords_df
 
         assert "sample_id" in pca_df.columns
         assert len(pca_df) == 50  # Project subset has 50 samples
         assert len(pca_df.columns) == 11  # sample_id + 10 PCs
 
         # Validate admixture outputs
-        assert "admixture_dir" in results
-        admix_dir = Path(results["admixture_dir"])
+        assert results.admixture is not None
+        admix_dir = Path(results.admixture.dir)
         assert admix_dir.exists(), "Admixture directory should exist"
 
         # Check that Q files were created for K=2,3
@@ -101,16 +93,8 @@ def test_generic_pipeline_with_precomputed_admixture(
             assert len(fit_q_df) == 50
 
         # Validate embedding outputs
-        assert "embedding_coords" in results
-        assert results["embedding_coords"] is not None
-
-        # Handle both DataFrame and string path returns
-        if isinstance(results["embedding_coords"], pd.DataFrame):
-            embedding_df = results["embedding_coords"]
-        else:
-            embedding_file = Path(results["embedding_coords"])
-            assert embedding_file.exists(), "Embedding output file should exist"
-            embedding_df = pd.read_csv(embedding_file)
+        assert results.embedding.coords_df is not None
+        embedding_df = results.embedding.coords_df
 
         assert "sample_id" in embedding_df.columns
         assert len(embedding_df) == 50
@@ -192,8 +176,8 @@ def test_pipeline_with_fit_only(
     )
 
     # Should still work and produce outputs
-    assert results["pca_coords"] is not None
-    assert results["embedding_coords"] is not None
+    assert results.pca.coords_df is not None
+    assert results.embedding.coords_df is not None
 
     # Check that fit and project outputs exist
     pca_dir = output_dir / "pca"
@@ -243,10 +227,10 @@ def test_skip_pca_resolves_existing_pca_files(
         skip_metrics=True,
     )
 
-    assert "fit_pca_file" in results, "fit_pca_file should be resolved from pre-existing file"
-    assert "pca_file" in results, "pca_file should be resolved from pre-existing project file"
-    assert results["fit_pca_file"] == fit_pca_file
-    assert results["pca_file"] == project_pca_file
+    assert results.pca.fit_pca == fit_pca_file, "fit_pca should be resolved from pre-existing file"
+    assert (
+        results.pca.project_pca == project_pca_file
+    ), "project_pca should be resolved from pre-existing file"
 
 
 @pytest.mark.integration
@@ -322,6 +306,6 @@ def test_skip_pca_runs_embedding_with_existing_pca_files(
         skip_metrics=True,
     )
 
-    assert results["embedding_file"].exists()
-    assert "embedding_coords" in results
-    assert len(results["embedding_coords"]) == len(small_pca_data)
+    assert results.embedding.embedding_file.exists()
+    assert results.embedding.coords_df is not None
+    assert len(results.embedding.coords_df) == len(small_pca_data)

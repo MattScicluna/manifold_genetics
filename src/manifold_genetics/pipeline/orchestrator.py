@@ -9,12 +9,12 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from ..embeddings import PHATE, TSNE, UMAP, DiffusionMap
 from .config import AdmixtureConfig, EmbeddingConfig, PCAConfig, build_configs
+from .result import PipelineResult
 from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
-from .steps.paths import metrics_output_paths, pca_output_paths
+from .steps.paths import figure_output_paths, metrics_output_paths, pca_output_paths
 from .steps.pca import PCAStepResult, run_pca_step
 from .steps.viz import (
     run_admixture_embedding_viz_step,
@@ -141,7 +141,7 @@ class Pipeline:
             projection_plot_project_column=projection_plot_project_column,
         )
 
-        self._io_config = configs.io
+        self._io = configs.io
         self._viz_config = configs.viz
 
         # Loose attributes kept for backward compatibility (existing callers and
@@ -186,7 +186,7 @@ class Pipeline:
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
         admix_batch_size: Optional[int] = None,
-    ) -> Dict:
+    ) -> PipelineResult:
         """
         Run full pipeline.
 
@@ -209,12 +209,13 @@ class Pipeline:
             admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
 
         Returns:
-            Dictionary with paths to outputs and computed metrics
+            PipelineResult with the typed outputs of every stage that ran; a
+            stage that was skipped leaves its field None (or its figure family
+            empty).
         """
-        results = {}
         failed = []
 
-        io = self._io_config
+        io = self._io
         pca_cfg = PCAConfig(n_pcs=n_pcs)
         pca_paths = pca_output_paths(io, pca_cfg)
         # admix_group_column / admix_within_group_order are run()-time parameters,
@@ -228,29 +229,19 @@ class Pipeline:
             admix_within_group_order=admix_within_group_order,
         )
 
-        # Step 1: PCA
+        # ---- Step 1: PCA ----
         if not skip_pca:
             logger.info("=" * 70)
             logger.info("STEP 1: PCA")
             logger.info("=" * 70)
 
-            pca_result = run_pca_step(io, pca_cfg)
-
-            results["fit_pca_file"] = pca_result.fit_pca
-            results["project_pca_file"] = pca_result.project_pca
-            results["pca_file"] = pca_result.project_pca
-            results["pca_coords"] = pca_result.coords_df
-
+            r_pca = run_pca_step(io, pca_cfg)
         else:
             # PCA skipped — resolve expected paths so embedding can still run
-            pca_result = _resolve_skipped_pca(io, pca_cfg)
-            if pca_result.fit_pca is not None:
-                results["fit_pca_file"] = pca_result.fit_pca
-            if pca_result.project_pca is not None:
-                results["project_pca_file"] = pca_result.project_pca
-                results["pca_file"] = pca_result.project_pca
+            r_pca = _resolve_skipped_pca(io, pca_cfg)
 
-        # Step 1.5: PCA Visualization (independent of PCA computation)
+        # ---- Step 1.5: PCA Visualization (independent of PCA computation) ----
+        pca_figures = ()
         if not skip_pca_visualization:
             logger.info("=" * 70)
             logger.info("STEP 1.5: PCA VISUALIZATION")
@@ -265,12 +256,14 @@ class Pipeline:
                     lambda: run_pca_viz_step(io, pca_file=pca_file, n_pcs=n_pcs),
                 )
                 if pca_viz_result is not None:
-                    results["pca_figures"] = list(pca_viz_result.figures)
+                    pca_figures = tuple(pca_viz_result.figures)
             else:
                 logger.warning(f"PCA file not found: {pca_file}")
                 logger.warning("Run with --skip-pca=False to compute PCA first")
 
-        # Step 2: Admixture
+        # ---- Step 2: Admixture ----
+        r_admix = None
+        admixture_figures = {}
         if not skip_admixture:
             logger.info("=" * 70)
             logger.info("STEP 2: ADMIXTURE")
@@ -284,34 +277,26 @@ class Pipeline:
                 batch_size=admix_batch_size,
             )
 
-            admix_result = run_admixture_step(io, admix_cfg, backend=self.admixture_backend)
-
-            admix_dir = admix_result.dir
-            results["admixture_dir"] = admix_dir
-            results["admixture_checkpoints_dir"] = admix_result.checkpoints_dir
-            results["fit_q_files"] = admix_result.fit_q_files
-            results["project_q_files"] = admix_result.project_q_files
-            results["q_files"] = admix_result.project_q_files
+            r_admix = run_admixture_step(io, admix_cfg, backend=self.admixture_backend)
 
             # Admixture bar plot (placed in figures/admixture/)
             if not skip_admixture_visualization:
                 admix_viz_result = _run_viz(
                     "admixture_viz",
                     failed,
-                    lambda: run_admixture_viz_step(io, viz_cfg, admixture=admix_result),
+                    lambda: run_admixture_viz_step(io, viz_cfg, admixture=r_admix),
                 )
                 if admix_viz_result is not None:
-                    results.setdefault("admixture_figures", {})["bars"] = admix_viz_result.figures[
-                        0
-                    ]
+                    admixture_figures["bars"] = figure_output_paths(io)["admixture_bars"]
 
-        # Step 3: Embedding
+        # ---- Step 3: Embedding ----
+        r_emb = None
         if not skip_embedding:
             logger.info("=" * 70)
             logger.info(f"STEP 3: EMBEDDING ({embedding.upper()})")
             logger.info("=" * 70)
 
-            if "fit_pca_file" not in results and "project_pca_file" not in results:
+            if r_pca.fit_pca is None and r_pca.project_pca is None:
                 raise RuntimeError(
                     "No PCA files found. PCA was skipped (--skip-pca) and no cached "
                     f"output exists at {pca_paths['fit_pca']} or "
@@ -327,21 +312,12 @@ class Pipeline:
 
             # PCA outputs may have come from the step or been resolved from disk
             # under --skip-pca; either way the embedding step takes them as a result.
-            pca_result = PCAStepResult(
-                fit_pca=results.get("fit_pca_file"),
-                project_pca=results.get("project_pca_file"),
-            )
+            r_emb = run_embedding_step(io, emb_cfg, pca=r_pca)
 
-            emb_result = run_embedding_step(io, emb_cfg, pca=pca_result)
-
-            embedding_file = emb_result.embedding_file
-            results["embedding_file"] = embedding_file
-            results["embedding_coords"] = emb_result.coords_df
-
-            if emb_result.fit_embedding_file is not None:
-                results["fit_embedding_file"] = emb_result.fit_embedding_file
-
-        # Step 4: Embedding Visualization
+        # ---- Step 4: Embedding Visualization ----
+        fit_embedding_figures = ()
+        embedding_figures = ()
+        projection_plot = None
         if not skip_visualization and not skip_embedding:
             logger.info("=" * 70)
             logger.info("STEP 4: EMBEDDING VISUALIZATION")
@@ -350,46 +326,46 @@ class Pipeline:
             emb_viz_result = _run_viz(
                 "embedding_viz",
                 failed,
-                lambda: run_embedding_viz_step(io, viz_cfg, embedding=emb_result, method=embedding),
+                lambda: run_embedding_viz_step(io, viz_cfg, embedding=r_emb, method=embedding),
             )
             if emb_viz_result is not None:
-                if emb_result.fit_embedding_file is not None:
-                    results["fit_embedding_figures"] = list(emb_viz_result.fit_figures)
-                results["embedding_figures"] = list(emb_viz_result.project_figures)
+                if r_emb.fit_embedding_file is not None:
+                    fit_embedding_figures = tuple(emb_viz_result.fit_figures)
+                embedding_figures = tuple(emb_viz_result.project_figures)
                 if emb_viz_result.projection_plot is not None:
-                    results["projection_plot"] = emb_viz_result.projection_plot
+                    projection_plot = emb_viz_result.projection_plot
                 failed.extend(emb_viz_result.failed_substeps)
 
-        # Step 4.5: Admixture-Colored Embedding Visualization (requires embedding to exist)
+        # ---- Step 4.5: Admixture-Colored Embedding Visualization (requires embedding) ----
         if not skip_admixture_visualization and not skip_embedding and not skip_admixture:
             logger.info("=" * 70)
             logger.info("STEP 4.5: ADMIXTURE-COLORED EMBEDDING VISUALIZATION")
             logger.info("=" * 70)
 
-            if "embedding_file" in results and "admixture_dir" in results:
+            if r_emb is not None and r_admix is not None:
                 admix_emb_viz_result = _run_viz(
                     "admixture_embedding_viz",
                     failed,
                     lambda: run_admixture_embedding_viz_step(
-                        io, embedding=emb_result, admixture=admix_result
+                        io, embedding=r_emb, admixture=r_admix
                     ),
                 )
                 if admix_emb_viz_result is not None:
-                    results.setdefault("admixture_figures", {})["admixture_colored_embedding"] = (
-                        admix_emb_viz_result.figures[0]
-                    )
+                    admixture_figures["admixture_colored_embedding"] = figure_output_paths(io)[
+                        "admixture_colored_embedding"
+                    ]
             else:
                 logger.warning(
                     "Skipping admixture-colored embedding visualization - missing embedding or admixture data"
                 )
 
-        # Step 5: Metrics
+        # ---- Step 5: Metrics ----
+        r_geo = None
+        r_admix_metrics = None
         if not skip_metrics and not skip_embedding:
             logger.info("=" * 70)
             logger.info("STEP 5: METRICS")
             logger.info("=" * 70)
-
-            metrics = {}
 
             metrics_paths = metrics_output_paths(io)
             # Created unconditionally: the output tree has always contained metrics/
@@ -398,26 +374,20 @@ class Pipeline:
 
             # Geographic preservation
             if self.geographic_coords:
-                geo_result = run_geographic_metrics_step(
-                    embedding_file,
+                r_geo = run_geographic_metrics_step(
+                    r_emb.embedding_file,
                     self.geographic_coords,
                     metrics_paths["geographic"],
                 )
-                metrics["geographic"] = geo_result.values
 
             # Admixture preservation
-            if not skip_admixture and "admixture_dir" in results:
-                admix_result = run_admixture_metrics_step(
-                    embedding_file,
-                    results["admixture_dir"] / "project",
+            if not skip_admixture and r_admix is not None:
+                r_admix_metrics = run_admixture_metrics_step(
+                    r_emb.embedding_file,
+                    r_admix.q_prefix,
                     range(k_min, k_max + 1),
                     metrics_paths["admixture"],
                 )
-                metrics["admixture"] = admix_result.values
-
-            results["metrics"] = metrics
-
-        results["failed_viz_steps"] = tuple(failed)
 
         # Summary
         logger.info("=" * 70)
@@ -425,41 +395,16 @@ class Pipeline:
         logger.info("=" * 70)
         logger.info(f"Output directory: {self.output_dir}")
 
-        return results
-
-    def _get_embedding_model(self, method: str, params: Optional[Dict] = None):
-        """Get embedding model instance.
-
-        Dead code: nothing calls this any more. Superseded by
-        ``pipeline.steps.embedding.build_embedding_model``, which is the live
-        path's method-to-model mapping. Scheduled for deletion in a later PR.
-        Its defaults deliberately differ from the live path (e.g. it leaves
-        PHATE's own ``n_landmark=2000`` default in place, whereas the live path
-        always passes ``n_landmark`` explicitly, ``None`` when unset) — do not
-        use it as a reference for current behaviour.
-        """
-        if params is None:
-            params = {}
-
-        # Set defaults for each method
-        if method == "phate":
-            defaults = {"n_components": 2, "knn": 25}
-            defaults.update(params)
-            return PHATE(**defaults)
-        elif method == "umap":
-            defaults = {"n_components": 2, "n_neighbors": 15}
-            defaults.update(params)
-            return UMAP(**defaults)
-        elif method == "tsne":
-            defaults = {"n_components": 2, "perplexity": 30}
-            defaults.update(params)
-            return TSNE(**defaults)
-        elif method == "diffusion_map":
-            defaults = {"n_components": 2, "knn": 25}
-            defaults.update(params)
-            return DiffusionMap(**defaults)
-        else:
-            raise ValueError(
-                f"Unknown embedding method: {method}. "
-                "Choose from: phate, umap, tsne, diffusion_map"
-            )
+        return PipelineResult(
+            pca=r_pca,
+            admixture=r_admix,
+            embedding=r_emb,
+            geographic_metrics=r_geo,
+            admixture_metrics=r_admix_metrics,
+            pca_figures=pca_figures,
+            fit_embedding_figures=fit_embedding_figures,
+            embedding_figures=embedding_figures,
+            projection_plot=projection_plot,
+            admixture_figures=admixture_figures,
+            failed_steps=tuple(failed),
+        )
