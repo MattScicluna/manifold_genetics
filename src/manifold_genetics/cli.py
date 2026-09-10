@@ -11,9 +11,9 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from .admixture import NeuralAdmixture
 from .pipeline import run_pipeline
 from .pipeline.steps import (
+    run_admixture,
     run_admixture_metrics_step,
     run_embedding,
     run_geographic_metrics_step,
@@ -179,37 +179,25 @@ def cmd_admixture(args):
     checkpoint_dir = Path(
         args.neuraladmixture_output_dir or args.output or Path.cwd() / "admixture_outputs"
     )
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.fit_output or not args.project_output:
         raise ValueError("Please provide --fit-output and --project-output for admixture outputs.")
     fit_output_path = Path(args.fit_output)
     project_output_path = Path(args.project_output)
-    fit_output_path.parent.mkdir(parents=True, exist_ok=True)
-    project_output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    admix = NeuralAdmixture(
+    fit_q_files, project_q_files = run_admixture(
+        fit_prefix,
+        project_prefix,
+        checkpoints_dir=checkpoint_dir,
+        fit_output=fit_output_path,
+        project_output=project_output_path,
         k_min=args.k_min,
         k_max=args.k_max,
         force=args.force,
         threads=args.threads,
         num_gpus=args.num_gpus,
         batch_size=getattr(args, "neuraladmixture_batch_size", None),
-    )
-
-    # Fit models
-    admix.fit(fit_prefix, output_dir=checkpoint_dir, model_name=args.model_name)
-
-    # Optional: infer on fit subset
-    fit_q_files = admix.transform(
-        fit_prefix,
-        output_prefix=fit_output_path,
-    )
-
-    # Project/infer on project subset
-    project_q_files = admix.transform(
-        project_prefix,
-        output_prefix=project_output_path,
+        model_name=args.model_name,
     )
 
     print(f"Admixture fit on {fit_prefix} and projected {project_prefix}")

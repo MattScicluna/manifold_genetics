@@ -63,7 +63,7 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
     calls = []
 
     class FakeAdmix:
-        def __init__(self, k_min, k_max, force, threads, num_gpus, batch_size=None):
+        def __init__(self, k_min, k_max, force, threads, num_gpus, batch_size=None, backend=None):
             calls.append(("init", k_min, k_max, force, threads, num_gpus, batch_size))
 
         def fit(self, prefix, output_dir=None, model_name=None):
@@ -85,7 +85,7 @@ def test_cli_admixture_fit_project(monkeypatch, tmp_path):
         def fit_transform(self, *args, **kwargs):
             raise AssertionError("fit_transform should not be called in fit+project mode")
 
-    monkeypatch.setattr(mg_cli, "NeuralAdmixture", FakeAdmix)
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.admixture.NeuralAdmixture", FakeAdmix)
 
     out_dir = tmp_path / "admix"
     args = argparse.Namespace(
