@@ -636,7 +636,9 @@ def test_cmd_plot_dispatch(monkeypatch, tmp_path, stub_validation):
 def test_cmd_plot_pca_dispatch(monkeypatch, tmp_path, stub_validation):
     cmap = tmp_path / "cmap.json"
     cmap.write_text(json.dumps({"Population": {"A": "#000000"}}))
-    monkeypatch.setattr(mg_cli, "plot_pca_pairs", lambda **k: tmp_path / "pca.png")
+    monkeypatch.setattr(
+        "manifold_genetics.pipeline.steps.viz.plot_pca_pairs", lambda **k: tmp_path / "pca.png"
+    )
     rc = mg_cli.main(
         [
             "plot-pca",

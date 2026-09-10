@@ -10,10 +10,12 @@ constraint D. These step functions may raise; the orchestrator's _run_viz
 wrapper is what catches. That contract is tested in test_orchestrator.py.
 """
 
+import json
 from pathlib import Path
 
 import pytest
 
+from manifold_genetics import cli as mg_cli
 from manifold_genetics.pipeline.config import (
     AdmixtureConfig,
     EmbeddingConfig,
@@ -142,6 +144,53 @@ class TestPcaVizStep:
         io = make_io(tmp_path)
         run_pca_viz_step(io, VizConfig(), pca_file=tmp_path / "p.csv", n_pcs=3)
         assert figure_output_paths(io)["pca"].is_dir()
+
+
+def test_cmd_plot_pca_uses_the_same_seam_as_the_pipeline_step(tmp_path, monkeypatch):
+    """``manifold-genetics plot-pca`` and ``run_pca_viz_step`` both go through
+    ``plot_pca_pair_grids`` now, so patching ``plot_pca_pairs`` at its one
+    definition intercepts both callers, and the CLI's output filenames match
+    the naming the pipeline step already uses.
+    """
+    for name in [
+        "validate_embedding_csv",
+        "validate_labels_csv",
+        "validate_colormap_json",
+        "validate_labels_colormap_match",
+        "validate_sample_id_overlap",
+    ]:
+        monkeypatch.setattr(mg_cli, name, lambda *a, **k: None)
+
+    produced = []
+
+    def fake_plot_pca_pairs(**kwargs):
+        produced.append(kwargs["output_path"])
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(f"{MODULE}.plot_pca_pairs", fake_plot_pca_pairs)
+
+    cmap_path = tmp_path / "cmap.json"
+    cmap_path.write_text(json.dumps(COLORMAP))
+    out_dir = tmp_path / "figs"
+
+    rc = mg_cli.main(
+        [
+            "plot-pca",
+            "--input",
+            "pca.csv",
+            "--labels",
+            "labels.csv",
+            "--colormap",
+            str(cmap_path),
+            "--output",
+            str(out_dir),
+            "--n-pcs",
+            "4",
+        ]
+    )
+
+    assert rc == 0
+    assert [p.name for p in produced] == [f"pca_pairs_by_{col}.png" for col in COLORMAP]
 
 
 # ---------------------------------------------------------------------------

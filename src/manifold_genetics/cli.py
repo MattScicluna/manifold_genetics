@@ -13,6 +13,7 @@ from typing import List, Optional
 
 from .pipeline import run_pipeline
 from .pipeline.steps import (
+    plot_pca_pair_grids,
     run_admixture,
     run_admixture_metrics_step,
     run_embedding,
@@ -36,7 +37,6 @@ from .visualization import (
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
     plot_knn_composition,
-    plot_pca_pairs,
     plot_projection,
     visualize,
 )
@@ -471,19 +471,13 @@ def cmd_plot_pca(args):
     with open(args.colormap) as f:
         colormap_dict = json.load(f)
 
-    figure_paths = []
-    for label_col in colormap_dict.keys():
-        output_path = output_dir / f"pca_pairs_by_{label_col}.png"
-        plot_path = plot_pca_pairs(
-            pca_coords=args.input,
-            labels=args.labels,
-            colormap=colormap_dict,
-            output_path=output_path,
-            label_column=label_col,
-            n_pcs=args.n_pcs,
-            title=f"PCA Pairs by {label_col}",
-        )
-        figure_paths.append(plot_path)
+    figure_paths = plot_pca_pair_grids(
+        pca_coords=args.input,
+        labels=args.labels,
+        colormap=colormap_dict,
+        output_dir=output_dir,
+        n_pcs=args.n_pcs,
+    )
 
     print(f"PCA visualization complete:")
     for path in figure_paths:

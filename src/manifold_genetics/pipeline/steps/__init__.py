@@ -27,6 +27,7 @@ from .paths import admixture_output_paths, embedding_output_paths, figure_output
 from .pca import PCAStepResult, pca_output_paths, run_pca, run_pca_step
 from .viz import (
     VizStepResult,
+    plot_pca_pair_grids,
     run_admixture_embedding_viz_step,
     run_admixture_viz_step,
     run_embedding_viz_step,
@@ -45,6 +46,7 @@ __all__ = [
     "figure_output_paths",
     "metrics_output_paths",
     "pca_output_paths",
+    "plot_pca_pair_grids",
     "run_admixture",
     "run_admixture_embedding_viz_step",
     "run_admixture_metrics_step",

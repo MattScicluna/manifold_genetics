@@ -19,7 +19,7 @@ the fit/project figures already produced in the same step.
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Tuple
+from typing import Mapping, Tuple
 
 from ...utils.io import read_colormap
 from ...visualization import (
@@ -38,11 +38,46 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "VizStepResult",
+    "plot_pca_pair_grids",
     "run_admixture_embedding_viz_step",
     "run_admixture_viz_step",
     "run_embedding_viz_step",
     "run_pca_viz_step",
 ]
+
+
+def plot_pca_pair_grids(
+    pca_coords,
+    labels,
+    colormap: Mapping,
+    output_dir: Path,
+    n_pcs: int,
+) -> list:
+    """Write one PCA-pairs grid per label column in ``colormap``.
+
+    The shared seam behind both ``manifold-genetics plot-pca`` and the pipeline's
+    PCA visualization step, so the ``pca_pairs_by_{column}.png`` naming lives in
+    one place.
+
+    Returns the figure paths, in colormap-key order.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    figure_paths = []
+    for label_col in colormap.keys():
+        output_path = output_dir / f"pca_pairs_by_{label_col}.png"
+        plot_path = plot_pca_pairs(
+            pca_coords=pca_coords,
+            labels=labels,
+            colormap=colormap,
+            output_path=output_path,
+            label_column=label_col,
+            n_pcs=n_pcs,
+            title=f"PCA Pairs by {label_col}",
+        )
+        figure_paths.append(plot_path)
+
+    return figure_paths
 
 
 @dataclass(frozen=True)
@@ -57,23 +92,17 @@ def run_pca_viz_step(io: IOConfig, viz: VizConfig, *, pca_file: Path, n_pcs: int
     """Plot one PCA-pairs grid per column in the project colormap."""
     paths = figure_output_paths(io)
     pca_figures_dir = paths["pca"]
-    pca_figures_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Plotting PCA pairs grid via plot_pca_pairs")
     colormap_dict = read_colormap(io.project_colormap)
-    pca_figure_paths = []
-    for label_col in colormap_dict.keys():
-        output_path = pca_figures_dir / f"pca_pairs_by_{label_col}.png"
-        plot_path = plot_pca_pairs(
-            pca_coords=pca_file,
-            labels=io.project_labels,
-            colormap=colormap_dict,
-            output_path=output_path,
-            label_column=label_col,
-            n_pcs=n_pcs,
-            title=f"PCA Pairs by {label_col}",
-        )
-        pca_figure_paths.append(plot_path)
+    pca_figure_paths = plot_pca_pair_grids(
+        pca_coords=pca_file,
+        labels=io.project_labels,
+        colormap=colormap_dict,
+        output_dir=pca_figures_dir,
+        n_pcs=n_pcs,
+    )
+    for plot_path in pca_figure_paths:
         logger.info(f"Saved PCA pairs plot: {plot_path}")
 
     logger.info(f"Created PCA plots: {len(pca_figure_paths)} figures")
