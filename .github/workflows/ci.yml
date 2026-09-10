@@ -109,4 +109,5 @@ jobs:
       
       - name: Run flake8
         run: |
-          uv run flake8 src tests --max-line-length=88 --extend-ignore=E501,E203,W503,F841,F541
+          # Flags live in .flake8 so a local `flake8 src tests` matches CI exactly.
+          uv run flake8 src tests
