@@ -23,7 +23,11 @@ __all__ = ["PipelineResult"]
 class PipelineResult:
     """Typed outputs of a pipeline run. Replaces the loose results dict."""
 
-    # Compute step results; None when that step was skipped
+    # Compute step results. ``admixture``, ``embedding`` and the two metrics
+    # results are None when their stage did not run. ``pca`` is the exception:
+    # under ``skip_pca`` it is still a PCAStepResult, with ``skipped=True`` and
+    # its paths filled only from cached output already on disk (possibly both
+    # None). Check ``.skipped``, not truthiness, to tell whether PCA ran.
     pca: Optional[PCAStepResult] = None
     admixture: Optional[AdmixtureStepResult] = None
     embedding: Optional[EmbeddingStepResult] = None
