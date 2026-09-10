@@ -499,17 +499,16 @@ def stub_viz_steps(monkeypatch, **overrides):
     fake of the caller's choosing (typically one that raises).
     """
     import manifold_genetics.pipeline.orchestrator as orch
-    from manifold_genetics.pipeline.steps.viz import VizStepResult
+    from manifold_genetics.pipeline.steps.viz import EmbeddingVizResult, VizStepResult
 
     defaults = {
-        "run_pca_viz_step": lambda io, viz, *, pca_file, n_pcs: VizStepResult(
+        "run_pca_viz_step": lambda io, *, pca_file, n_pcs: VizStepResult(
             figures=(Path("pca_pairs.png"),)
         ),
         "run_admixture_viz_step": lambda io, viz, *, admixture: VizStepResult(
             figures=(Path("bars.png"),)
         ),
-        "run_embedding_viz_step": lambda io, viz, *, embedding, method: VizStepResult(
-            figures=(Path("fit.png"), Path("project.png"), Path("proj.png")),
+        "run_embedding_viz_step": lambda io, viz, *, embedding, method: EmbeddingVizResult(
             fit_figures=(Path("fit.png"),),
             project_figures=(Path("project.png"),),
             projection_plot=Path("proj.png"),
@@ -716,18 +715,17 @@ class TestPipelineVizIsNonFatal:
 
     def test_projection_plot_substep_failure_is_recorded(self, tmp_path, monkeypatch):
         """A projection-plot failure is a sub-step failure inside an otherwise-
-        successful embedding_viz step (VizStepResult.failed_substeps), not a
+        successful embedding_viz step (EmbeddingVizResult.failed_substeps), not a
         whole-step failure — but it must still reach failed_viz_steps under its
         own name, and the run must complete normally."""
-        from manifold_genetics.pipeline.steps.viz import VizStepResult
+        from manifold_genetics.pipeline.steps.viz import EmbeddingVizResult
 
         stub_pca_step(monkeypatch, 3)
         stub_embedding_step(monkeypatch)
         stub_admixture_step(monkeypatch)
         stub_viz_steps(
             monkeypatch,
-            run_embedding_viz_step=lambda io, viz, *, embedding, method: VizStepResult(
-                figures=(Path("fit.png"), Path("project.png")),
+            run_embedding_viz_step=lambda io, viz, *, embedding, method: EmbeddingVizResult(
                 fit_figures=(Path("fit.png"),),
                 project_figures=(Path("project.png"),),
                 projection_plot=None,

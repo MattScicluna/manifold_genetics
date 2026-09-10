@@ -251,7 +251,7 @@ class Pipeline:
                 pca_viz_result = _run_viz(
                     "pca_viz",
                     failed,
-                    lambda: run_pca_viz_step(io, viz_cfg, pca_file=pca_file, n_pcs=n_pcs),
+                    lambda: run_pca_viz_step(io, pca_file=pca_file, n_pcs=n_pcs),
                 )
                 if pca_viz_result is not None:
                     results["pca_figures"] = list(pca_viz_result.figures)
