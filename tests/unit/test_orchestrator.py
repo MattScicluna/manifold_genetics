@@ -1,19 +1,18 @@
 """Tests for pipeline/orchestrator.py — Pipeline init routing, embedding input
-modes, admixture CLI flags, in-process PCA dispatch, and _get_embedding_model
+modes, in-process PCA/admixture/embedding dispatch, and _get_embedding_model
 dispatch.
 
-Strategy: PCA now runs in-process, so it is stubbed via `stub_pca_step()`, which
-replaces `run_pca_step()` with a fake that writes real CSVs to tmp_path (the
-orchestrator reads these back for post-run result loading). Admixture and
-embedding still shell out, so `subprocess.run` is mocked at the module level to
-capture CLI commands without executing them. This exercises real pandas and path
-logic without needing any external binaries.
+Strategy: every compute stage (PCA, admixture, embedding) runs in-process, so
+each is stubbed via its own `stub_*_step()` helper, which replaces the step
+function with a fake that writes real CSVs to tmp_path (the orchestrator reads
+these back for post-run result loading). This exercises real pandas and path
+logic without needing any external binaries or shelling out to this project's
+own CLI.
 
 Tests are organised around failure modes: each test documents what would break in
 production if the assertion failed.
 """
 
-import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -44,21 +43,6 @@ def write_pca_csv(path: Path, n_dims: int, n_rows: int = 2) -> None:
     cols.update({f"dim_{i}": [float(i)] * n_rows for i in range(1, n_dims + 1)})
     path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(cols).to_csv(path, index=False)
-
-
-def capture_subprocess(monkeypatch, on_call=None):
-    """Patch subprocess.run; call on_call(cmd) after recording if provided."""
-    calls = []
-    import manifold_genetics.pipeline.orchestrator as orch_mod
-
-    def fake_run(cmd, **kwargs):
-        calls.append(list(cmd))
-        if on_call:
-            on_call(cmd)
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(orch_mod.subprocess, "run", fake_run)
-    return calls
 
 
 def stub_pca_step(monkeypatch, n_pcs):
@@ -108,18 +92,6 @@ def stub_metrics_steps(monkeypatch, geo=None, admix=None):
     monkeypatch.setattr(
         m, "compute_admixture_preservation", lambda **k: admix or {2: {"correlation": 0.5}}
     )
-
-
-def pca_calls(calls):
-    return [c for c in calls if "manifold-genetics" in c and "pca" in c]
-
-
-def admix_calls(calls):
-    return [c for c in calls if "manifold-genetics" in c and "admixture" in c]
-
-
-def embed_calls(calls):
-    return [c for c in calls if "manifold-genetics" in c and "embed" in c]
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +209,37 @@ def stub_embedding_step(monkeypatch):
     return calls
 
 
+def stub_admixture_step(monkeypatch):
+    """Replace the in-process admixture step with a fake that writes its Q files.
+
+    Returns the list of (io, admix_config, backend) it was called with.
+    """
+    import manifold_genetics.pipeline.orchestrator as orch
+    from manifold_genetics.pipeline.steps.admixture import AdmixtureStepResult
+    from manifold_genetics.pipeline.steps.paths import admixture_output_paths
+
+    calls = []
+
+    def fake_run_admixture_step(io, admix, *, backend=None):
+        calls.append((io, admix, backend))
+        paths = admixture_output_paths(io, admix)
+        paths["checkpoints_dir"].mkdir(parents=True, exist_ok=True)
+        for q in list(paths["fit_q_files"].values()) + list(paths["project_q_files"].values()):
+            write_pca_csv(q, 2)
+        return AdmixtureStepResult(
+            q_prefix=paths["project_prefix"],
+            k_values=tuple(range(admix.k_min, admix.k_max + 1)),
+            dir=paths["dir"],
+            checkpoints_dir=paths["checkpoints_dir"],
+            fit_prefix=paths["fit_prefix"],
+            fit_q_files=paths["fit_q_files"],
+            project_q_files=paths["project_q_files"],
+        )
+
+    monkeypatch.setattr(orch, "run_admixture_step", fake_run_admixture_step)
+    return calls
+
+
 class TestPipelineRunEmbeddingInputMode:
     """embedding_input='fit'|'project'|'both' controls which PCA coordinates the
     embedding step receives.
@@ -258,7 +261,6 @@ class TestPipelineRunEmbeddingInputMode:
 
     def _run(self, pipeline, monkeypatch, n_pcs, mode, method="phate"):
         calls = stub_embedding_step(monkeypatch)
-        capture_subprocess(monkeypatch)
         pipeline.run(
             n_pcs=n_pcs,
             embedding=method,
@@ -314,33 +316,11 @@ class TestPipelineRunEmbeddingInputMode:
         assert emb.method == "umap"
         assert emb.params["knn"] == 5
 
-    def test_embedding_no_longer_shells_out(self, tmp_path, monkeypatch):
-        """Re-introducing a subprocess hop would restore the API -> CLI -> API
-        inversion this refactor removed."""
-        pipeline = make_pipeline(tmp_path)
-        n_pcs = 10
-        self._setup(pipeline, n_pcs)
-
-        stub_embedding_step(monkeypatch)
-        calls = capture_subprocess(monkeypatch)
-        pipeline.run(
-            n_pcs=n_pcs,
-            embedding="phate",
-            embedding_params={"knn": 5},
-            skip_pca=True,
-            skip_admixture=True,
-            skip_visualization=True,
-            skip_pca_visualization=True,
-            skip_metrics=True,
-        )
-        assert embed_calls(calls) == [], f"Embedding must run in-process, got: {calls}"
-
     def test_results_expose_embedding_paths(self, tmp_path, monkeypatch):
         pipeline = make_pipeline(tmp_path)
         n_pcs = 10
         self._setup(pipeline, n_pcs)
         stub_embedding_step(monkeypatch)
-        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -364,7 +344,6 @@ class TestPipelineRunEmbeddingInputMode:
         n_pcs = 10
         self._setup(pipeline, n_pcs)
         stub_embedding_step(monkeypatch)
-        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -414,7 +393,6 @@ class TestPipelineRunMissingPCA:
         write_pca_csv(project_pca, n_pcs)
 
         stub_embedding_step(monkeypatch)
-        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -427,72 +405,6 @@ class TestPipelineRunMissingPCA:
             skip_metrics=True,
         )
         assert "embedding_file" in results
-
-
-# ---------------------------------------------------------------------------
-# TestPipelineRunAdmixtureFlags — optional CLI args
-# ---------------------------------------------------------------------------
-
-
-class TestPipelineRunAdmixtureFlags:
-    """Optional admixture args are appended to the CLI command only when provided.
-
-    The critical case is admix_gpus=0: zero is falsy but is a valid, meaningful
-    value (explicit CPU-only execution). Using `if admix_gpus:` instead of
-    `if admix_gpus is not None:` would silently drop it, causing neural-admixture
-    to auto-detect and potentially use GPUs against the caller's intent.
-    """
-
-    def _admix_cmd(self, pipeline, monkeypatch, **run_kwargs):
-        calls = capture_subprocess(monkeypatch)
-        pipeline.run(
-            skip_pca=True,
-            skip_embedding=True,
-            skip_pca_visualization=True,
-            skip_admixture_visualization=True,
-            skip_metrics=True,
-            **run_kwargs,
-        )
-        cmds = admix_calls(calls)
-        assert len(cmds) == 1, f"Expected one admixture command, got: {cmds}"
-        return cmds[0]
-
-    def test_threads_flag_present_when_set(self, tmp_path, monkeypatch):
-        pipeline = make_pipeline(tmp_path)
-        cmd = self._admix_cmd(pipeline, monkeypatch, admix_threads=4)
-        assert "--threads" in cmd
-        assert cmd[cmd.index("--threads") + 1] == "4"
-
-    def test_threads_flag_absent_when_none(self, tmp_path, monkeypatch):
-        pipeline = make_pipeline(tmp_path)
-        cmd = self._admix_cmd(pipeline, monkeypatch, admix_threads=None)
-        assert "--threads" not in cmd
-
-    def test_gpus_zero_included_in_command(self, tmp_path, monkeypatch):
-        """admix_gpus=0 explicitly requests CPU-only mode — must not be silently dropped."""
-        pipeline = make_pipeline(tmp_path)
-        cmd = self._admix_cmd(pipeline, monkeypatch, admix_gpus=0)
-        assert "--num-gpus" in cmd, (
-            "admix_gpus=0 must appear as --num-gpus 0. "
-            "Dropping it would cause neural-admixture to auto-detect GPUs."
-        )
-        assert cmd[cmd.index("--num-gpus") + 1] == "0"
-
-    def test_gpus_flag_absent_when_none(self, tmp_path, monkeypatch):
-        pipeline = make_pipeline(tmp_path)
-        cmd = self._admix_cmd(pipeline, monkeypatch, admix_gpus=None)
-        assert "--num-gpus" not in cmd
-
-    def test_batch_size_flag_present_when_set(self, tmp_path, monkeypatch):
-        pipeline = make_pipeline(tmp_path)
-        cmd = self._admix_cmd(pipeline, monkeypatch, admix_batch_size=256)
-        assert "--neuraladmixture-batch-size" in cmd
-        assert cmd[cmd.index("--neuraladmixture-batch-size") + 1] == "256"
-
-    def test_batch_size_flag_absent_when_none(self, tmp_path, monkeypatch):
-        pipeline = make_pipeline(tmp_path)
-        cmd = self._admix_cmd(pipeline, monkeypatch, admix_batch_size=None)
-        assert "--neuraladmixture-batch-size" not in cmd
 
 
 # ---------------------------------------------------------------------------
@@ -580,10 +492,10 @@ class _FakeBackend:
 
 
 class TestPipelineRunFullFlow:
-    """PCA viz, admixture (backend + CLI), bar plot, embedding viz, admixture-
-    colored embedding, and metrics all run when their skip flags are False.
-    All plotting and I/O is stubbed; subprocess writes the CSV/JSON the
-    orchestrator reads back."""
+    """PCA viz, admixture (backend + real step), bar plot, embedding viz,
+    admixture-colored embedding, and metrics all run when their skip flags are
+    False. All plotting and I/O is stubbed; the stubbed steps write the CSV/JSON
+    the orchestrator reads back."""
 
     def _stub_plots(self, monkeypatch):
         import manifold_genetics.pipeline.orchestrator as orch
@@ -605,6 +517,11 @@ class TestPipelineRunFullFlow:
         )
 
     def test_full_run_with_backend_and_metrics(self, tmp_path, monkeypatch):
+        """The admixture step itself is NOT stubbed here on purpose: this is the
+        one unit test that lets an injected backend flow through the real
+        run_admixture_step()/NeuralAdmixture path, so backend.calls below is the
+        unit-level proof of the fit-then-transform-twice unification (constraint
+        also covered end-to-end by test_generic_pipeline.py)."""
         self._stub_plots(monkeypatch)
         backend = _FakeBackend()
         pipeline = make_pipeline(
@@ -619,7 +536,6 @@ class TestPipelineRunFullFlow:
             admixture_backend=backend,
         )
         n_pcs = 3
-        calls = capture_subprocess(monkeypatch)
 
         stub_pca_step(monkeypatch, n_pcs)
         stub_embedding_step(monkeypatch)
@@ -633,20 +549,16 @@ class TestPipelineRunFullFlow:
             embedding_input="both",
         )
 
-        assert backend.calls == ["fit", "fit_transform", "transform"]
+        assert backend.calls == ["fit", "transform", "transform"]
         assert "pca_figures" in results
         assert "admixture_figures" in results
         assert "embedding_figures" in results
         assert "projection_plot" in results
         assert results["metrics"]["geographic"]["correlation"] == 0.9
         assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
-        # no admixture CLI call — backend was used
-        assert admix_calls(calls) == []
         # Metrics ran in-process and landed at the documented paths (constraint B)
         assert (pipeline.output_dir / "metrics" / "geographic.json").exists()
         assert (pipeline.output_dir / "metrics" / "admixture.json").exists()
-        assert [c for c in calls if "metrics-geographic" in c] == []
-        assert [c for c in calls if "metrics-admixture" in c] == []
 
     def test_metrics_skipped_when_no_geographic_coords(self, tmp_path, monkeypatch):
         """Without geographic_coords the geographic metric must not run, but the
@@ -657,7 +569,6 @@ class TestPipelineRunFullFlow:
         n_pcs = 3
         stub_pca_step(monkeypatch, n_pcs)
         stub_embedding_step(monkeypatch)
-        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -671,31 +582,10 @@ class TestPipelineRunFullFlow:
         assert not (pipeline.output_dir / "metrics" / "geographic.json").exists()
         assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
 
-    def test_full_run_via_cli_admixture(self, tmp_path, monkeypatch):
-        self._stub_plots(monkeypatch)
-        pipeline = make_pipeline(tmp_path)
-        n_pcs = 3
-        calls = capture_subprocess(monkeypatch)
-
-        stub_pca_step(monkeypatch, n_pcs)
-        stub_embedding_step(monkeypatch)
-        pipeline.run(
-            n_pcs=n_pcs,
-            k_min=2,
-            k_max=3,
-            embedding="phate",
-            embedding_params={"knn": 5},
-            skip_metrics=True,
-        )
-        admix = admix_calls(calls)
-        assert len(admix) == 1
-        assert "--k-min" in admix[0] and "--k-max" in admix[0]
-
     def test_phate_landmark_and_batch_flags_forwarded(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)
         pipeline = make_pipeline(tmp_path)
         n_pcs = 3
-        capture_subprocess(monkeypatch)
 
         stub_pca_step(monkeypatch, n_pcs)
         embed_step_calls = stub_embedding_step(monkeypatch)
@@ -719,8 +609,7 @@ class TestPipelineRunFullFlow:
     def test_pca_viz_warns_when_pca_file_absent(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)
         pipeline = make_pipeline(tmp_path)
-        # subprocess writes nothing -> project_pca file never appears
-        capture_subprocess(monkeypatch)
+        # nothing writes a PCA file -> project_pca file never appears
 
         results = pipeline.run(
             n_pcs=3,
@@ -730,6 +619,16 @@ class TestPipelineRunFullFlow:
             skip_metrics=True,
         )
         assert "pca_figures" not in results
+
+    def test_pipeline_makes_no_subprocess_calls(self, tmp_path, monkeypatch):
+        """After PR 4 no stage shells out to our own CLI. subprocess.run is gone
+        from orchestrator.py entirely, so patching it is no longer even possible —
+        assert instead that the module no longer imports it."""
+        import manifold_genetics.pipeline.orchestrator as orch
+
+        assert not hasattr(
+            orch, "subprocess"
+        ), "orchestrator must no longer import subprocess — every stage runs in-process"
 
 
 # ---------------------------------------------------------------------------
@@ -742,21 +641,6 @@ class TestPipelineRunPCAInProcess:
     would restore the API → CLI → API inversion this refactor removed, along
     with its cold-start cost and buried tracebacks."""
 
-    def test_pca_no_longer_shells_out(self, tmp_path, monkeypatch):
-        pipeline = make_pipeline(tmp_path)
-        stub_pca_step(monkeypatch, 3)
-        calls = capture_subprocess(monkeypatch)
-
-        pipeline.run(
-            n_pcs=3,
-            skip_admixture=True,
-            skip_embedding=True,
-            skip_pca_visualization=True,
-            skip_metrics=True,
-        )
-
-        assert pca_calls(calls) == [], f"PCA must run in-process, got: {calls}"
-
     def test_step_receives_pipeline_io_and_n_pcs(self, tmp_path, monkeypatch):
         """The step's IOConfig must carry the pipeline's own prefixes; passing
         the wrong cohort would fit PCA on the projection set."""
@@ -764,7 +648,6 @@ class TestPipelineRunPCAInProcess:
             tmp_path, fit_plink_prefix="fitset", project_plink_prefix="projectset"
         )
         step_calls = stub_pca_step(monkeypatch, 7)
-        capture_subprocess(monkeypatch)
 
         pipeline.run(
             n_pcs=7,
@@ -784,7 +667,6 @@ class TestPipelineRunPCAInProcess:
     def test_results_expose_pca_paths_and_coords(self, tmp_path, monkeypatch):
         pipeline = make_pipeline(tmp_path)
         stub_pca_step(monkeypatch, 4)
-        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=4,
@@ -808,7 +690,6 @@ class TestPipelineRunPCAInProcess:
         write_pca_csv(pca_dir / "project_pca_4.csv", 4)
 
         step_calls = stub_pca_step(monkeypatch, 4)
-        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=4,
@@ -822,3 +703,76 @@ class TestPipelineRunPCAInProcess:
         assert step_calls == [], "skip_pca must not run the step"
         assert results["fit_pca_file"] == pca_dir / "fit_pca_4.csv"
         assert results["project_pca_file"] == pca_dir / "project_pca_4.csv"
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineRunAdmixtureInProcess — the last subprocess hop is gone
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunAdmixtureInProcess:
+    """run() calls run_admixture_step() directly, for the real backend and for an
+    injected one alike. The old code had two branches here — the injected-backend
+    one used fit_transform() for the fit cohort where the CLI path used
+    transform() — which is exactly the divergence this unification removes."""
+
+    def _run(self, pipeline, monkeypatch, **kwargs):
+        calls = stub_admixture_step(monkeypatch)
+        pipeline.run(
+            skip_pca=True,
+            skip_embedding=True,
+            skip_pca_visualization=True,
+            skip_admixture_visualization=True,
+            skip_metrics=True,
+            **kwargs,
+        )
+        assert len(calls) == 1, f"Expected one admixture step call, got {len(calls)}"
+        return calls[0]
+
+    def test_cluster_resources_reach_the_step(self, tmp_path, monkeypatch):
+        """Constraint E. admix_gpus=0 and admix_threads=0 are meaningful values,
+        not absent ones — the old argv builder dropped threads=0 as falsy."""
+        pipeline = make_pipeline(tmp_path)
+        io, cfg, backend = self._run(
+            pipeline, monkeypatch, admix_threads=0, admix_gpus=0, admix_batch_size=256
+        )
+        assert cfg.threads == 0
+        assert cfg.num_gpus == 0
+        assert cfg.batch_size == 256
+
+    def test_k_range_reaches_the_step(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        io, cfg, backend = self._run(pipeline, monkeypatch, k_min=3, k_max=6)
+        assert cfg.k_min == 3
+        assert cfg.k_max == 6
+
+    def test_injected_backend_is_forwarded_not_branched_on(self, tmp_path, monkeypatch):
+        """One code path: the backend is a parameter, not a branch."""
+        backend = _FakeBackend()
+        pipeline = make_pipeline(tmp_path, admixture_backend=backend)
+        io, cfg, seen_backend = self._run(pipeline, monkeypatch)
+        assert seen_backend is backend
+
+    def test_no_backend_passes_none(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        io, cfg, seen_backend = self._run(pipeline, monkeypatch)
+        assert seen_backend is None
+
+    def test_results_expose_admixture_paths(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        stub_admixture_step(monkeypatch)
+        results = pipeline.run(
+            k_min=2,
+            k_max=3,
+            skip_pca=True,
+            skip_embedding=True,
+            skip_pca_visualization=True,
+            skip_admixture_visualization=True,
+            skip_metrics=True,
+        )
+        admix_dir = pipeline.output_dir / "admixture"
+        assert results["admixture_dir"] == admix_dir
+        assert results["admixture_checkpoints_dir"] == admix_dir / "checkpoints"
+        assert sorted(results["fit_q_files"]) == [2, 3]
+        assert sorted(results["project_q_files"]) == [2, 3]
+        assert results["q_files"] == results["project_q_files"]
