@@ -209,20 +209,46 @@ class TestPipelineInit:
 # ---------------------------------------------------------------------------
 
 
-class TestPipelineRunEmbeddingInputMode:
-    """embedding_input='fit'|'project'|'both' controls which PCA files are passed
-    to the embedding CLI command.
+def stub_embedding_step(monkeypatch):
+    """Replace the in-process embedding step with a fake that writes its outputs.
 
-    'fit':    embed fit PCA standalone (fit_transform only, no --project-input)
-    'project': embed project PCA standalone (using project PCA as --input)
-    'both':   fit embedding on fit PCA, project embedding on project PCA
-              (--project-input present, separate --fit-output written)
+    Returns the list of (io, emb, pca) it was called with.
+    """
+    import manifold_genetics.pipeline.orchestrator as orch
+    from manifold_genetics.pipeline.steps.embedding import EmbeddingStepResult
+    from manifold_genetics.pipeline.steps.paths import embedding_output_paths
+
+    calls = []
+
+    def fake_run_embedding_step(io, emb, *, pca):
+        calls.append((io, emb, pca))
+        paths = embedding_output_paths(io, emb)
+        write_pca_csv(paths["embedding"], 2)
+        fit_file = paths.get("fit_embedding")
+        if fit_file is not None:
+            write_pca_csv(fit_file, 2)
+        return EmbeddingStepResult(
+            embedding_file=paths["embedding"],
+            fit_embedding_file=fit_file,
+            coords_df=pd.read_csv(paths["embedding"]),
+        )
+
+    monkeypatch.setattr(orch, "run_embedding_step", fake_run_embedding_step)
+    return calls
+
+
+class TestPipelineRunEmbeddingInputMode:
+    """embedding_input='fit'|'project'|'both' controls which PCA coordinates the
+    embedding step receives.
+
+    'fit':     embed the fit cohort's PCA standalone
+    'project': embed the project cohort's PCA standalone
+    'both':    fit on the fit PCA, apply to the project PCA, write both files
 
     Wrong mode silently embeds the wrong dataset.
     """
 
     def _setup(self, pipeline, n_pcs):
-        """Write both PCA files and return (fit_path, project_path)."""
         pca_dir = pipeline.output_dir / "pca"
         fit_file = pca_dir / f"fit_pca_{n_pcs}.csv"
         project_file = pca_dir / f"project_pca_{n_pcs}.csv"
@@ -230,17 +256,9 @@ class TestPipelineRunEmbeddingInputMode:
         write_pca_csv(project_file, n_pcs)
         return fit_file, project_file
 
-    def _run_embedding_only(self, pipeline, monkeypatch, n_pcs, mode, method="phate"):
-        embedding_dir = pipeline.output_dir / "embeddings"
-        embedding_file = embedding_dir / f"{method}_2d.csv"
-        fit_embedding_file = embedding_dir / f"{method}_fit_2d.csv"
-
-        def on_call(cmd):
-            if "embed" in cmd:
-                write_pca_csv(embedding_file, 2)
-                write_pca_csv(fit_embedding_file, 2)
-
-        calls = capture_subprocess(monkeypatch, on_call=on_call)
+    def _run(self, pipeline, monkeypatch, n_pcs, mode, method="phate"):
+        calls = stub_embedding_step(monkeypatch)
+        capture_subprocess(monkeypatch)
         pipeline.run(
             n_pcs=n_pcs,
             embedding=method,
@@ -252,71 +270,114 @@ class TestPipelineRunEmbeddingInputMode:
             skip_pca_visualization=True,
             skip_metrics=True,
         )
-        return embed_calls(calls)
+        assert len(calls) == 1, f"Expected one embedding step call, got {len(calls)}"
+        return calls[0]
 
-    def test_mode_both_includes_project_input_and_fit_output(self, tmp_path, monkeypatch):
-        """Mode 'both': --project-input (project PCA) and --fit-output must both appear.
-        Without --project-input, only the fit dataset gets embedded; project data is lost.
-        """
+    def test_mode_both_passes_both_pca_files(self, tmp_path, monkeypatch):
         pipeline = make_pipeline(tmp_path)
         n_pcs = 10
         fit_file, project_file = self._setup(pipeline, n_pcs)
 
-        cmds = self._run_embedding_only(pipeline, monkeypatch, n_pcs, "both")
-        assert len(cmds) == 1, f"Expected one embed call, got {len(cmds)}"
-        cmd = cmds[0]
+        io, emb, pca = self._run(pipeline, monkeypatch, n_pcs, "both")
 
-        assert (
-            "--project-input" in cmd
-        ), f"Mode 'both' must include --project-input for the project dataset. Got: {cmd}"
-        assert (
-            "--fit-output" in cmd
-        ), f"Mode 'both' must include --fit-output to save fit embedding. Got: {cmd}"
+        assert emb.input_mode == "both"
+        assert pca.fit_pca == fit_file
+        assert pca.project_pca == project_file
 
-        input_val = cmd[cmd.index("--input") + 1]
-        assert (
-            "fit_pca" in input_val
-        ), f"Mode 'both': primary --input should be fit PCA, got: {input_val}"
+    def test_mode_fit_passes_the_fit_pca(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        fit_file, _ = self._setup(pipeline, n_pcs)
 
-        project_input_val = cmd[cmd.index("--project-input") + 1]
-        assert (
-            "project_pca" in project_input_val
-        ), f"Mode 'both': --project-input should be project PCA, got: {project_input_val}"
+        io, emb, pca = self._run(pipeline, monkeypatch, n_pcs, "fit")
 
-    def test_mode_fit_omits_project_input(self, tmp_path, monkeypatch):
-        """Mode 'fit': standalone fit_transform — no --project-input flag."""
+        assert emb.input_mode == "fit"
+        assert pca.fit_pca == fit_file
+
+    def test_mode_project_passes_the_project_pca(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        _, project_file = self._setup(pipeline, n_pcs)
+
+        io, emb, pca = self._run(pipeline, monkeypatch, n_pcs, "project")
+
+        assert emb.input_mode == "project"
+        assert pca.project_pca == project_file
+
+    def test_method_and_params_reach_the_step(self, tmp_path, monkeypatch):
         pipeline = make_pipeline(tmp_path)
         n_pcs = 10
         self._setup(pipeline, n_pcs)
 
-        cmds = self._run_embedding_only(pipeline, monkeypatch, n_pcs, "fit")
-        assert len(cmds) == 1
-        cmd = cmds[0]
+        io, emb, pca = self._run(pipeline, monkeypatch, n_pcs, "both", method="umap")
 
-        assert (
-            "--project-input" not in cmd
-        ), f"Mode 'fit' must not include --project-input. Got: {cmd}"
-        input_val = cmd[cmd.index("--input") + 1]
-        assert "fit_pca" in input_val
+        assert emb.method == "umap"
+        assert emb.params["knn"] == 5
 
-    def test_mode_project_uses_project_pca_as_primary_input(self, tmp_path, monkeypatch):
-        """Mode 'project': the project PCA feeds --input (not fit PCA).
-        If the fit PCA were passed instead, project samples would be embedded using
-        fit-cohort geometry.
-        """
+    def test_embedding_no_longer_shells_out(self, tmp_path, monkeypatch):
+        """Re-introducing a subprocess hop would restore the API -> CLI -> API
+        inversion this refactor removed."""
         pipeline = make_pipeline(tmp_path)
         n_pcs = 10
         self._setup(pipeline, n_pcs)
 
-        cmds = self._run_embedding_only(pipeline, monkeypatch, n_pcs, "project")
-        assert len(cmds) == 1
-        cmd = cmds[0]
+        stub_embedding_step(monkeypatch)
+        calls = capture_subprocess(monkeypatch)
+        pipeline.run(
+            n_pcs=n_pcs,
+            embedding="phate",
+            embedding_params={"knn": 5},
+            skip_pca=True,
+            skip_admixture=True,
+            skip_visualization=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+        assert embed_calls(calls) == [], f"Embedding must run in-process, got: {calls}"
 
-        input_val = cmd[cmd.index("--input") + 1]
-        assert (
-            "project_pca" in input_val
-        ), f"Mode 'project': --input should be project PCA, got: {input_val}"
-        assert "--project-input" not in cmd
+    def test_results_expose_embedding_paths(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        self._setup(pipeline, n_pcs)
+        stub_embedding_step(monkeypatch)
+        capture_subprocess(monkeypatch)
+
+        results = pipeline.run(
+            n_pcs=n_pcs,
+            embedding="phate",
+            embedding_params={"knn": 5},
+            embedding_input="both",
+            skip_pca=True,
+            skip_admixture=True,
+            skip_visualization=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+
+        emb_dir = pipeline.output_dir / "embeddings"
+        assert results["embedding_file"] == emb_dir / "phate_2d.csv"
+        assert results["fit_embedding_file"] == emb_dir / "phate_fit_2d.csv"
+        assert isinstance(results["embedding_coords"], pd.DataFrame)
+
+    def test_single_input_mode_reports_no_fit_embedding_file(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        self._setup(pipeline, n_pcs)
+        stub_embedding_step(monkeypatch)
+        capture_subprocess(monkeypatch)
+
+        results = pipeline.run(
+            n_pcs=n_pcs,
+            embedding="phate",
+            embedding_params={"knn": 5},
+            embedding_input="fit",
+            skip_pca=True,
+            skip_admixture=True,
+            skip_visualization=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+        assert "fit_embedding_file" not in results
 
 
 # ---------------------------------------------------------------------------
@@ -352,15 +413,8 @@ class TestPipelineRunMissingPCA:
         write_pca_csv(fit_pca, n_pcs)
         write_pca_csv(project_pca, n_pcs)
 
-        embedding_file = pipeline.output_dir / "embeddings" / "phate_2d.csv"
-        fit_embedding_file = pipeline.output_dir / "embeddings" / "phate_fit_2d.csv"
-
-        def on_call(cmd):
-            if "embed" in cmd:
-                write_pca_csv(embedding_file, 2)
-                write_pca_csv(fit_embedding_file, 2)
-
-        capture_subprocess(monkeypatch, on_call=on_call)
+        stub_embedding_step(monkeypatch)
+        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -452,6 +506,12 @@ class TestGetEmbeddingModel:
     Parameter forwarding matters: silently ignoring user-supplied knn or
     n_neighbors would produce embeddings with wrong neighbourhood scale,
     which is undetectable from the output shape alone.
+
+    Dead code: _get_embedding_model is no longer called by the live path
+    (superseded by pipeline.steps.embedding.build_embedding_model) and is kept
+    only until a later PR deletes it. Its defaults deliberately differ from the
+    live path — see test_empty_params_uses_defaults below, which pins PHATE's
+    own n_landmark=2000 default, not the live path's explicit None.
     """
 
     @pytest.fixture
@@ -544,16 +604,6 @@ class TestPipelineRunFullFlow:
             lambda p: {"Population": {"A": "#000000"}},
         )
 
-    def _writer(self, pipeline, n_pcs, method="phate"):
-        emb_dir = pipeline.output_dir / "embeddings"
-
-        def on_call(cmd):
-            if "embed" in cmd:
-                write_pca_csv(emb_dir / f"{method}_2d.csv", 2)
-                write_pca_csv(emb_dir / f"{method}_fit_2d.csv", 2)
-
-        return on_call
-
     def test_full_run_with_backend_and_metrics(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)
         backend = _FakeBackend()
@@ -569,9 +619,10 @@ class TestPipelineRunFullFlow:
             admixture_backend=backend,
         )
         n_pcs = 3
-        calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+        calls = capture_subprocess(monkeypatch)
 
         stub_pca_step(monkeypatch, n_pcs)
+        stub_embedding_step(monkeypatch)
         stub_metrics_steps(monkeypatch)
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -605,7 +656,8 @@ class TestPipelineRunFullFlow:
         pipeline = make_pipeline(tmp_path, admixture_backend=_FakeBackend())
         n_pcs = 3
         stub_pca_step(monkeypatch, n_pcs)
-        capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+        stub_embedding_step(monkeypatch)
+        capture_subprocess(monkeypatch)
 
         results = pipeline.run(
             n_pcs=n_pcs,
@@ -623,9 +675,10 @@ class TestPipelineRunFullFlow:
         self._stub_plots(monkeypatch)
         pipeline = make_pipeline(tmp_path)
         n_pcs = 3
-        calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+        calls = capture_subprocess(monkeypatch)
 
         stub_pca_step(monkeypatch, n_pcs)
+        stub_embedding_step(monkeypatch)
         pipeline.run(
             n_pcs=n_pcs,
             k_min=2,
@@ -642,9 +695,10 @@ class TestPipelineRunFullFlow:
         self._stub_plots(monkeypatch)
         pipeline = make_pipeline(tmp_path)
         n_pcs = 3
-        calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+        capture_subprocess(monkeypatch)
 
         stub_pca_step(monkeypatch, n_pcs)
+        embed_step_calls = stub_embedding_step(monkeypatch)
         pipeline.run(
             n_pcs=n_pcs,
             embedding="phate",
@@ -657,10 +711,10 @@ class TestPipelineRunFullFlow:
             skip_admixture=True,
             skip_metrics=True,
         )
-        cmd = embed_calls(calls)[0]
-        assert cmd[cmd.index("--n-landmark") + 1] == "200"
-        assert "--random-landmarking" in cmd
-        assert cmd[cmd.index("--embed-batch-size") + 1] == "64"
+        io, emb, pca = embed_step_calls[0]
+        assert emb.params["n_landmark"] == 200
+        assert emb.params["random_landmarking"] is True
+        assert emb.params["embed_batch_size"] == 64
 
     def test_pca_viz_warns_when_pca_file_absent(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)

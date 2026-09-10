@@ -139,10 +139,11 @@ def test_cli_embed_fit_project(monkeypatch, tmp_path):
             raise AssertionError("fit_transform should not be called in fit+project mode")
 
     # Stub all embedding models to the same fake
-    monkeypatch.setattr(mg_cli, "PHATE", FakeEmbed)
-    monkeypatch.setattr(mg_cli, "UMAP", FakeEmbed)
-    monkeypatch.setattr(mg_cli, "TSNE", FakeEmbed)
-    monkeypatch.setattr(mg_cli, "DiffusionMap", FakeEmbed)
+    _STEP_EMBEDDING = "manifold_genetics.pipeline.steps.embedding"
+    monkeypatch.setattr(f"{_STEP_EMBEDDING}.PHATE", FakeEmbed)
+    monkeypatch.setattr(f"{_STEP_EMBEDDING}.UMAP", FakeEmbed)
+    monkeypatch.setattr(f"{_STEP_EMBEDDING}.TSNE", FakeEmbed)
+    monkeypatch.setattr(f"{_STEP_EMBEDDING}.DiffusionMap", FakeEmbed)
 
     fit_input = tmp_path / "fit.csv"
     proj_input = tmp_path / "proj.csv"

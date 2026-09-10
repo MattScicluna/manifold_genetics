@@ -46,9 +46,18 @@ _VALIDATORS = [
 
 @pytest.fixture
 def stub_validation(monkeypatch):
-    """Turn every validate_* helper imported into cli into a no-op."""
+    """Turn every validate_* helper imported into cli into a no-op.
+
+    ``validate_embedding_csv`` also runs inside the embedding step's shared
+    seam (``pipeline.steps.embedding.run_embedding``) now, since cmd_embed no
+    longer validates its own inputs — that seam is stubbed here too so tests
+    using fake, non-existent embedding paths still exercise dispatch only.
+    """
     for name in _VALIDATORS:
         monkeypatch.setattr(mg_cli, name, lambda *a, **k: None)
+    monkeypatch.setattr(
+        "manifold_genetics.pipeline.steps.embedding.validate_embedding_csv", lambda *a, **k: None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -341,23 +350,30 @@ def test_cmd_admixture_missing_outputs_returns_1(monkeypatch, tmp_path, capsys):
     assert "fit-output" in capsys.readouterr().err
 
 
-def test_cmd_embed_fit_project(monkeypatch, tmp_path, stub_validation):
-    calls = []
+_STEP_EMBEDDING = "manifold_genetics.pipeline.steps.embedding"
 
+
+def _fake_embed_models(monkeypatch, calls):
     class FakeEmbed:
-        def __init__(self, n_components=2, **kwargs):
+        def __init__(self, **kwargs):
             calls.append(("init", kwargs))
 
         def fit(self, X):
-            calls.append(("fit", X))
+            calls.append(("fit", str(X)))
             return self
 
         def transform(self, X):
-            calls.append(("transform", X))
+            calls.append(("transform", str(X)))
             return pd.DataFrame({"sample_id": ["s1"], "dim_1": [0.1], "dim_2": [0.2]})
 
     for name in ("PHATE", "UMAP", "TSNE", "DiffusionMap"):
-        monkeypatch.setattr(mg_cli, name, FakeEmbed)
+        monkeypatch.setattr(f"{_STEP_EMBEDDING}.{name}", FakeEmbed)
+    return FakeEmbed
+
+
+def test_cmd_embed_fit_project(monkeypatch, tmp_path, stub_validation):
+    calls = []
+    _fake_embed_models(monkeypatch, calls)
 
     out = tmp_path / "emb.csv"
     rc = mg_cli.main(
@@ -377,6 +393,61 @@ def test_cmd_embed_fit_project(monkeypatch, tmp_path, stub_validation):
     assert out.exists()
     assert ("fit", str(tmp_path / "fit.csv")) in calls
     assert ("transform", str(tmp_path / "proj.csv")) in calls
+
+
+def test_cmd_embed_phate_passes_n_landmark_explicitly(monkeypatch, tmp_path, stub_validation):
+    """PHATE defaults n_landmark=2000; the CLI has always overridden it with None.
+    Losing that would silently enable landmarking for every default run."""
+    calls = []
+    _fake_embed_models(monkeypatch, calls)
+
+    rc = mg_cli.main(
+        [
+            "embed",
+            "--method",
+            "phate",
+            "--input",
+            str(tmp_path / "in.csv"),
+            "--output",
+            str(tmp_path / "out.csv"),
+        ]
+    )
+    assert rc == 0
+    init_kwargs = next(k for tag, k in calls if tag == "init")
+    assert "n_landmark" in init_kwargs
+    assert init_kwargs["n_landmark"] is None
+
+
+def test_cmd_embed_random_landmarking_without_n_landmark_raises(
+    monkeypatch, tmp_path, stub_validation
+):
+    # main() catches all exceptions and converts them to a return code (see
+    # test_cmd_embed_unknown_method_returns_1's rationale), so exercise
+    # cmd_embed directly to observe the raised ValueError.
+    import argparse
+
+    calls = []
+    _fake_embed_models(monkeypatch, calls)
+
+    args = argparse.Namespace(
+        input=str(tmp_path / "in.csv"),
+        fit_input=None,
+        project_input=None,
+        fit_output=None,
+        project_output=None,
+        output=str(tmp_path / "out.csv"),
+        method="phate",
+        knn=5,
+        t="auto",
+        n_landmark=None,
+        random_landmarking=True,
+        n_neighbors=15,
+        min_dist=0.1,
+        perplexity=30.0,
+        verbose=False,
+    )
+    with pytest.raises(ValueError, match="random-landmarking"):
+        mg_cli.cmd_embed(args)
 
 
 def test_cmd_embed_unknown_method_returns_1(monkeypatch, tmp_path, stub_validation, capsys):
