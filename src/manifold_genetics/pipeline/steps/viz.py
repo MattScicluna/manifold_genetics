@@ -37,6 +37,7 @@ from .paths import figure_output_paths
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "EmbeddingVizResult",
     "VizStepResult",
     "plot_pca_pair_grids",
     "run_admixture_embedding_viz_step",
@@ -85,9 +86,14 @@ class VizStepResult:
     """Typed outputs of a visualization step: the figures it produced."""
 
     figures: Tuple[Path, ...] = ()
-    failed: bool = False
-    # Populated only by run_embedding_viz_step. That step feeds three distinct
-    # results keys, which a flat `figures` tuple cannot reconstruct.
+
+
+@dataclass(frozen=True)
+class EmbeddingVizResult:
+    """Outputs of the embedding visualization step, which feeds three distinct
+    figure families and guards its projection plot separately.
+    """
+
     fit_figures: Tuple[Path, ...] = ()
     project_figures: Tuple[Path, ...] = ()
     projection_plot: Optional[Path] = None
@@ -97,8 +103,16 @@ class VizStepResult:
     # still reaches the pipeline's failed-step list.
     failed_substeps: Tuple[str, ...] = ()
 
+    @property
+    def figures(self) -> Tuple[Path, ...]:
+        """All figures, in production order: fit, then project, then projection."""
+        figures = tuple(self.fit_figures) + tuple(self.project_figures)
+        if self.projection_plot is not None:
+            figures += (self.projection_plot,)
+        return figures
 
-def run_pca_viz_step(io: IOConfig, viz: VizConfig, *, pca_file: Path, n_pcs: int) -> VizStepResult:
+
+def run_pca_viz_step(io: IOConfig, *, pca_file: Path, n_pcs: int) -> VizStepResult:
     """Plot one PCA-pairs grid per column in the project colormap."""
     paths = figure_output_paths(io)
     pca_figures_dir = paths["pca"]
@@ -121,7 +135,7 @@ def run_pca_viz_step(io: IOConfig, viz: VizConfig, *, pca_file: Path, n_pcs: int
 
 def run_embedding_viz_step(
     io: IOConfig, viz: VizConfig, *, embedding: EmbeddingStepResult, method: str
-) -> VizStepResult:
+) -> EmbeddingVizResult:
     """Plot fit figures (if a fit embedding exists), project figures, and the
     fit/project projection plot (if both projection columns are configured).
     """
@@ -191,12 +205,7 @@ def run_embedding_viz_step(
             logger.warning(f"Failed to create projection plot: {e}")
             failed_substeps.append("projection_plot")
 
-    figures = list(fit_figure_paths) + list(project_figure_paths)
-    if projection_plot_path is not None:
-        figures.append(projection_plot_path)
-
-    return VizStepResult(
-        figures=tuple(figures),
+    return EmbeddingVizResult(
         fit_figures=tuple(fit_figure_paths),
         project_figures=tuple(project_figure_paths),
         projection_plot=projection_plot_path,

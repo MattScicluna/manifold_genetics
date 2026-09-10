@@ -13,6 +13,8 @@ import pandas as pd
 import pytest
 
 from manifold_genetics import cli as mg_cli
+from manifold_genetics.pipeline.result import PipelineResult
+from manifold_genetics.pipeline.steps.metrics import MetricsStepResult
 
 # Every subcommand registered in main()'s parser.
 SUBCOMMANDS = [
@@ -759,7 +761,7 @@ def test_cmd_pipeline_forwards_to_run_pipeline(monkeypatch, tmp_path, stub_valid
 
     def fake_run_pipeline(**kwargs):
         captured.update(kwargs)
-        return {}
+        return PipelineResult()
 
     monkeypatch.setattr(mg_cli, "run_pipeline", fake_run_pipeline)
     rc = mg_cli.main(
@@ -797,12 +799,14 @@ def test_cmd_pipeline_prints_metrics(monkeypatch, tmp_path, stub_validation, cap
     monkeypatch.setattr(
         mg_cli,
         "run_pipeline",
-        lambda **k: {
-            "metrics": {
-                "geographic": {"correlation": 0.8, "p_value": 1e-4},
-                "admixture": {"2": {"correlation": 0.7}},
-            }
-        },
+        lambda **k: PipelineResult(
+            geographic_metrics=MetricsStepResult(
+                path=Path("geo.json"), values={"correlation": 0.8, "p_value": 1e-4}
+            ),
+            admixture_metrics=MetricsStepResult(
+                path=Path("admix.json"), values={"2": {"correlation": 0.7}}
+            ),
+        ),
     )
     rc = mg_cli.main(
         [

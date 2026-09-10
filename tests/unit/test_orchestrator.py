@@ -1,6 +1,5 @@
 """Tests for pipeline/orchestrator.py — Pipeline init routing, embedding input
-modes, in-process PCA/admixture/embedding dispatch, and _get_embedding_model
-dispatch.
+modes, and in-process PCA/admixture/embedding dispatch.
 
 Strategy: every compute stage (PCA, admixture, embedding) runs in-process, so
 each is stubbed via its own `stub_*_step()` helper, which replaces the step
@@ -18,7 +17,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from manifold_genetics.embeddings import PHATE, TSNE, UMAP, DiffusionMap
 from manifold_genetics.pipeline.orchestrator import Pipeline
 
 # ---------------------------------------------------------------------------
@@ -335,9 +333,57 @@ class TestPipelineRunEmbeddingInputMode:
         )
 
         emb_dir = pipeline.output_dir / "embeddings"
-        assert results["embedding_file"] == emb_dir / "phate_2d.csv"
-        assert results["fit_embedding_file"] == emb_dir / "phate_fit_2d.csv"
-        assert isinstance(results["embedding_coords"], pd.DataFrame)
+        assert results.embedding.embedding_file == emb_dir / "phate_2d.csv"
+        assert results.embedding.fit_embedding_file == emb_dir / "phate_fit_2d.csv"
+        assert isinstance(results.embedding.coords_df, pd.DataFrame)
+        # skip_admixture=True above — admixture must not have run.
+        assert results.admixture is None
+
+    def test_project_only_mode_leaves_fit_figures_and_projection_plot_absent(
+        self, tmp_path, monkeypatch
+    ):
+        """embedding_input='project' produces no fit embedding, so
+        fit_embedding_figures must stay empty and projection_plot must stay None
+        — regardless of what the (stubbed) viz step returns for the fit/project
+        figure families. The viz stub here mirrors the real run_embedding_viz_step's
+        own internal gate (projection_plot only when a fit embedding exists) while
+        still returning non-empty fit_figures, so a regression that dropped the
+        orchestrator's `r_emb.fit_embedding_file is not None` guard around
+        fit_embedding_figures would be caught here rather than passing silently."""
+        import manifold_genetics.pipeline.orchestrator as orch
+        from manifold_genetics.pipeline.steps.viz import EmbeddingVizResult
+
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        self._setup(pipeline, n_pcs)
+        stub_embedding_step(monkeypatch)
+
+        def fake_embedding_viz_step(io, viz, *, embedding, method):
+            return EmbeddingVizResult(
+                fit_figures=(Path("fit.png"),),
+                project_figures=(Path("project.png"),),
+                projection_plot=(
+                    Path("proj.png") if embedding.fit_embedding_file is not None else None
+                ),
+            )
+
+        monkeypatch.setattr(orch, "run_embedding_viz_step", fake_embedding_viz_step)
+
+        results = pipeline.run(
+            n_pcs=n_pcs,
+            embedding="phate",
+            embedding_params={"knn": 5},
+            embedding_input="project",
+            skip_pca=True,
+            skip_admixture=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+
+        assert results.embedding.fit_embedding_file is None
+        assert results.fit_embedding_figures == ()
+        assert results.projection_plot is None
+        assert results.embedding_figures == (Path("project.png"),)
 
     def test_single_input_mode_reports_no_fit_embedding_file(self, tmp_path, monkeypatch):
         pipeline = make_pipeline(tmp_path)
@@ -356,7 +402,7 @@ class TestPipelineRunEmbeddingInputMode:
             skip_pca_visualization=True,
             skip_metrics=True,
         )
-        assert "fit_embedding_file" not in results
+        assert results.embedding.fit_embedding_file is None
 
 
 # ---------------------------------------------------------------------------
@@ -404,68 +450,44 @@ class TestPipelineRunMissingPCA:
             skip_pca_visualization=True,
             skip_metrics=True,
         )
-        assert "embedding_file" in results
+        assert results.embedding is not None
 
+    def test_error_names_flag_and_expected_paths(self, tmp_path):
+        """Spec constraint C: the error must name which skip flag was set and
+        which files were expected, not just say 'PCA' vaguely."""
+        pipeline = make_pipeline(tmp_path)
+        n_pcs = 10
+        pca_dir = pipeline.output_dir / "pca"
+        expected_fit = pca_dir / f"fit_pca_{n_pcs}.csv"
+        expected_project = pca_dir / f"project_pca_{n_pcs}.csv"
 
-# ---------------------------------------------------------------------------
-# TestGetEmbeddingModel — method dispatch and parameter forwarding
-# ---------------------------------------------------------------------------
+        with pytest.raises(RuntimeError) as exc_info:
+            pipeline.run(
+                n_pcs=n_pcs,
+                skip_pca=True,
+                skip_admixture=True,
+                skip_pca_visualization=True,
+                skip_metrics=True,
+            )
 
+        message = str(exc_info.value)
+        assert "--skip-pca" in message
+        assert str(expected_fit) in message
+        assert str(expected_project) in message
 
-class TestGetEmbeddingModel:
-    """_get_embedding_model maps a method string to an embedding class instance.
+    def test_error_still_says_no_pca_files_found(self, tmp_path):
+        """Locks in the leading phrase integration tests match on
+        (tests/integration/test_generic_pipeline.py::test_skip_pca_raises_when_no_pca_files
+        asserts match="No PCA files found") alongside the clearer path/flag detail."""
+        pipeline = make_pipeline(tmp_path)
 
-    Parameter forwarding matters: silently ignoring user-supplied knn or
-    n_neighbors would produce embeddings with wrong neighbourhood scale,
-    which is undetectable from the output shape alone.
-
-    Dead code: _get_embedding_model is no longer called by the live path
-    (superseded by pipeline.steps.embedding.build_embedding_model) and is kept
-    only until a later PR deletes it. Its defaults deliberately differ from the
-    live path — see test_empty_params_uses_defaults below, which pins PHATE's
-    own n_landmark=2000 default, not the live path's explicit None.
-    """
-
-    @pytest.fixture
-    def pipeline(self, tmp_path):
-        return make_pipeline(tmp_path)
-
-    def test_unknown_method_raises_valueerror(self, pipeline):
-        with pytest.raises(ValueError, match="Unknown embedding method"):
-            pipeline._get_embedding_model("foo")
-
-    def test_phate_returns_phate_instance(self, pipeline):
-        assert isinstance(pipeline._get_embedding_model("phate"), PHATE)
-
-    def test_umap_returns_umap_instance(self, pipeline):
-        assert isinstance(pipeline._get_embedding_model("umap"), UMAP)
-
-    def test_tsne_returns_tsne_instance(self, pipeline):
-        assert isinstance(pipeline._get_embedding_model("tsne"), TSNE)
-
-    def test_diffusion_map_returns_diffusion_map_instance(self, pipeline):
-        assert isinstance(pipeline._get_embedding_model("diffusion_map"), DiffusionMap)
-
-    def test_phate_knn_param_overrides_default(self, pipeline):
-        """User-supplied knn=100 must override the built-in default of 25."""
-        model = pipeline._get_embedding_model("phate", {"knn": 100})
-        assert model.knn == 100, (
-            f"Expected knn=100, got {model.knn}. "
-            "Silently ignoring user params produces wrong-scale embeddings."
-        )
-
-    def test_umap_n_neighbors_param_overrides_default(self, pipeline):
-        model = pipeline._get_embedding_model("umap", {"n_neighbors": 50})
-        assert model.n_neighbors == 50
-
-    def test_tsne_perplexity_param_overrides_default(self, pipeline):
-        model = pipeline._get_embedding_model("tsne", {"perplexity": 100})
-        assert model.perplexity == 100
-
-    def test_empty_params_uses_defaults(self, pipeline):
-        """Empty params dict must not crash — defaults apply."""
-        model = pipeline._get_embedding_model("phate", {})
-        assert model.knn == 25  # built-in default
+        with pytest.raises(RuntimeError, match="No PCA files found"):
+            pipeline.run(
+                skip_pca=True,
+                skip_admixture=True,
+                skip_pca_visualization=True,
+                skip_metrics=True,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -499,17 +521,16 @@ def stub_viz_steps(monkeypatch, **overrides):
     fake of the caller's choosing (typically one that raises).
     """
     import manifold_genetics.pipeline.orchestrator as orch
-    from manifold_genetics.pipeline.steps.viz import VizStepResult
+    from manifold_genetics.pipeline.steps.viz import EmbeddingVizResult, VizStepResult
 
     defaults = {
-        "run_pca_viz_step": lambda io, viz, *, pca_file, n_pcs: VizStepResult(
+        "run_pca_viz_step": lambda io, *, pca_file, n_pcs: VizStepResult(
             figures=(Path("pca_pairs.png"),)
         ),
         "run_admixture_viz_step": lambda io, viz, *, admixture: VizStepResult(
             figures=(Path("bars.png"),)
         ),
-        "run_embedding_viz_step": lambda io, viz, *, embedding, method: VizStepResult(
-            figures=(Path("fit.png"), Path("project.png"), Path("proj.png")),
+        "run_embedding_viz_step": lambda io, viz, *, embedding, method: EmbeddingVizResult(
             fit_figures=(Path("fit.png"),),
             project_figures=(Path("project.png"),),
             projection_plot=Path("proj.png"),
@@ -566,12 +587,12 @@ class TestPipelineRunFullFlow:
         )
 
         assert backend.calls == ["fit", "transform", "transform"]
-        assert "pca_figures" in results
-        assert "admixture_figures" in results
-        assert "embedding_figures" in results
-        assert "projection_plot" in results
-        assert results["metrics"]["geographic"]["correlation"] == 0.9
-        assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
+        assert results.pca_figures
+        assert results.admixture_figures
+        assert results.embedding_figures
+        assert results.projection_plot is not None
+        assert results.metrics["geographic"]["correlation"] == 0.9
+        assert results.metrics["admixture"]["2"]["correlation"] == 0.5
         # Metrics ran in-process and landed at the documented paths (constraint B)
         assert (pipeline.output_dir / "metrics" / "geographic.json").exists()
         assert (pipeline.output_dir / "metrics" / "admixture.json").exists()
@@ -594,9 +615,9 @@ class TestPipelineRunFullFlow:
             embedding_params={"knn": 5},
         )
 
-        assert "geographic" not in results["metrics"]
+        assert "geographic" not in results.metrics
         assert not (pipeline.output_dir / "metrics" / "geographic.json").exists()
-        assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
+        assert results.metrics["admixture"]["2"]["correlation"] == 0.5
 
     def test_phate_landmark_and_batch_flags_forwarded(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)
@@ -634,7 +655,7 @@ class TestPipelineRunFullFlow:
             skip_embedding=True,
             skip_metrics=True,
         )
-        assert "pca_figures" not in results
+        assert results.pca_figures == ()
 
 
 # ---------------------------------------------------------------------------
@@ -670,13 +691,13 @@ class TestPipelineVizIsNonFatal:
 
         # The pipeline returned normally (no exception propagated), and the
         # compute outputs the failing viz step depended on are still present.
-        assert "embedding_file" in results
-        assert "admixture_dir" in results
+        assert results.embedding is not None
+        assert results.admixture is not None
 
     def test_failure_is_recorded_in_results(self, tmp_path, monkeypatch):
         results = self._run_with_one_failing_step(tmp_path, monkeypatch, "run_admixture_viz_step")
 
-        assert results["failed_viz_steps"] == ("admixture_viz",)
+        assert results.failed_steps == ("admixture_viz",)
 
     def test_a_warning_is_logged(self, tmp_path, monkeypatch, caplog):
         with caplog.at_level("WARNING"):
@@ -690,12 +711,12 @@ class TestPipelineVizIsNonFatal:
 
         # admixture_viz's own "bars" key never got set, but the other three viz
         # steps (pca_viz, embedding_viz, admixture_embedding_viz) all ran fine.
-        assert "pca_figures" in results
-        assert "embedding_figures" in results
-        assert "fit_embedding_figures" in results
-        assert "projection_plot" in results
-        assert "bars" not in results.get("admixture_figures", {})
-        assert "admixture_colored_embedding" in results["admixture_figures"]
+        assert results.pca_figures
+        assert results.embedding_figures
+        assert results.fit_embedding_figures
+        assert results.projection_plot is not None
+        assert "bars" not in results.admixture_figures
+        assert "admixture_colored_embedding" in results.admixture_figures
 
     def test_no_failures_yields_an_empty_tuple(self, tmp_path, monkeypatch):
         stub_pca_step(monkeypatch, 3)
@@ -712,22 +733,21 @@ class TestPipelineVizIsNonFatal:
             skip_metrics=True,
         )
 
-        assert results["failed_viz_steps"] == ()
+        assert results.failed_steps == ()
 
     def test_projection_plot_substep_failure_is_recorded(self, tmp_path, monkeypatch):
         """A projection-plot failure is a sub-step failure inside an otherwise-
-        successful embedding_viz step (VizStepResult.failed_substeps), not a
-        whole-step failure — but it must still reach failed_viz_steps under its
+        successful embedding_viz step (EmbeddingVizResult.failed_substeps), not a
+        whole-step failure — but it must still reach failed_steps under its
         own name, and the run must complete normally."""
-        from manifold_genetics.pipeline.steps.viz import VizStepResult
+        from manifold_genetics.pipeline.steps.viz import EmbeddingVizResult
 
         stub_pca_step(monkeypatch, 3)
         stub_embedding_step(monkeypatch)
         stub_admixture_step(monkeypatch)
         stub_viz_steps(
             monkeypatch,
-            run_embedding_viz_step=lambda io, viz, *, embedding, method: VizStepResult(
-                figures=(Path("fit.png"), Path("project.png")),
+            run_embedding_viz_step=lambda io, viz, *, embedding, method: EmbeddingVizResult(
                 fit_figures=(Path("fit.png"),),
                 project_figures=(Path("project.png"),),
                 projection_plot=None,
@@ -744,10 +764,10 @@ class TestPipelineVizIsNonFatal:
             skip_metrics=True,
         )
 
-        assert "projection_plot" in results["failed_viz_steps"]
-        assert "embedding_viz" not in results["failed_viz_steps"]
-        assert "embedding_file" in results
-        assert "projection_plot" not in results
+        assert "projection_plot" in results.failed_steps
+        assert "embedding_viz" not in results.failed_steps
+        assert results.embedding is not None
+        assert results.projection_plot is None
 
 
 def test_skip_pca_visualization_with_admixture_visualization_on(tmp_path, monkeypatch):
@@ -777,8 +797,8 @@ def test_skip_pca_visualization_with_admixture_visualization_on(tmp_path, monkey
         skip_metrics=True,
     )
 
-    assert results["failed_viz_steps"] == ()
-    assert results["admixture_figures"]["bars"].name == "project_bars.png"
+    assert results.failed_steps == ()
+    assert results.admixture_figures["bars"].name == "project_bars.png"
 
 
 # ---------------------------------------------------------------------------
@@ -865,10 +885,9 @@ class TestPipelineRunPCAInProcess:
         )
 
         pca_dir = pipeline.output_dir / "pca"
-        assert results["fit_pca_file"] == pca_dir / "fit_pca_4.csv"
-        assert results["project_pca_file"] == pca_dir / "project_pca_4.csv"
-        assert results["pca_file"] == results["project_pca_file"]
-        assert isinstance(results["pca_coords"], pd.DataFrame)
+        assert results.pca.fit_pca == pca_dir / "fit_pca_4.csv"
+        assert results.pca.project_pca == pca_dir / "project_pca_4.csv"
+        assert isinstance(results.pca.coords_df, pd.DataFrame)
 
     def test_skip_pca_still_resolves_existing_outputs(self, tmp_path, monkeypatch):
         """Spec constraint C: a skipped step still supplies its paths downstream."""
@@ -889,8 +908,8 @@ class TestPipelineRunPCAInProcess:
         )
 
         assert step_calls == [], "skip_pca must not run the step"
-        assert results["fit_pca_file"] == pca_dir / "fit_pca_4.csv"
-        assert results["project_pca_file"] == pca_dir / "project_pca_4.csv"
+        assert results.pca.fit_pca == pca_dir / "fit_pca_4.csv"
+        assert results.pca.project_pca == pca_dir / "project_pca_4.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -959,8 +978,9 @@ class TestPipelineRunAdmixtureInProcess:
             skip_metrics=True,
         )
         admix_dir = pipeline.output_dir / "admixture"
-        assert results["admixture_dir"] == admix_dir
-        assert results["admixture_checkpoints_dir"] == admix_dir / "checkpoints"
-        assert sorted(results["fit_q_files"]) == [2, 3]
-        assert sorted(results["project_q_files"]) == [2, 3]
-        assert results["q_files"] == results["project_q_files"]
+        assert results.admixture.dir == admix_dir
+        assert results.admixture.checkpoints_dir == admix_dir / "checkpoints"
+        assert sorted(results.admixture.fit_q_files) == [2, 3]
+        assert sorted(results.admixture.project_q_files) == [2, 3]
+        # skip_embedding=True above — embedding must not have run.
+        assert results.embedding is None

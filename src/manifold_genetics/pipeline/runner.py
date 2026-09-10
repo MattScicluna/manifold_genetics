@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 
 from .orchestrator import Pipeline
+from .result import PipelineResult
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def run_pipeline(
     skip_pca_visualization: bool = False,
     skip_admixture_visualization: bool = False,
     skip_metrics: bool = False,
-) -> Dict:
+) -> PipelineResult:
     """
     Run the complete manifold-genetics pipeline.
 
@@ -97,19 +98,17 @@ def run_pipeline(
         skip_metrics: Skip metrics computation
 
     Returns:
-        Dictionary with paths to outputs and computed metrics. Keys include:
-        - fit_pca_file: Path to fit PCA coordinates CSV
-        - project_pca_file: Path to project PCA coordinates CSV
-        - pca_coords: pandas DataFrame with PCA coordinates
-        - admixture_dir: Path to admixture output directory
-        - fit_q_files: Dict mapping K -> fit admixture CSV path
-        - project_q_files: Dict mapping K -> project admixture CSV path
-        - embedding_file: Path to embedding coordinates CSV
-        - embedding_coords: pandas DataFrame with embedding coordinates
-        - pca_figures: List of PCA plot paths
-        - embedding_figures: List of embedding plot paths
-        - admixture_figures: Dict with admixture plot paths
-        - metrics: Dict with geographic and admixture preservation metrics
+        PipelineResult with the typed outputs of every stage that ran.
+        ``admixture`` and ``embedding`` are None when their stage did not run
+        (``skip_admixture`` / ``skip_embedding``), as are
+        ``geographic_metrics`` and ``admixture_metrics`` when their metric
+        did not run. ``pca`` is different: it is never None — under
+        ``skip_pca`` it is still a ``PCAStepResult``, but with
+        ``skipped=True`` and ``fit_pca``/``project_pca`` populated only from
+        whatever cached output already exists on disk (possibly both None).
+        Check ``.skipped``, not truthiness, to tell whether PCA ran. Figure
+        families are empty tuples/dicts when their stage did not run or
+        produced nothing.
 
     Examples:
         >>> # Basic usage with shared labels/colormap
@@ -156,19 +155,10 @@ def run_pipeline(
         * Separate values for all of `fit_labels`, `project_labels`, `fit_colormap`,
           and `project_colormap` for cross-cohort analysis.
     """
-    # Validate labels/colormap arguments
-    if not labels and not (fit_labels and project_labels):
-        raise ValueError(
-            "Must provide either 'labels' (used for both fit and project) OR both "
-            "'fit_labels' and 'project_labels'. Providing only one of 'fit_labels' or "
-            "'project_labels' without 'labels' is not allowed."
-        )
-    if not colormap and not (fit_colormap and project_colormap):
-        raise ValueError(
-            "Must provide either 'colormap' (used for both fit and project) OR both "
-            "'fit_colormap' and 'project_colormap'. Providing only one of "
-            "'fit_colormap' or 'project_colormap' without 'colormap' is not allowed."
-        )
+    # Labels/colormap argument-shape validation now lives in Pipeline.__init__
+    # (via build_configs()), which runs before output_dir is created — no need
+    # to duplicate it here, and duplicating it would risk the two messages
+    # drifting apart.
 
     # Create Pipeline instance
     pipeline = Pipeline(

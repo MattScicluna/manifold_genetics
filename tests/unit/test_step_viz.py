@@ -21,6 +21,7 @@ from manifold_genetics.pipeline.steps.admixture import AdmixtureStepResult
 from manifold_genetics.pipeline.steps.embedding import EmbeddingStepResult
 from manifold_genetics.pipeline.steps.paths import figure_output_paths
 from manifold_genetics.pipeline.steps.viz import (
+    EmbeddingVizResult,
     VizStepResult,
     run_admixture_embedding_viz_step,
     run_admixture_viz_step,
@@ -111,21 +112,20 @@ class TestPcaVizStep:
         io = make_io(tmp_path)
         pca_file = tmp_path / "project_pca_10.csv"
 
-        result = run_pca_viz_step(io, VizConfig(), pca_file=pca_file, n_pcs=10)
+        result = run_pca_viz_step(io, pca_file=pca_file, n_pcs=10)
 
         names = [c[0] for c in calls]
         assert names == ["plot_pca_pairs", "plot_pca_pairs"], "one grid per colormap column"
         cols = [c[1]["label_column"] for c in calls]
         assert cols == ["Population", "Region"]
         assert isinstance(result, VizStepResult)
-        assert result.failed is False
         assert len(result.figures) == 2
 
     def test_forwards_the_documented_kwargs(self, tmp_path, calls, stub_colormap):
         io = make_io(tmp_path)
         pca_file = tmp_path / "project_pca_10.csv"
 
-        run_pca_viz_step(io, VizConfig(), pca_file=pca_file, n_pcs=10)
+        run_pca_viz_step(io, pca_file=pca_file, n_pcs=10)
 
         _, kw = calls[0]
         assert kw["pca_coords"] == pca_file
@@ -137,7 +137,7 @@ class TestPcaVizStep:
 
     def test_creates_the_figures_directory(self, tmp_path, calls, stub_colormap):
         io = make_io(tmp_path)
-        run_pca_viz_step(io, VizConfig(), pca_file=tmp_path / "p.csv", n_pcs=3)
+        run_pca_viz_step(io, pca_file=tmp_path / "p.csv", n_pcs=3)
         assert figure_output_paths(io)["pca"].is_dir()
 
 
@@ -268,7 +268,7 @@ class TestEmbeddingVizStep:
     def test_split_fields_populated_with_fit_embedding_and_projection_columns(
         self, tmp_path, calls, stub_colormap
     ):
-        """VizStepResult carries fit_figures/project_figures/projection_plot
+        """EmbeddingVizResult carries fit_figures/project_figures/projection_plot
         separately from the flat `figures` aggregate, so the orchestrator can
         reconstruct the three distinct `results` keys the old inline block set."""
         io = make_io(tmp_path)
@@ -278,6 +278,7 @@ class TestEmbeddingVizStep:
 
         result = run_embedding_viz_step(io, viz, embedding=self._emb(tmp_path), method="phate")
 
+        assert isinstance(result, EmbeddingVizResult)
         assert result.fit_figures == (Path("emb.png"),)
         assert result.project_figures == (Path("emb.png"),)
         assert result.projection_plot is not None
