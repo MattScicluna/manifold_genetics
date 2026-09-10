@@ -9,8 +9,6 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-import pandas as pd
-
 from ..embeddings import PHATE, TSNE, UMAP, DiffusionMap
 from ..visualization import (
     plot_admixture_bar_grid,
@@ -18,10 +16,11 @@ from ..visualization import (
     plot_projection,
     visualize,
 )
-from .config import IOConfig, PCAConfig
+from .config import EmbeddingConfig, IOConfig, PCAConfig
+from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
 from .steps.paths import metrics_output_paths, pca_output_paths
-from .steps.pca import run_pca_step
+from .steps.pca import PCAStepResult, run_pca_step
 
 logger = logging.getLogger(__name__)
 
@@ -362,93 +361,27 @@ class Pipeline:
                     f"{self.output_dir / 'pca'} contains fit_pca_{{n}}.csv / project_pca_{{n}}.csv."
                 )
 
-            embedding_dir = self.output_dir / "embeddings"
-            embedding_dir.mkdir(exist_ok=True)
-            embedding_file = embedding_dir / f"{embedding}_2d.csv"
+            emb_cfg = EmbeddingConfig(
+                method=embedding,
+                input_mode=embedding_input,
+                params=dict(embedding_params or {}),
+            )
 
-            # Determine which PCA coordinates to embed based on embedding_input mode
-            if embedding_input == "fit":
-                # Mode 1: fit_transform embedding on fit PCA coordinates only
-                logger.info(f"Embedding fit PCA coordinates only (mode: fit-only)")
-                fit_input = results["fit_pca_file"]
-                project_input = None
-            elif embedding_input == "project":
-                # Mode 2: fit_transform embedding on project PCA coordinates only
-                logger.info(f"Embedding project PCA coordinates only (mode: project-only)")
-                fit_input = results["project_pca_file"]
-                project_input = None
-            else:  # embedding_input == "both"
-                # Mode 3: fit embedding on fit PCA, apply it to project PCA
-                logger.info("Embedding: fit on fit PCA, apply to project PCA (mode: both)")
-                fit_input = results["fit_pca_file"]
-                project_input = results["project_pca_file"]
+            # PCA outputs may have come from the step or been resolved from disk
+            # under --skip-pca; either way the embedding step takes them as a result.
+            pca_result = PCAStepResult(
+                fit_pca=results.get("fit_pca_file"),
+                project_pca=results.get("project_pca_file"),
+            )
 
-            embed_cmd = [
-                "manifold-genetics",
-                "embed",
-                "--method",
-                embedding,
-                "--input",
-                str(fit_input),
-            ]
+            emb_result = run_embedding_step(io, emb_cfg, pca=pca_result)
 
-            # Add fit or project output based on mode
-            fit_embedding_file = None
-            if project_input is None:
-                # Modes 1 & 2: fit_transform only (output goes to main embedding file)
-                embed_cmd.extend(["--project-output", str(embedding_file)])
-            else:
-                # Mode 3: fit on one dataset, apply to another
-                fit_embedding_file = embedding_dir / f"{embedding}_fit_2d.csv"
-                embed_cmd.extend(
-                    [
-                        "--fit-output",
-                        str(fit_embedding_file),
-                        "--project-input",
-                        str(project_input),
-                        "--project-output",
-                        str(embedding_file),
-                    ]
-                )
-
-            if embedding == "phate":
-                embed_cmd.extend(["--knn", str(embedding_params.get("knn", 25))])
-                t_val = embedding_params.get("t", "auto")
-                embed_cmd.extend(["--t", str(t_val)])
-
-                # Add n_landmark if specified
-                if "n_landmark" in embedding_params and embedding_params["n_landmark"] is not None:
-                    embed_cmd.extend(["--n-landmark", str(embedding_params["n_landmark"])])
-
-                # Add random_landmarking flag if specified
-                if embedding_params.get("random_landmarking", False):
-                    embed_cmd.append("--random-landmarking")
-
-                # Add embed_batch_size if specified
-                if (
-                    "embed_batch_size" in embedding_params
-                    and embedding_params["embed_batch_size"] is not None
-                ):
-                    embed_cmd.extend(
-                        ["--embed-batch-size", str(embedding_params["embed_batch_size"])]
-                    )
-            elif embedding == "umap":
-                embed_cmd.extend(["--n-neighbors", str(embedding_params.get("n_neighbors", 15))])
-                embed_cmd.extend(["--min-dist", str(embedding_params.get("min_dist", 0.1))])
-            elif embedding == "tsne":
-                embed_cmd.extend(["--perplexity", str(embedding_params.get("perplexity", 30))])
-            elif embedding == "diffusion_map":
-                embed_cmd.extend(["--knn", str(embedding_params.get("knn", 25))])
-
-            subprocess.run(embed_cmd, check=True)
-            embedding_coords = pd.read_csv(embedding_file)
-
+            embedding_file = emb_result.embedding_file
             results["embedding_file"] = embedding_file
-            results["embedding_coords"] = embedding_coords
+            results["embedding_coords"] = emb_result.coords_df
 
-            # Track fit embedding file if it exists (Mode 3: cross-projection)
-            if fit_embedding_file is not None:
-                results["fit_embedding_file"] = fit_embedding_file
+            if emb_result.fit_embedding_file is not None:
+                results["fit_embedding_file"] = emb_result.fit_embedding_file
 
         # Step 4: Embedding Visualization
         if not skip_visualization and not skip_embedding:
