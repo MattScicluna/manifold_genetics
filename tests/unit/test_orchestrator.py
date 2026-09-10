@@ -336,6 +336,8 @@ class TestPipelineRunEmbeddingInputMode:
         assert results.embedding.embedding_file == emb_dir / "phate_2d.csv"
         assert results.embedding.fit_embedding_file == emb_dir / "phate_fit_2d.csv"
         assert isinstance(results.embedding.coords_df, pd.DataFrame)
+        # skip_admixture=True above — admixture must not have run.
+        assert results.admixture is None
 
     def test_project_only_mode_leaves_fit_figures_and_projection_plot_absent(
         self, tmp_path, monkeypatch
@@ -736,7 +738,7 @@ class TestPipelineVizIsNonFatal:
     def test_projection_plot_substep_failure_is_recorded(self, tmp_path, monkeypatch):
         """A projection-plot failure is a sub-step failure inside an otherwise-
         successful embedding_viz step (EmbeddingVizResult.failed_substeps), not a
-        whole-step failure — but it must still reach failed_viz_steps under its
+        whole-step failure — but it must still reach failed_steps under its
         own name, and the run must complete normally."""
         from manifold_genetics.pipeline.steps.viz import EmbeddingVizResult
 
@@ -980,3 +982,5 @@ class TestPipelineRunAdmixtureInProcess:
         assert results.admixture.checkpoints_dir == admix_dir / "checkpoints"
         assert sorted(results.admixture.fit_q_files) == [2, 3]
         assert sorted(results.admixture.project_q_files) == [2, 3]
+        # skip_embedding=True above — embedding must not have run.
+        assert results.embedding is None

@@ -14,7 +14,7 @@ from .result import PipelineResult
 from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
-from .steps.paths import figure_output_paths, metrics_output_paths, pca_output_paths
+from .steps.paths import metrics_output_paths, pca_output_paths
 from .steps.pca import PCAStepResult, run_pca_step
 from .steps.viz import (
     run_admixture_embedding_viz_step,
@@ -209,9 +209,17 @@ class Pipeline:
             admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
 
         Returns:
-            PipelineResult with the typed outputs of every stage that ran; a
-            stage that was skipped leaves its field None (or its figure family
-            empty).
+            PipelineResult with the typed outputs of every stage that ran.
+            ``admixture`` and ``embedding`` are None when their stage did not
+            run (``skip_admixture`` / ``skip_embedding``), as are
+            ``geographic_metrics`` and ``admixture_metrics`` when their
+            metric did not run. ``pca`` is different: it is never None —
+            under ``skip_pca`` it is still a ``PCAStepResult``, but with
+            ``skipped=True`` and ``fit_pca``/``project_pca`` populated only
+            from whatever cached output already exists on disk (possibly
+            both None). Check ``.skipped``, not truthiness, to tell whether
+            PCA ran. Figure families are empty tuples/dicts when their stage
+            did not run or produced nothing.
         """
         failed = []
 
@@ -287,7 +295,9 @@ class Pipeline:
                     lambda: run_admixture_viz_step(io, viz_cfg, admixture=r_admix),
                 )
                 if admix_viz_result is not None:
-                    admixture_figures["bars"] = figure_output_paths(io)["admixture_bars"]
+                    bars = admix_viz_result.figures[0] if admix_viz_result.figures else None
+                    if bars is not None:
+                        admixture_figures["bars"] = bars
 
         # ---- Step 3: Embedding ----
         r_emb = None
@@ -351,9 +361,11 @@ class Pipeline:
                     ),
                 )
                 if admix_emb_viz_result is not None:
-                    admixture_figures["admixture_colored_embedding"] = figure_output_paths(io)[
-                        "admixture_colored_embedding"
-                    ]
+                    admix_emb = (
+                        admix_emb_viz_result.figures[0] if admix_emb_viz_result.figures else None
+                    )
+                    if admix_emb is not None:
+                        admixture_figures["admixture_colored_embedding"] = admix_emb
             else:
                 logger.warning(
                     "Skipping admixture-colored embedding visualization - missing embedding or admixture data"
