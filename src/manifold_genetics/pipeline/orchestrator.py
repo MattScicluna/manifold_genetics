@@ -520,7 +520,16 @@ class Pipeline:
         return results
 
     def _get_embedding_model(self, method: str, params: Optional[Dict] = None):
-        """Get embedding model instance."""
+        """Get embedding model instance.
+
+        Dead code: nothing calls this any more. Superseded by
+        ``pipeline.steps.embedding.build_embedding_model``, which is the live
+        path's method-to-model mapping. Scheduled for deletion in a later PR.
+        Its defaults deliberately differ from the live path (e.g. it leaves
+        PHATE's own ``n_landmark=2000`` default in place, whereas the live path
+        always passes ``n_landmark`` explicitly, ``None`` when unset) — do not
+        use it as a reference for current behaviour.
+        """
         if params is None:
             params = {}
 

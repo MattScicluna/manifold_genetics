@@ -506,6 +506,12 @@ class TestGetEmbeddingModel:
     Parameter forwarding matters: silently ignoring user-supplied knn or
     n_neighbors would produce embeddings with wrong neighbourhood scale,
     which is undetectable from the output shape alone.
+
+    Dead code: _get_embedding_model is no longer called by the live path
+    (superseded by pipeline.steps.embedding.build_embedding_model) and is kept
+    only until a later PR deletes it. Its defaults deliberately differ from the
+    live path — see test_empty_params_uses_defaults below, which pins PHATE's
+    own n_landmark=2000 default, not the live path's explicit None.
     """
 
     @pytest.fixture

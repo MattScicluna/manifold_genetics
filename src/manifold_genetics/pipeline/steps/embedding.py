@@ -18,6 +18,7 @@ from typing import Mapping, Optional, Union
 import pandas as pd
 
 from ...embeddings import PHATE, TSNE, UMAP, DiffusionMap
+from ...utils.validation import validate_embedding_csv
 from ..config import EmbeddingConfig, IOConfig
 from .paths import embedding_output_paths
 from .pca import PCAStepResult
@@ -100,6 +101,11 @@ def run_embedding(
 
     Returns the DataFrame written to ``project_output``.
     """
+    if fit_input is not None:
+        validate_embedding_csv(fit_input)
+    if project_input is not None and project_input != fit_input:
+        validate_embedding_csv(project_input)
+
     if project_input is None:
         project_input = fit_input
 

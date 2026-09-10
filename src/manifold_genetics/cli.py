@@ -369,12 +369,6 @@ def cmd_embed(args):
     fit_input = args.fit_input or args.input
     project_input = args.project_input or fit_input
 
-    # Validate inputs (after resolving fit/project)
-    if fit_input is not None:
-        validate_embedding_csv(fit_input)
-    if project_input is not None and project_input != fit_input:
-        validate_embedding_csv(project_input)
-
     if fit_input is None:
         raise ValueError("Please provide --input or --fit-input for embedding fit.")
     if args.output is None and args.project_output is None:

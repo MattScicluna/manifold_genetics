@@ -46,9 +46,18 @@ _VALIDATORS = [
 
 @pytest.fixture
 def stub_validation(monkeypatch):
-    """Turn every validate_* helper imported into cli into a no-op."""
+    """Turn every validate_* helper imported into cli into a no-op.
+
+    ``validate_embedding_csv`` also runs inside the embedding step's shared
+    seam (``pipeline.steps.embedding.run_embedding``) now, since cmd_embed no
+    longer validates its own inputs — that seam is stubbed here too so tests
+    using fake, non-existent embedding paths still exercise dispatch only.
+    """
     for name in _VALIDATORS:
         monkeypatch.setattr(mg_cli, name, lambda *a, **k: None)
+    monkeypatch.setattr(
+        "manifold_genetics.pipeline.steps.embedding.validate_embedding_csv", lambda *a, **k: None
+    )
 
 
 # ---------------------------------------------------------------------------

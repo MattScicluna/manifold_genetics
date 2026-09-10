@@ -70,6 +70,13 @@ def fake_models(monkeypatch):
     return FakeEmbed
 
 
+@pytest.fixture
+def stub_validate_embedding_csv(monkeypatch):
+    """No-op the seam's input validation so fake, non-existent paths can be
+    used to test fit/transform call sequencing without touching disk."""
+    monkeypatch.setattr(f"{MODULE}.validate_embedding_csv", lambda *a, **k: None)
+
+
 def make_io(tmp_path) -> IOConfig:
     return IOConfig(
         fit_plink=Path("data/fit"),
@@ -178,7 +185,9 @@ class TestBuildEmbeddingModel:
 
 
 class TestRunEmbedding:
-    def test_fits_on_fit_input_and_transforms_project_input(self, tmp_path, fake_models):
+    def test_fits_on_fit_input_and_transforms_project_input(
+        self, tmp_path, fake_models, stub_validate_embedding_csv
+    ):
         out = tmp_path / "emb.csv"
         run_embedding("fit.csv", "proj.csv", project_output=out, method="umap")
 
@@ -186,7 +195,9 @@ class TestRunEmbedding:
         assert inst.calls == [("fit", "fit.csv"), ("transform", "proj.csv")]
         assert out.exists()
 
-    def test_writes_fit_output_when_requested(self, tmp_path, fake_models):
+    def test_writes_fit_output_when_requested(
+        self, tmp_path, fake_models, stub_validate_embedding_csv
+    ):
         fit_out, proj_out = tmp_path / "fit.csv", tmp_path / "proj.csv"
         run_embedding(
             "fit_in.csv", "proj_in.csv", fit_output=fit_out, project_output=proj_out, method="umap"
@@ -200,7 +211,9 @@ class TestRunEmbedding:
         ]
         assert fit_out.exists() and proj_out.exists()
 
-    def test_absent_project_input_reuses_fit_input(self, tmp_path, fake_models):
+    def test_absent_project_input_reuses_fit_input(
+        self, tmp_path, fake_models, stub_validate_embedding_csv
+    ):
         """Modes 'fit'/'project': fit and transform the SAME csv — not fit_transform.
         FakeEmbed.fit_transform raises, so a regression to fit_transform fails here."""
         out = tmp_path / "emb.csv"
@@ -209,16 +222,18 @@ class TestRunEmbedding:
         (inst,) = fake_models.instances
         assert inst.calls == [("fit", "only.csv"), ("transform", "only.csv")]
 
-    def test_creates_parent_directories(self, tmp_path, fake_models):
+    def test_creates_parent_directories(self, tmp_path, fake_models, stub_validate_embedding_csv):
         out = tmp_path / "nested" / "deeper" / "emb.csv"
         run_embedding("a.csv", None, project_output=out, method="umap")
         assert out.exists()
 
-    def test_returns_the_projected_coordinates(self, tmp_path, fake_models):
+    def test_returns_the_projected_coordinates(
+        self, tmp_path, fake_models, stub_validate_embedding_csv
+    ):
         df = run_embedding("a.csv", None, project_output=tmp_path / "e.csv", method="umap")
         assert list(df.columns) == ["sample_id", "dim_1", "dim_2"]
 
-    def test_params_reach_the_model(self, tmp_path, fake_models):
+    def test_params_reach_the_model(self, tmp_path, fake_models, stub_validate_embedding_csv):
         run_embedding(
             "a.csv",
             None,
@@ -320,7 +335,7 @@ class TestRunEmbeddingStep:
         pca = PCAStepResult(fit_pca=None, project_pca=Path("project.csv"))
         emb = EmbeddingConfig(method="phate", input_mode="fit", params={})
 
-        with pytest.raises(RuntimeError, match="fit"):
+        with pytest.raises(RuntimeError, match="mode 'fit' requires the fit PCA"):
             run_embedding_step(io, emb, pca=pca)
 
     def test_mode_project_with_missing_project_pca_raises(self, tmp_path, fake_models):
@@ -328,7 +343,7 @@ class TestRunEmbeddingStep:
         pca = PCAStepResult(fit_pca=Path("fit.csv"), project_pca=None)
         emb = EmbeddingConfig(method="phate", input_mode="project", params={})
 
-        with pytest.raises(RuntimeError, match="project"):
+        with pytest.raises(RuntimeError, match="mode 'project' requires the project PCA"):
             run_embedding_step(io, emb, pca=pca)
 
     def test_mode_both_with_missing_project_pca_raises(self, tmp_path, fake_models):
@@ -336,5 +351,22 @@ class TestRunEmbeddingStep:
         pca = PCAStepResult(fit_pca=Path("fit.csv"), project_pca=None)
         emb = EmbeddingConfig(method="phate", input_mode="both", params={})
 
-        with pytest.raises(RuntimeError, match="both"):
+        with pytest.raises(RuntimeError, match="mode 'both' requires the project PCA"):
             run_embedding_step(io, emb, pca=pca)
+
+    def test_validates_the_pca_coordinates_it_is_handed(self, tmp_path, fake_models, monkeypatch):
+        """Regression: Pipeline.run() no longer shells out to `manifold-genetics
+        embed`, so cmd_embed's input validation no longer runs on the pipeline
+        path. run_embedding_step must validate the PCA coordinates itself (via
+        the shared run_embedding() seam) so a malformed cached PCA CSV — e.g.
+        under --skip-pca — fails with a clean validation error instead of deep
+        inside PHATE."""
+        io, pca = make_io(tmp_path), make_pca_result(tmp_path)
+        emb = EmbeddingConfig(method="phate", input_mode="both", params={})
+
+        validated = []
+        monkeypatch.setattr(f"{MODULE}.validate_embedding_csv", lambda path: validated.append(path))
+
+        run_embedding_step(io, emb, pca=pca)
+
+        assert validated == [pca.fit_pca, pca.project_pca]
