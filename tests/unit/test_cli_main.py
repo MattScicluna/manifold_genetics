@@ -186,10 +186,11 @@ def test_cmd_setup_skip_plink1(monkeypatch):
 
 
 def test_cmd_pca_fit_project(monkeypatch, tmp_path):
+    """--fit-plink + --project-plink fits one dataset and projects the other."""
     calls = []
 
     class FakePCA:
-        def __init__(self, n_components, force):
+        def __init__(self, n_components, force=False):
             calls.append(("init", n_components, force))
 
         def fit(self, prefix, output_dir=None):
@@ -202,7 +203,7 @@ def test_cmd_pca_fit_project(monkeypatch, tmp_path):
                 df.to_csv(output_path, index=False)
             return df
 
-    monkeypatch.setattr(mg_cli, "PCA", FakePCA)
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
     out = tmp_path / "proj.csv"
     rc = mg_cli.main(
         [
@@ -220,6 +221,67 @@ def test_cmd_pca_fit_project(monkeypatch, tmp_path):
     assert rc == 0
     assert out.exists()
     assert ("fit", "fit") in calls
+    assert ("project", "proj") in calls
+
+
+def test_cmd_pca_single_input_uses_fit_transform(monkeypatch, tmp_path):
+    """`pca --input X --output Y` fits and projects the same dataset."""
+    calls = []
+
+    class FakePCA:
+        def __init__(self, n_components, force=False):
+            calls.append(("init", n_components, force))
+
+        def fit_transform(self, prefix, output_path=None):
+            calls.append(("fit_transform", prefix))
+            df = pd.DataFrame({"sample_id": ["s1"], "dim_1": [0.1]})
+            if output_path:
+                df.to_csv(output_path, index=False)
+            return df
+
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
+    out = tmp_path / "all.csv"
+    rc = mg_cli.main(["pca", "--input", "all", "--output", str(out), "--n-pcs", "1"])
+    assert rc == 0
+    assert out.exists()
+    assert ("fit_transform", "all") in calls
+
+
+def test_cmd_pca_flashpca_output_dir_overrides_model_dir(monkeypatch, tmp_path):
+    """--flashpca-output-dir wins over --model-dir (both name the same thing)."""
+    seen = {}
+
+    class FakePCA:
+        def __init__(self, n_components, force=False):
+            pass
+
+        def fit(self, prefix, output_dir=None):
+            seen["output_dir"] = output_dir
+
+        def project(self, prefix, output_path=None):
+            df = pd.DataFrame({"sample_id": ["s1"], "dim_1": [0.1]})
+            if output_path:
+                df.to_csv(output_path, index=False)
+            return df
+
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.pca.PCA", FakePCA)
+    rc = mg_cli.main(
+        [
+            "pca",
+            "--fit-plink",
+            "fit",
+            "--project-plink",
+            "proj",
+            "--project-output",
+            str(tmp_path / "p.csv"),
+            "--model-dir",
+            str(tmp_path / "ignored"),
+            "--flashpca-output-dir",
+            str(tmp_path / "flash"),
+        ]
+    )
+    assert rc == 0
+    assert seen["output_dir"] == tmp_path / "flash"
 
 
 def test_cmd_admixture_fit_project(monkeypatch, tmp_path):
@@ -342,10 +404,24 @@ def test_cmd_embed_unknown_method_returns_1(monkeypatch, tmp_path, stub_validati
     assert "Unknown method" in capsys.readouterr().out
 
 
-def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_validation):
+_STEP_METRICS = "manifold_genetics.pipeline.steps.metrics"
+
+
+@pytest.fixture
+def stub_step_metrics_validation(monkeypatch):
+    """Turn every validator used by the metrics steps into a no-op."""
+    for name in (
+        "validate_embedding_csv",
+        "validate_geographic_csv",
+        "validate_admixture_csv",
+        "validate_sample_id_overlap",
+    ):
+        monkeypatch.setattr(f"{_STEP_METRICS}.{name}", lambda *a, **k: None)
+
+
+def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_step_metrics_validation):
     monkeypatch.setattr(
-        mg_cli,
-        "compute_geographic_preservation",
+        f"{_STEP_METRICS}.compute_geographic_preservation",
         lambda **k: {"correlation": 0.9, "p_value": 1e-3},
     )
     out = tmp_path / "geo.json"
@@ -364,10 +440,9 @@ def test_cmd_metrics_geographic_writes_json(monkeypatch, tmp_path, stub_validati
     assert json.loads(out.read_text())["correlation"] == 0.9
 
 
-def test_cmd_metrics_admixture_writes_json(monkeypatch, tmp_path, stub_validation):
+def test_cmd_metrics_admixture_writes_json(monkeypatch, tmp_path, stub_step_metrics_validation):
     monkeypatch.setattr(
-        mg_cli,
-        "compute_admixture_preservation",
+        f"{_STEP_METRICS}.compute_admixture_preservation",
         lambda **k: {"2": {"correlation": 0.5}},
     )
     out = tmp_path / "adm.json"
@@ -388,6 +463,37 @@ def test_cmd_metrics_admixture_writes_json(monkeypatch, tmp_path, stub_validatio
     )
     assert rc == 0
     assert json.loads(out.read_text())["2"]["correlation"] == 0.5
+
+
+def test_cmd_metrics_admixture_forwards_subsample(
+    monkeypatch, tmp_path, stub_step_metrics_validation
+):
+    """--subsample must reach compute_admixture_preservation; dropping it would
+    silently run full pairwise distances on a large cohort."""
+    seen = {}
+    monkeypatch.setattr(
+        f"{_STEP_METRICS}.compute_admixture_preservation",
+        lambda **k: seen.update(k) or {"2": {"correlation": 0.5}},
+    )
+    rc = mg_cli.main(
+        [
+            "metrics-admixture",
+            "--embedding",
+            "emb.csv",
+            "--admixture-output",
+            str(tmp_path / "q"),
+            "--k-min",
+            "2",
+            "--k-max",
+            "2",
+            "--output",
+            str(tmp_path / "a.json"),
+            "--subsample",
+            "500",
+        ]
+    )
+    assert rc == 0
+    assert seen["subsample"] == 500
 
 
 def test_cmd_plot_dispatch(monkeypatch, tmp_path, stub_validation):

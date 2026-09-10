@@ -1,10 +1,13 @@
-"""Tests for pipeline/orchestrator.py — Pipeline init routing, PCA force logic,
-embedding input modes, admixture CLI flags, and _get_embedding_model dispatch.
+"""Tests for pipeline/orchestrator.py — Pipeline init routing, embedding input
+modes, admixture CLI flags, in-process PCA dispatch, and _get_embedding_model
+dispatch.
 
-Strategy: mock subprocess.run at the module level to capture CLI commands without
-executing them. Real CSV files are written to tmp_path where the orchestrator reads
-them back (PCA component-count check, post-run result loading). This exercises real
-pandas and path logic without needing any external binaries.
+Strategy: PCA now runs in-process, so it is stubbed via `stub_pca_step()`, which
+replaces `run_pca_step()` with a fake that writes real CSVs to tmp_path (the
+orchestrator reads these back for post-run result loading). Admixture and
+embedding still shell out, so `subprocess.run` is mocked at the module level to
+capture CLI commands without executing them. This exercises real pandas and path
+logic without needing any external binaries.
 
 Tests are organised around failure modes: each test documents what would break in
 production if the assertion failed.
@@ -56,6 +59,55 @@ def capture_subprocess(monkeypatch, on_call=None):
 
     monkeypatch.setattr(orch_mod.subprocess, "run", fake_run)
     return calls
+
+
+def stub_pca_step(monkeypatch, n_pcs):
+    """Replace the in-process PCA step with a fake that writes both CSVs.
+
+    Returns the list of (io, pca_config) it was called with, so tests can assert
+    what the orchestrator handed the step.
+    """
+    import manifold_genetics.pipeline.orchestrator as orch
+    from manifold_genetics.pipeline.steps.pca import PCAStepResult
+
+    calls = []
+
+    def fake_run_pca_step(io, pca):
+        calls.append((io, pca))
+        paths = orch.pca_output_paths(io, pca)
+        write_pca_csv(paths["fit_pca"], pca.n_pcs)
+        write_pca_csv(paths["project_pca"], pca.n_pcs)
+        return PCAStepResult(
+            fit_pca=paths["fit_pca"],
+            project_pca=paths["project_pca"],
+            coords_df=pd.read_csv(paths["project_pca"]),
+        )
+
+    monkeypatch.setattr(orch, "run_pca_step", fake_run_pca_step)
+    return calls
+
+
+def stub_metrics_steps(monkeypatch, geo=None, admix=None):
+    """Stub the metric computations and validators inside steps.metrics so the
+    real step code (JSON write + reload) runs against fake inputs."""
+    import manifold_genetics.pipeline.steps.metrics as m
+
+    for name in (
+        "validate_embedding_csv",
+        "validate_geographic_csv",
+        "validate_admixture_csv",
+        "validate_sample_id_overlap",
+    ):
+        monkeypatch.setattr(m, name, lambda *a, **k: None)
+
+    monkeypatch.setattr(
+        m, "compute_geographic_preservation", lambda **k: geo or {"correlation": 0.9}
+    )
+    # int keys on purpose: the JSON round-trip inside the step is what turns
+    # them into the string keys run_pipeline() has always returned.
+    monkeypatch.setattr(
+        m, "compute_admixture_preservation", lambda **k: admix or {2: {"correlation": 0.5}}
+    )
 
 
 def pca_calls(calls):
@@ -150,104 +202,6 @@ class TestPipelineInit:
         assert not out.exists()
         make_pipeline(tmp_path, output_dir=out)
         assert out.is_dir()
-
-
-# ---------------------------------------------------------------------------
-# TestPipelineRunPCAForce — --force flag on component count mismatch
-# ---------------------------------------------------------------------------
-
-
-class TestPipelineRunPCAForce:
-    """The PCA step inspects the cached project_pca_{n}.csv before running.
-    If the existing file has a different number of dim_ columns than n_pcs,
-    --force is appended to recompute from scratch.
-
-    Silent reuse of stale PCA would propagate wrong-dimensionality coordinates
-    to all downstream embedding and metric computations.
-    """
-
-    def _run_pca_step(self, pipeline, n_pcs, monkeypatch, project_pca_path):
-        """Run only the PCA step; fake subprocess writes the expected output file."""
-
-        def on_call(cmd):
-            if "pca" in cmd:
-                write_pca_csv(project_pca_path, n_pcs)
-
-        return capture_subprocess(monkeypatch, on_call=on_call)
-
-    def test_force_flag_added_when_existing_pca_has_wrong_component_count(
-        self, tmp_path, monkeypatch
-    ):
-        """Existing file has 10 dim_ columns; n_pcs=50 → --force must appear."""
-        pipeline = make_pipeline(tmp_path)
-        n_pcs = 50
-        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
-        write_pca_csv(project_pca, n_dims=10)  # 10 != 50
-
-        calls = self._run_pca_step(pipeline, n_pcs, monkeypatch, project_pca)
-        pipeline.run(
-            n_pcs=n_pcs,
-            skip_admixture=True,
-            skip_embedding=True,
-            skip_pca_visualization=True,
-            skip_metrics=True,
-        )
-
-        cmd = pca_calls(calls)
-        assert len(cmd) == 1
-        assert (
-            "--force" in cmd[0]
-        ), f"Expected --force when existing PCA has 10 dims but n_pcs=50. Got: {cmd[0]}"
-
-    def test_no_force_flag_when_component_count_matches(self, tmp_path, monkeypatch):
-        """Existing file already has 50 dim_ columns; n_pcs=50 → no --force.
-        Adding --force unnecessarily would recompute expensive PCA on every run.
-        """
-        pipeline = make_pipeline(tmp_path)
-        n_pcs = 50
-        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
-        write_pca_csv(project_pca, n_dims=50)  # correct count
-
-        calls = capture_subprocess(monkeypatch)
-        pipeline.run(
-            n_pcs=n_pcs,
-            skip_admixture=True,
-            skip_embedding=True,
-            skip_pca_visualization=True,
-            skip_metrics=True,
-        )
-        # Fake run didn't write the file after subprocess; read_csv will re-read original.
-        # Patch pd.read_csv for the post-run load only.
-
-        cmd = pca_calls(calls)
-        assert len(cmd) == 1
-        assert "--force" not in cmd[0], (
-            f"--force must not appear when existing PCA already has {n_pcs} components. "
-            f"Got: {cmd[0]}"
-        )
-
-    def test_no_force_flag_on_fresh_run_no_existing_file(self, tmp_path, monkeypatch):
-        """No cached file → first-time run must not include --force."""
-        pipeline = make_pipeline(tmp_path)
-        n_pcs = 50
-        project_pca = pipeline.output_dir / "pca" / f"project_pca_{n_pcs}.csv"
-
-        def on_call(cmd):
-            if "pca" in cmd:
-                write_pca_csv(project_pca, n_pcs)
-
-        calls = capture_subprocess(monkeypatch, on_call=on_call)
-        pipeline.run(
-            n_pcs=n_pcs,
-            skip_admixture=True,
-            skip_embedding=True,
-            skip_pca_visualization=True,
-            skip_metrics=True,
-        )
-
-        cmd = pca_calls(calls)
-        assert len(cmd) == 1
-        assert "--force" not in cmd[0]
 
 
 # ---------------------------------------------------------------------------
@@ -591,23 +545,12 @@ class TestPipelineRunFullFlow:
         )
 
     def _writer(self, pipeline, n_pcs, method="phate"):
-        pca_dir = pipeline.output_dir / "pca"
         emb_dir = pipeline.output_dir / "embeddings"
-        metrics_dir = pipeline.output_dir / "metrics"
 
         def on_call(cmd):
-            if "pca" in cmd:
-                write_pca_csv(pca_dir / f"fit_pca_{n_pcs}.csv", n_pcs)
-                write_pca_csv(pca_dir / f"project_pca_{n_pcs}.csv", n_pcs)
-            elif "embed" in cmd:
+            if "embed" in cmd:
                 write_pca_csv(emb_dir / f"{method}_2d.csv", 2)
                 write_pca_csv(emb_dir / f"{method}_fit_2d.csv", 2)
-            elif "metrics-geographic" in cmd:
-                (metrics_dir).mkdir(parents=True, exist_ok=True)
-                (metrics_dir / "geographic.json").write_text('{"correlation": 0.9}')
-            elif "metrics-admixture" in cmd:
-                (metrics_dir).mkdir(parents=True, exist_ok=True)
-                (metrics_dir / "admixture.json").write_text('{"2": {"correlation": 0.5}}')
 
         return on_call
 
@@ -628,6 +571,8 @@ class TestPipelineRunFullFlow:
         n_pcs = 3
         calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
 
+        stub_pca_step(monkeypatch, n_pcs)
+        stub_metrics_steps(monkeypatch)
         results = pipeline.run(
             n_pcs=n_pcs,
             k_min=2,
@@ -646,6 +591,33 @@ class TestPipelineRunFullFlow:
         assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
         # no admixture CLI call — backend was used
         assert admix_calls(calls) == []
+        # Metrics ran in-process and landed at the documented paths (constraint B)
+        assert (pipeline.output_dir / "metrics" / "geographic.json").exists()
+        assert (pipeline.output_dir / "metrics" / "admixture.json").exists()
+        assert [c for c in calls if "metrics-geographic" in c] == []
+        assert [c for c in calls if "metrics-admixture" in c] == []
+
+    def test_metrics_skipped_when_no_geographic_coords(self, tmp_path, monkeypatch):
+        """Without geographic_coords the geographic metric must not run, but the
+        admixture metric still must."""
+        self._stub_plots(monkeypatch)
+        stub_metrics_steps(monkeypatch)
+        pipeline = make_pipeline(tmp_path, admixture_backend=_FakeBackend())
+        n_pcs = 3
+        stub_pca_step(monkeypatch, n_pcs)
+        capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
+
+        results = pipeline.run(
+            n_pcs=n_pcs,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            embedding_params={"knn": 5},
+        )
+
+        assert "geographic" not in results["metrics"]
+        assert not (pipeline.output_dir / "metrics" / "geographic.json").exists()
+        assert results["metrics"]["admixture"]["2"]["correlation"] == 0.5
 
     def test_full_run_via_cli_admixture(self, tmp_path, monkeypatch):
         self._stub_plots(monkeypatch)
@@ -653,6 +625,7 @@ class TestPipelineRunFullFlow:
         n_pcs = 3
         calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
 
+        stub_pca_step(monkeypatch, n_pcs)
         pipeline.run(
             n_pcs=n_pcs,
             k_min=2,
@@ -671,6 +644,7 @@ class TestPipelineRunFullFlow:
         n_pcs = 3
         calls = capture_subprocess(monkeypatch, on_call=self._writer(pipeline, n_pcs))
 
+        stub_pca_step(monkeypatch, n_pcs)
         pipeline.run(
             n_pcs=n_pcs,
             embedding="phate",
@@ -702,3 +676,95 @@ class TestPipelineRunFullFlow:
             skip_metrics=True,
         )
         assert "pca_figures" not in results
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineRunPCAInProcess — PR 2 cutover: no subprocess for PCA
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunPCAInProcess:
+    """run() calls run_pca_step() directly. Re-introducing a subprocess hop
+    would restore the API → CLI → API inversion this refactor removed, along
+    with its cold-start cost and buried tracebacks."""
+
+    def test_pca_no_longer_shells_out(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        stub_pca_step(monkeypatch, 3)
+        calls = capture_subprocess(monkeypatch)
+
+        pipeline.run(
+            n_pcs=3,
+            skip_admixture=True,
+            skip_embedding=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+
+        assert pca_calls(calls) == [], f"PCA must run in-process, got: {calls}"
+
+    def test_step_receives_pipeline_io_and_n_pcs(self, tmp_path, monkeypatch):
+        """The step's IOConfig must carry the pipeline's own prefixes; passing
+        the wrong cohort would fit PCA on the projection set."""
+        pipeline = make_pipeline(
+            tmp_path, fit_plink_prefix="fitset", project_plink_prefix="projectset"
+        )
+        step_calls = stub_pca_step(monkeypatch, 7)
+        capture_subprocess(monkeypatch)
+
+        pipeline.run(
+            n_pcs=7,
+            skip_admixture=True,
+            skip_embedding=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+
+        assert len(step_calls) == 1
+        io, pca_cfg = step_calls[0]
+        assert io.fit_plink == Path("fitset")
+        assert io.project_plink == Path("projectset")
+        assert io.output_dir == pipeline.output_dir
+        assert pca_cfg.n_pcs == 7
+
+    def test_results_expose_pca_paths_and_coords(self, tmp_path, monkeypatch):
+        pipeline = make_pipeline(tmp_path)
+        stub_pca_step(monkeypatch, 4)
+        capture_subprocess(monkeypatch)
+
+        results = pipeline.run(
+            n_pcs=4,
+            skip_admixture=True,
+            skip_embedding=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+
+        pca_dir = pipeline.output_dir / "pca"
+        assert results["fit_pca_file"] == pca_dir / "fit_pca_4.csv"
+        assert results["project_pca_file"] == pca_dir / "project_pca_4.csv"
+        assert results["pca_file"] == results["project_pca_file"]
+        assert isinstance(results["pca_coords"], pd.DataFrame)
+
+    def test_skip_pca_still_resolves_existing_outputs(self, tmp_path, monkeypatch):
+        """Spec constraint C: a skipped step still supplies its paths downstream."""
+        pipeline = make_pipeline(tmp_path)
+        pca_dir = pipeline.output_dir / "pca"
+        write_pca_csv(pca_dir / "fit_pca_4.csv", 4)
+        write_pca_csv(pca_dir / "project_pca_4.csv", 4)
+
+        step_calls = stub_pca_step(monkeypatch, 4)
+        capture_subprocess(monkeypatch)
+
+        results = pipeline.run(
+            n_pcs=4,
+            skip_pca=True,
+            skip_admixture=True,
+            skip_embedding=True,
+            skip_pca_visualization=True,
+            skip_metrics=True,
+        )
+
+        assert step_calls == [], "skip_pca must not run the step"
+        assert results["fit_pca_file"] == pca_dir / "fit_pca_4.csv"
+        assert results["project_pca_file"] == pca_dir / "project_pca_4.csv"
