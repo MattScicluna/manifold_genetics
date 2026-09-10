@@ -12,9 +12,13 @@ from pathlib import Path
 from typing import List, Optional
 
 from .admixture import NeuralAdmixture
-from .embeddings import PHATE, TSNE, UMAP, DiffusionMap
 from .pipeline import run_pipeline
-from .pipeline.steps import run_admixture_metrics_step, run_geographic_metrics_step, run_pca
+from .pipeline.steps import (
+    run_admixture_metrics_step,
+    run_embedding,
+    run_geographic_metrics_step,
+    run_pca,
+)
 from .utils.io import read_colormap
 from .utils.tools import ToolResolver
 from .utils.validation import (
@@ -71,6 +75,52 @@ def _resolve_k_values(
     raise ValueError(
         "Please provide --ks or both --k-min/--k-max (or ensure <prefix>.<K>.csv files exist to auto-detect)."
     )
+
+
+def _embedding_params_from_args(args) -> dict:
+    """Turn argparse values into the embedding params dict.
+
+    Shared by ``cmd_embed`` and ``cmd_pipeline`` so the two cannot drift. Reads
+    optional attributes with ``getattr`` because the two subparsers do not
+    define an identical flag set — the ``pipeline`` parser has no ``--min-dist``.
+    """
+    method = getattr(args, "method", None) or getattr(args, "embedding", None)
+    params: dict = {}
+
+    if method == "phate":
+        t_param = args.t
+        if isinstance(t_param, str) and t_param != "auto":
+            t_param = int(t_param)
+
+        n_landmark = None
+        if args.n_landmark is not None:
+            if isinstance(args.n_landmark, str):
+                if args.n_landmark.lower() != "none":
+                    n_landmark = int(args.n_landmark)
+            else:
+                n_landmark = args.n_landmark
+
+        if args.random_landmarking and n_landmark is None:
+            raise ValueError("random-landmarking requires --n-landmark to be set")
+
+        params = {
+            "knn": args.knn,
+            "t": t_param,
+            "n_landmark": n_landmark,
+            "random_landmarking": args.random_landmarking,
+            "embed_batch_size": getattr(args, "embed_batch_size", None),
+        }
+    elif method == "umap":
+        params = {
+            "n_neighbors": args.n_neighbors,
+            "min_dist": getattr(args, "min_dist", 0.1),
+        }
+    elif method == "tsne":
+        params = {"perplexity": args.perplexity}
+    elif method == "diffusion_map":
+        params = {"knn": args.knn}
+
+    return params
 
 
 def cmd_pca(args):
@@ -333,59 +383,18 @@ def cmd_embed(args):
     project_output = args.project_output or args.output
     fit_output = args.fit_output
 
-    # Ensure output directories exist
-    if fit_output:
-        Path(fit_output).parent.mkdir(parents=True, exist_ok=True)
-    if project_output:
-        Path(project_output).parent.mkdir(parents=True, exist_ok=True)
-
-    # Parse embedding-specific parameters
-    embed_params = {}
-    if args.method == "phate":
-        # Allow t="auto" or a numeric string; ensure PHATE gets int for numbers
-        t_param = args.t
-        if isinstance(t_param, str) and t_param != "auto":
-            t_param = int(t_param)
-
-        n_landmark = None
-        if args.n_landmark is not None:
-            if isinstance(args.n_landmark, str):
-                if args.n_landmark.lower() != "none":
-                    n_landmark = int(args.n_landmark)
-            else:
-                n_landmark = args.n_landmark
-
-        if args.random_landmarking and n_landmark is None:
-            raise ValueError("random-landmarking requires --n-landmark to be set")
-        embed_params = {
-            "knn": args.knn,
-            "t": t_param,
-            "n_landmark": n_landmark,
-            "random_landmarking": args.random_landmarking,
-            "embed_batch_size": getattr(args, "embed_batch_size", None),
-        }
-        model = PHATE(n_components=2, **embed_params)
-    elif args.method == "umap":
-        embed_params = {"n_neighbors": args.n_neighbors, "min_dist": args.min_dist}
-        model = UMAP(n_components=2, **embed_params)
-    elif args.method == "tsne":
-        embed_params = {"perplexity": args.perplexity}
-        model = TSNE(n_components=2, **embed_params)
-    elif args.method == "diffusion_map":
-        embed_params = {"knn": args.knn}
-        model = DiffusionMap(n_components=2, **embed_params)
-    else:
+    if args.method not in ("phate", "umap", "tsne", "diffusion_map"):
         print(f"Unknown method: {args.method}")
         return 1
 
-    # Fit on fit_input
-    model.fit(fit_input)
-    if fit_output:
-        model.transform(fit_input).to_csv(fit_output, index=False)
-
-    # Transform project_input
-    embedding = model.transform(project_input)
-    embedding.to_csv(project_output, index=False)
+    embedding = run_embedding(
+        fit_input,
+        project_input,
+        fit_output=fit_output,
+        project_output=project_output,
+        method=args.method,
+        params=_embedding_params_from_args(args),
+    )
 
     print(f"Embedding fit on {fit_input} and projected {project_input}")
     if fit_output:
@@ -593,33 +602,7 @@ def cmd_pipeline(args):
         validate_geographic_csv(args.geographic)
 
     # Parse embedding parameters
-    embedding_params = {}
-    if args.embedding == "phate":
-        embedding_params["knn"] = args.knn
-        # t can be "auto" or int-like
-        t_param = args.t
-        if isinstance(t_param, str) and t_param != "auto":
-            t_param = int(t_param)
-        embedding_params["t"] = t_param
-
-        n_landmark = None
-        if args.n_landmark is not None:
-            if isinstance(args.n_landmark, str):
-                if args.n_landmark.lower() != "none":
-                    n_landmark = int(args.n_landmark)
-            else:
-                n_landmark = args.n_landmark
-        if args.random_landmarking and n_landmark is None:
-            raise ValueError("random-landmarking requires --n-landmark to be set")
-        embedding_params["n_landmark"] = n_landmark
-        embedding_params["random_landmarking"] = args.random_landmarking
-        embedding_params["embed_batch_size"] = getattr(args, "embed_batch_size", None)
-    elif args.embedding == "umap":
-        embedding_params["n_neighbors"] = args.n_neighbors
-    elif args.embedding == "tsne":
-        embedding_params["perplexity"] = args.perplexity
-    elif args.embedding == "diffusion_map":
-        embedding_params["knn"] = args.knn
+    embedding_params = _embedding_params_from_args(args)
 
     # Handle separate labels/colormaps for cross-cohort analysis
     fit_labels = args.fit_labels if hasattr(args, "fit_labels") and args.fit_labels else None
