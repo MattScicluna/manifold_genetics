@@ -35,7 +35,7 @@ def _run_viz(name: str, failed: list, fn):
     try:
         return fn()
     except Exception as e:
-        logger.warning(f"Visualization step {name!r} failed: {e}")
+        logger.warning(f"Visualization step {name!r} failed: {e}", exc_info=True)
         failed.append(name)
         return None
 
@@ -146,7 +146,7 @@ class Pipeline:
     def _io_config(self) -> IOConfig:
         """Adapt the pipeline's loose attributes to the step layer's IOConfig.
 
-        Transitional: PR 5 wires ``build_configs()`` into ``__init__`` and drops
+        Transitional: PR 5b wires ``build_configs()`` into ``__init__`` and drops
         this. ``__init__`` has already guaranteed every field is set.
         """
         return IOConfig(
@@ -345,6 +345,7 @@ class Pipeline:
                 results["embedding_figures"] = list(emb_viz_result.project_figures)
                 if emb_viz_result.projection_plot is not None:
                     results["projection_plot"] = emb_viz_result.projection_plot
+                failed.extend(emb_viz_result.failed_substeps)
 
         # Step 4.5: Admixture-Colored Embedding Visualization (requires embedding to exist)
         if not skip_admixture_visualization and not skip_embedding and not skip_admixture:

@@ -91,6 +91,11 @@ class VizStepResult:
     fit_figures: Tuple[Path, ...] = ()
     project_figures: Tuple[Path, ...] = ()
     projection_plot: Optional[Path] = None
+    # Sub-steps that failed inside an otherwise-successful step. The embedding
+    # viz step guards its projection plot separately, so that a projection
+    # failure does not lose the fit/project figures — this is how that failure
+    # still reaches the pipeline's failed-step list.
+    failed_substeps: Tuple[str, ...] = ()
 
 
 def run_pca_viz_step(io: IOConfig, viz: VizConfig, *, pca_file: Path, n_pcs: int) -> VizStepResult:
@@ -127,6 +132,7 @@ def run_embedding_viz_step(
     fit_figure_paths = []
     project_figure_paths = []
     projection_plot_path = None
+    failed_substeps = []
 
     # Fit visualizations (only when a fit embedding was produced).
     if embedding.fit_embedding_file is not None:
@@ -183,6 +189,7 @@ def run_embedding_viz_step(
             logger.info(f"Projection plot saved: {projection_plot_path}")
         except Exception as e:
             logger.warning(f"Failed to create projection plot: {e}")
+            failed_substeps.append("projection_plot")
 
     figures = list(fit_figure_paths) + list(project_figure_paths)
     if projection_plot_path is not None:
@@ -193,6 +200,7 @@ def run_embedding_viz_step(
         fit_figures=tuple(fit_figure_paths),
         project_figures=tuple(project_figure_paths),
         projection_plot=projection_plot_path,
+        failed_substeps=tuple(failed_substeps),
     )
 
 

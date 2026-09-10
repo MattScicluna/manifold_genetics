@@ -714,6 +714,41 @@ class TestPipelineVizIsNonFatal:
 
         assert results["failed_viz_steps"] == ()
 
+    def test_projection_plot_substep_failure_is_recorded(self, tmp_path, monkeypatch):
+        """A projection-plot failure is a sub-step failure inside an otherwise-
+        successful embedding_viz step (VizStepResult.failed_substeps), not a
+        whole-step failure — but it must still reach failed_viz_steps under its
+        own name, and the run must complete normally."""
+        from manifold_genetics.pipeline.steps.viz import VizStepResult
+
+        stub_pca_step(monkeypatch, 3)
+        stub_embedding_step(monkeypatch)
+        stub_admixture_step(monkeypatch)
+        stub_viz_steps(
+            monkeypatch,
+            run_embedding_viz_step=lambda io, viz, *, embedding, method: VizStepResult(
+                figures=(Path("fit.png"), Path("project.png")),
+                fit_figures=(Path("fit.png"),),
+                project_figures=(Path("project.png"),),
+                projection_plot=None,
+                failed_substeps=("projection_plot",),
+            ),
+        )
+
+        pipeline = make_pipeline(tmp_path)
+        results = pipeline.run(
+            n_pcs=3,
+            k_min=2,
+            k_max=3,
+            embedding="phate",
+            skip_metrics=True,
+        )
+
+        assert "projection_plot" in results["failed_viz_steps"]
+        assert "embedding_viz" not in results["failed_viz_steps"]
+        assert "embedding_file" in results
+        assert "projection_plot" not in results
+
 
 def test_skip_pca_visualization_with_admixture_visualization_on(tmp_path, monkeypatch):
     """Regression, issue #72: read_colormap used to be imported inside the PCA-viz

@@ -265,6 +265,10 @@ class TestEmbeddingVizStep:
         result = run_embedding_viz_step(io, viz, embedding=self._emb(tmp_path), method="phate")
 
         assert result.figures, "fit/project figures must survive a projection-plot failure"
+        assert result.fit_figures == (Path("emb.png"),)
+        assert result.project_figures == (Path("emb.png"),)
+        assert result.projection_plot is None
+        assert result.failed_substeps == ("projection_plot",)
 
     def test_split_fields_populated_with_fit_embedding_and_projection_columns(
         self, tmp_path, calls, stub_colormap
