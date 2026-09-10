@@ -17,9 +17,9 @@ the fit/project figures already produced in the same step.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Tuple
+from typing import Mapping, Optional, Tuple
 
 from ...utils.io import read_colormap
 from ...visualization import (
@@ -84,8 +84,13 @@ def plot_pca_pair_grids(
 class VizStepResult:
     """Typed outputs of a visualization step: the figures it produced."""
 
-    figures: Tuple[Path, ...] = field(default_factory=tuple)
+    figures: Tuple[Path, ...] = ()
     failed: bool = False
+    # Populated only by run_embedding_viz_step. That step feeds three distinct
+    # results keys, which a flat `figures` tuple cannot reconstruct.
+    fit_figures: Tuple[Path, ...] = ()
+    project_figures: Tuple[Path, ...] = ()
+    projection_plot: Optional[Path] = None
 
 
 def run_pca_viz_step(io: IOConfig, viz: VizConfig, *, pca_file: Path, n_pcs: int) -> VizStepResult:
@@ -119,7 +124,9 @@ def run_embedding_viz_step(
     embedding_figures_dir = paths["embeddings"]
     embedding_figures_dir.mkdir(parents=True, exist_ok=True)
 
-    figures = []
+    fit_figure_paths = []
+    project_figure_paths = []
+    projection_plot_path = None
 
     # Fit visualizations (only when a fit embedding was produced).
     if embedding.fit_embedding_file is not None:
@@ -132,7 +139,6 @@ def run_embedding_viz_step(
             output_prefix=method,
             dataset_prefix="fit_",
         )
-        figures.extend(fit_figure_paths)
         logger.info(f"Created {len(fit_figure_paths)} fit embedding figures")
 
     # Project visualizations — always.
@@ -145,7 +151,6 @@ def run_embedding_viz_step(
         output_prefix=method,
         dataset_prefix="project_",
     )
-    figures.extend(project_figure_paths)
     logger.info(f"Created {len(project_figure_paths)} project embedding figures")
 
     # Projection plot (fit + project together), only in cross-projection mode.
@@ -156,7 +161,7 @@ def run_embedding_viz_step(
     ):
         logger.info("Creating projection plot (fit + project together)...")
 
-        projection_plot_path = (
+        candidate_projection_plot_path = (
             embedding_figures_dir / f"{method}_projection_fit_{viz.projection_plot_fit_column}"
             f"_project_{viz.projection_plot_project_column}.png"
         )
@@ -169,17 +174,26 @@ def run_embedding_viz_step(
                 project_labels=io.project_labels,
                 fit_colormap=io.fit_colormap,
                 project_colormap=io.project_colormap,
-                output_path=projection_plot_path,
+                output_path=candidate_projection_plot_path,
                 fit_label_column=viz.projection_plot_fit_column,
                 project_label_column=viz.projection_plot_project_column,
             )
 
-            figures.append(projection_plot_path)
+            projection_plot_path = candidate_projection_plot_path
             logger.info(f"Projection plot saved: {projection_plot_path}")
         except Exception as e:
             logger.warning(f"Failed to create projection plot: {e}")
 
-    return VizStepResult(figures=tuple(figures))
+    figures = list(fit_figure_paths) + list(project_figure_paths)
+    if projection_plot_path is not None:
+        figures.append(projection_plot_path)
+
+    return VizStepResult(
+        figures=tuple(figures),
+        fit_figures=tuple(fit_figure_paths),
+        project_figures=tuple(project_figure_paths),
+        projection_plot=projection_plot_path,
+    )
 
 
 def run_admixture_viz_step(

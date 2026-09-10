@@ -649,6 +649,10 @@ def cmd_pipeline(args):
             for k, metrics in results["metrics"]["admixture"].items():
                 print(f"    K={k}: {metrics['correlation']:.4f}")
 
+    if results.get("failed_viz_steps"):
+        names = ", ".join(results["failed_viz_steps"])
+        print(f"\n⚠ {len(results['failed_viz_steps'])} visualization step(s) failed: {names}")
+
     return 0
 
 

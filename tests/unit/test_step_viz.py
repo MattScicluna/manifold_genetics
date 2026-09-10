@@ -266,6 +266,45 @@ class TestEmbeddingVizStep:
 
         assert result.figures, "fit/project figures must survive a projection-plot failure"
 
+    def test_split_fields_populated_with_fit_embedding_and_projection_columns(
+        self, tmp_path, calls, stub_colormap
+    ):
+        """VizStepResult carries fit_figures/project_figures/projection_plot
+        separately from the flat `figures` aggregate, so the orchestrator can
+        reconstruct the three distinct `results` keys the old inline block set."""
+        io = make_io(tmp_path)
+        viz = VizConfig(
+            projection_plot_fit_column="Population", projection_plot_project_column="Region"
+        )
+
+        result = run_embedding_viz_step(io, viz, embedding=self._emb(tmp_path), method="phate")
+
+        assert result.fit_figures == (Path("emb.png"),)
+        assert result.project_figures == (Path("emb.png"),)
+        assert result.projection_plot is not None
+        assert result.projection_plot.name == ("phate_projection_fit_Population_project_Region.png")
+        assert result.figures == (
+            result.fit_figures + result.project_figures + (result.projection_plot,)
+        )
+
+    def test_split_fields_without_fit_embedding(self, tmp_path, calls, stub_colormap):
+        """No fit embedding means fit_figures is empty and projection_plot is
+        None, even when both projection columns are configured — there is no
+        fit embedding to pair the project embedding with."""
+        io = make_io(tmp_path)
+        viz = VizConfig(
+            projection_plot_fit_column="Population", projection_plot_project_column="Region"
+        )
+
+        result = run_embedding_viz_step(
+            io, viz, embedding=self._emb(tmp_path, with_fit=False), method="phate"
+        )
+
+        assert result.fit_figures == ()
+        assert result.project_figures == (Path("emb.png"),)
+        assert result.projection_plot is None
+        assert result.figures == result.project_figures
+
 
 # ---------------------------------------------------------------------------
 # run_admixture_viz_step

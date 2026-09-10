@@ -9,20 +9,35 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 
 from ..embeddings import PHATE, TSNE, UMAP, DiffusionMap
-from ..visualization import (
-    plot_admixture_bar_grid,
-    plot_admixture_embedding_grid,
-    plot_projection,
-    visualize,
-)
-from .config import AdmixtureConfig, EmbeddingConfig, IOConfig, PCAConfig
+from .config import AdmixtureConfig, EmbeddingConfig, IOConfig, PCAConfig, VizConfig
 from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
 from .steps.paths import metrics_output_paths, pca_output_paths
 from .steps.pca import PCAStepResult, run_pca_step
+from .steps.viz import (
+    run_admixture_embedding_viz_step,
+    run_admixture_viz_step,
+    run_embedding_viz_step,
+    run_pca_viz_step,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _run_viz(name: str, failed: list, fn):
+    """Run a visualization step, converting any failure into a warning.
+
+    Spec constraint D: visualization is non-fatal. A broken plot must never fail
+    `manifold-genetics pipeline`, but it must not vanish silently either — the
+    step name lands in the returned results so the CLI can shout about it.
+    """
+    try:
+        return fn()
+    except Exception as e:
+        logger.warning(f"Visualization step {name!r} failed: {e}")
+        failed.append(name)
+        return None
 
 
 class Pipeline:
@@ -191,10 +206,17 @@ class Pipeline:
             Dictionary with paths to outputs and computed metrics
         """
         results = {}
+        failed = []
 
         io = self._io_config()
         pca_cfg = PCAConfig(n_pcs=n_pcs)
         pca_paths = pca_output_paths(io, pca_cfg)
+        viz_cfg = VizConfig(
+            admix_group_column=admix_group_column,
+            admix_within_group_order=admix_within_group_order,
+            projection_plot_fit_column=self.projection_plot_fit_column,
+            projection_plot_project_column=self.projection_plot_project_column,
+        )
 
         # Step 1: PCA
         if not skip_pca:
@@ -226,32 +248,13 @@ class Pipeline:
             pca_file = pca_paths["project_pca"]
 
             if pca_file.exists():
-                pca_figures_dir = self.output_dir / "figures" / "pca"
-                pca_figures_dir.mkdir(parents=True, exist_ok=True)
-
-                logger.info("Plotting PCA pairs grid via plot_pca_pairs")
-                # Use plot_pca_pairs to generate a single grid covering PC pairs
-                from ..utils.io import read_colormap
-                from ..visualization import plot_pca_pairs
-
-                colormap_dict = read_colormap(self.project_colormap)
-                pca_figure_paths = []
-                for label_col in colormap_dict.keys():
-                    output_path = pca_figures_dir / f"pca_pairs_by_{label_col}.png"
-                    plot_path = plot_pca_pairs(
-                        pca_coords=pca_file,
-                        labels=self.project_labels,
-                        colormap=colormap_dict,
-                        output_path=output_path,
-                        label_column=label_col,
-                        n_pcs=n_pcs,
-                        title=f"PCA Pairs by {label_col}",
-                    )
-                    pca_figure_paths.append(plot_path)
-                    logger.info(f"Saved PCA pairs plot: {plot_path}")
-
-                results["pca_figures"] = pca_figure_paths
-                logger.info(f"Created PCA plots: {len(pca_figure_paths)} figures")
+                pca_viz_result = _run_viz(
+                    "pca_viz",
+                    failed,
+                    lambda: run_pca_viz_step(io, viz_cfg, pca_file=pca_file, n_pcs=n_pcs),
+                )
+                if pca_viz_result is not None:
+                    results["pca_figures"] = list(pca_viz_result.figures)
             else:
                 logger.warning(f"PCA file not found: {pca_file}")
                 logger.warning("Run with --skip-pca=False to compute PCA first")
@@ -281,29 +284,15 @@ class Pipeline:
 
             # Admixture bar plot (placed in figures/admixture/)
             if not skip_admixture_visualization:
-                admix_figures_dir = self.output_dir / "figures" / "admixture"
-                admix_figures_dir.mkdir(parents=True, exist_ok=True)
-
-                cmap_dict = read_colormap(self.project_colormap)
-                # Grouping column: user-specified if provided, else first colormap key
-                group_col = admix_group_column
-                if not group_col:
-                    group_col = next(iter(cmap_dict.keys()))
-
-                # Bar plot (using project set by default)
-                bar_plot_path = admix_figures_dir / "project_bars.png"
-                plot_admixture_bar_grid(
-                    q_prefix=admix_dir / "project",
-                    labels=self.project_labels,
-                    group_column=group_col,
-                    k_values=range(k_min, k_max + 1),
-                    output_path=bar_plot_path,
-                    colormap=cmap_dict,
-                    subsample_per_group=300,
-                    within_group_order=admix_within_group_order,
+                admix_viz_result = _run_viz(
+                    "admixture_viz",
+                    failed,
+                    lambda: run_admixture_viz_step(io, viz_cfg, admixture=admix_result),
                 )
-
-                results.setdefault("admixture_figures", {})["bars"] = bar_plot_path
+                if admix_viz_result is not None:
+                    results.setdefault("admixture_figures", {})["bars"] = admix_viz_result.figures[
+                        0
+                    ]
 
         # Step 3: Embedding
         if not skip_embedding:
@@ -345,66 +334,17 @@ class Pipeline:
             logger.info("STEP 4: EMBEDDING VISUALIZATION")
             logger.info("=" * 70)
 
-            embedding_figures_dir = self.output_dir / "figures" / "embeddings"
-            embedding_figures_dir.mkdir(parents=True, exist_ok=True)
-
-            # Step 4.1: Generate FIT visualizations (for all columns in fit_colormap)
-            if "fit_embedding_file" in results and self.fit_labels and self.fit_colormap:
-                logger.info("Creating fit embedding visualizations...")
-                fit_figure_paths = visualize(
-                    embedding=results["fit_embedding_file"],
-                    labels=self.fit_labels,
-                    colormap=self.fit_colormap,
-                    output_dir=embedding_figures_dir,
-                    output_prefix=embedding,
-                    dataset_prefix="fit_",
-                )
-                results["fit_embedding_figures"] = fit_figure_paths
-                logger.info(f"Created {len(fit_figure_paths)} fit embedding figures")
-
-            # Step 4.2: Generate PROJECT visualizations (for all columns in project_colormap)
-            logger.info("Creating project embedding visualizations...")
-            project_figure_paths = visualize(
-                embedding=embedding_file,
-                labels=self.project_labels,
-                colormap=self.project_colormap,
-                output_dir=embedding_figures_dir,
-                output_prefix=embedding,
-                dataset_prefix="project_",
+            emb_viz_result = _run_viz(
+                "embedding_viz",
+                failed,
+                lambda: run_embedding_viz_step(io, viz_cfg, embedding=emb_result, method=embedding),
             )
-            results["embedding_figures"] = project_figure_paths
-            logger.info(f"Created {len(project_figure_paths)} project embedding figures")
-
-            # Step 4.3: Projection Plot (fit + project together) if cross-projection mode
-            if (
-                "fit_embedding_file" in results
-                and self.projection_plot_fit_column
-                and self.projection_plot_project_column
-            ):
-                logger.info("Creating projection plot (fit + project together)...")
-
-                projection_plot_path = (
-                    embedding_figures_dir
-                    / f"{embedding}_projection_fit_{self.projection_plot_fit_column}_project_{self.projection_plot_project_column}.png"
-                )
-
-                try:
-                    plot_projection(
-                        fit_embedding=results["fit_embedding_file"],
-                        project_embedding=results["embedding_file"],
-                        fit_labels=self.fit_labels,
-                        project_labels=self.project_labels,
-                        fit_colormap=self.fit_colormap,
-                        project_colormap=self.project_colormap,
-                        output_path=projection_plot_path,
-                        fit_label_column=self.projection_plot_fit_column,
-                        project_label_column=self.projection_plot_project_column,
-                    )
-
-                    results["projection_plot"] = projection_plot_path
-                    logger.info(f"Projection plot saved: {projection_plot_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to create projection plot: {e}")
+            if emb_viz_result is not None:
+                if emb_result.fit_embedding_file is not None:
+                    results["fit_embedding_figures"] = list(emb_viz_result.fit_figures)
+                results["embedding_figures"] = list(emb_viz_result.project_figures)
+                if emb_viz_result.projection_plot is not None:
+                    results["projection_plot"] = emb_viz_result.projection_plot
 
         # Step 4.5: Admixture-Colored Embedding Visualization (requires embedding to exist)
         if not skip_admixture_visualization and not skip_embedding and not skip_admixture:
@@ -413,21 +353,17 @@ class Pipeline:
             logger.info("=" * 70)
 
             if "embedding_file" in results and "admixture_dir" in results:
-                admix_figures_dir = self.output_dir / "figures" / "admixture"
-                admix_figures_dir.mkdir(parents=True, exist_ok=True)
-
-                # Admixture-colored embedding grid plot
-                emb_plot_path = admix_figures_dir / "project_admixture_colored_embedding.png"
-                plot_admixture_embedding_grid(
-                    embedding=results["embedding_file"],
-                    q_prefix=results["admixture_dir"] / "project",
-                    k_values=range(k_min, k_max + 1),
-                    output_path=emb_plot_path,
+                admix_emb_viz_result = _run_viz(
+                    "admixture_embedding_viz",
+                    failed,
+                    lambda: run_admixture_embedding_viz_step(
+                        io, embedding=emb_result, admixture=admix_result
+                    ),
                 )
-                results.setdefault("admixture_figures", {})[
-                    "admixture_colored_embedding"
-                ] = emb_plot_path
-                logger.info(f"Saved admixture-colored embedding plot: {emb_plot_path}")
+                if admix_emb_viz_result is not None:
+                    results.setdefault("admixture_figures", {})["admixture_colored_embedding"] = (
+                        admix_emb_viz_result.figures[0]
+                    )
             else:
                 logger.warning(
                     "Skipping admixture-colored embedding visualization - missing embedding or admixture data"
@@ -466,6 +402,8 @@ class Pipeline:
                 metrics["admixture"] = admix_result.values
 
             results["metrics"] = metrics
+
+        results["failed_viz_steps"] = tuple(failed)
 
         # Summary
         logger.info("=" * 70)
