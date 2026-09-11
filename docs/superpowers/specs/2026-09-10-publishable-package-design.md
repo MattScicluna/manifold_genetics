@@ -80,10 +80,38 @@ Memory: projection is `X_std @ loadings`, which chunks cleanly over samples — 
 486,748-sample cohort must never be materialised whole. Fit uses randomized SVD
 over a chunked reader.
 
-To verify early, before building on them:
-- that `bed-reader` publishes wheels for 3.10–3.12 across Linux/macOS/Windows
-  (it resolves to 1.1.0 on this platform; the rest is unconfirmed);
-- the exact standardisation, per above.
+#### Measured contract (2026-09-10)
+
+Determined empirically, not assumed. ``bed-reader`` was dropped: the reader is
+about forty lines of numpy and adds no dependency, so cross-platform wheel
+coverage stopped being a question.
+
+| property | convention | agreement with flashpca |
+|---|---|---|
+| dosage | count of A1 (``.bim`` col 5) | 5e-7; counting A2 is wrong by up to 1.97 |
+| mean | over non-missing genotypes | 5e-7 |
+| sd | ``sqrt(mean * (1 - mean/2))`` (binom2) | 1.7e-6 |
+| eigenvalues | ``S**2 / n_variants`` | exact |
+| loadings | right singular vectors, unit-norm | corr 1.0 |
+| PC (fit) | ``U * sqrt(eigenvalues)`` | ratio sd 1.7e-6 |
+| PC (project) | ``X_new @ loadings / sqrt(n_variants)`` | 5e-8, signed |
+
+Two findings worth carrying forward:
+
+**sklearn's randomized_svd defaults are not adequate here.** A genotype spectrum
+has a long flat tail -- on HGDP, PC13-PC20 span 2.81 to 2.28 with gaps as small
+as 0.010 -- and near-equal eigenvalues are where a randomized SVD loses trailing
+components. At ``n_iter=10, n_oversamples=10`` the first twelve PCs matched to
+1e-13 while PC20's loading correlation was 0.993: a plausible-looking wrong
+answer. ``n_iter=20, n_oversamples=40`` reaches 1.5e-7, flashpca's own text
+precision, in 36s against an exact SVD's 147s.
+
+**Fit memory was the real blocker to switching the default**, not accuracy. The
+straightforward fit materialises the standardised matrix: 82 GB for the 60,000
+sample geosketch cohort. A streaming randomized range finder bounds peak memory
+to ``O((n_variants + n_samples) * l)`` -- about 110 MB at those sizes,
+independent of cohort size -- at the cost of streaming the ``.bed`` once per
+half-iteration.
 
 **Exit:** integration tests pass on a GitHub ubuntu runner with no binary present.
 

@@ -25,6 +25,16 @@ def no_flashpca(monkeypatch):
     monkeypatch.setattr("manifold_genetics.utils.tools.ToolResolver.resolve_flashpca", boom)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_cwd(tmp_path, monkeypatch):
+    """fit_transform/project default their output dir to the CWD.
+
+    Without this the suite writes pca_outputs/ into whatever directory pytest
+    was started from -- the repo root, in practice.
+    """
+    monkeypatch.chdir(tmp_path)
+
+
 @pytest.fixture
 def cohort(tmp_path):
     rng = np.random.default_rng(0)

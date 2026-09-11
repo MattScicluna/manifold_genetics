@@ -38,6 +38,9 @@ class IOConfig:
 class PCAConfig:
     n_pcs: int = 50
     force: bool = False
+    # "flashpca" shells out to the binary; "python" runs in process and needs no
+    # binary. They agree to 1.5e-7 (tests/integration/test_pca_flashpca_parity.py).
+    backend: str = "flashpca"
 
 
 @dataclass(frozen=True)

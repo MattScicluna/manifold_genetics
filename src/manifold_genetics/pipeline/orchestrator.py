@@ -169,6 +169,7 @@ class Pipeline:
     def run(
         self,
         n_pcs: int = 50,
+        pca_backend: str = "flashpca",
         k_min: int = 2,
         k_max: int = 10,
         embedding: str = "phate",
@@ -191,6 +192,7 @@ class Pipeline:
         Run full pipeline.
 
         Args:
+            pca_backend: 'flashpca' (external binary) or 'python' (in process)
             n_pcs: Number of principal components
             k_min: Minimum K for admixture
             k_max: Maximum K for admixture
@@ -224,7 +226,7 @@ class Pipeline:
         failed = []
 
         io = self._io
-        pca_cfg = PCAConfig(n_pcs=n_pcs)
+        pca_cfg = PCAConfig(n_pcs=n_pcs, backend=pca_backend)
         pca_paths = pca_output_paths(io, pca_cfg)
         # admix_group_column / admix_within_group_order are run()-time parameters,
         # not init-time ones — self._viz_config only carries the init-time

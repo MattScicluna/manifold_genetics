@@ -226,3 +226,40 @@ class TestFacadeParity:
         )
         corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
         assert min(corr) > 0.9999, f"worst projection correlation {min(corr):.6f}"
+
+
+class TestStreamingFitParity:
+    """The memory-bounded fit path, against flashpca on the real cohort.
+
+    The streaming path is what makes the Python backend usable at real cohort
+    sizes, so it needs the same evidence as the in-memory one rather than only
+    agreement with its unchunked sibling.
+    """
+
+    @pytest.fixture(scope="class")
+    def streamed(self):
+        return SklearnPCABackend(n_components=N_PCS, random_state=42, fit_chunk_size=20000).fit(FIT)
+
+    def test_statistics_match_flashpca(self, streamed, flashpca_outputs):
+        np.testing.assert_allclose(streamed.mean, flashpca_outputs["meansd"].Mean.values, atol=1e-5)
+        np.testing.assert_allclose(streamed.sd, flashpca_outputs["meansd"].SD.values, atol=1e-5)
+
+    def test_eigenvalues_match_flashpca(self, streamed, flashpca_outputs):
+        np.testing.assert_allclose(
+            streamed.eigenvalues, flashpca_outputs["eigenval"][:N_PCS], rtol=1e-5
+        )
+
+    def test_loadings_match_flashpca_up_to_sign(self, streamed, flashpca_outputs):
+        theirs = flashpca_outputs["loadings"][:, :N_PCS]
+        ours = streamed.loadings * sign_alignment(streamed.loadings, theirs)
+        corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
+        assert min(corr) > 0.9999, f"worst streamed loading correlation {min(corr):.6f}"
+
+    def test_projection_from_a_streamed_model_matches_flashpca(self, streamed, flashpca_outputs):
+        coords = SklearnPCABackend(
+            n_components=N_PCS, random_state=42, variant_chunk_size=20000
+        ).project(PROJECT, streamed)
+        theirs = flashpca_outputs["project_pc"][:, :N_PCS]
+        ours = coords * sign_alignment(coords, theirs)
+        corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
+        assert min(corr) > 0.9999, f"worst streamed projection correlation {min(corr):.6f}"

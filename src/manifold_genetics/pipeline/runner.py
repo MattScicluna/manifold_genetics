@@ -31,6 +31,7 @@ def run_pipeline(
     geographic_coords: Optional[Union[str, Path]] = None,
     # PCA parameters
     n_pcs: int = 50,
+    pca_backend: str = "flashpca",
     # Admixture parameters
     k_min: int = 2,
     k_max: int = 10,
@@ -74,6 +75,7 @@ def run_pipeline(
         project_colormap: Optional override colormap JSON for project dataset
         geographic_coords: Optional path to geographic coordinates CSV for metrics
         n_pcs: Number of principal components (default: 50)
+        pca_backend: 'flashpca' (external binary) or 'python' (in process)
         k_min: Minimum K for admixture (default: 2)
         k_max: Maximum K for admixture (default: 10)
         admix_threads: Number of threads for neural admixture (None = auto-detect)
@@ -180,6 +182,7 @@ def run_pipeline(
     # Run pipeline with all parameters
     results = pipeline.run(
         n_pcs=n_pcs,
+        pca_backend=pca_backend,
         k_min=k_min,
         k_max=k_max,
         embedding=embedding,

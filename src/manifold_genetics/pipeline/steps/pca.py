@@ -50,6 +50,7 @@ def run_pca(
     flashpca_dir: Optional[PathLike] = None,
     n_pcs: int = 50,
     force: bool = False,
+    backend: str = "flashpca",
 ) -> pd.DataFrame:
     """Run FlashPCA and write coordinate CSVs.
 
@@ -62,11 +63,12 @@ def run_pca(
         flashpca_dir: Directory for flashpca's raw intermediate outputs.
         n_pcs: Number of principal components.
         force: Recompute even when cached flashpca outputs exist.
+        backend: ``"flashpca"`` or ``"python"``; see PCAConfig.
 
     Returns:
         DataFrame written to ``project_output`` (sample_id, dim_1, ..., dim_N).
     """
-    pca = PCA(n_components=n_pcs, force=force)
+    pca = PCA(n_components=n_pcs, force=force, backend=backend)
 
     if project_plink is None:
         return pca.fit_transform(fit_plink, output_path=project_output)
@@ -123,6 +125,7 @@ def run_pca_step(io: IOConfig, pca: PCAConfig) -> PCAStepResult:
         flashpca_dir=flashpca_dir,
         n_pcs=pca.n_pcs,
         force=force,
+        backend=pca.backend,
     )
 
     return PCAStepResult(fit_pca=fit_pca, project_pca=project_pca, coords_df=coords)

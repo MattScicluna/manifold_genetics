@@ -13,9 +13,10 @@ def test_cli_pca_fit_project(monkeypatch, tmp_path):
     calls = []
 
     class FakePCA:
-        def __init__(self, n_components, force):
+        def __init__(self, n_components, force, backend="flashpca"):
             self.n_components = n_components
             self.force = force
+            self.backend = backend
 
         def fit(self, prefix, output_dir=None):
             calls.append(("fit", prefix, output_dir))

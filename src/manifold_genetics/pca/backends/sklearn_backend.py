@@ -44,6 +44,7 @@ class SklearnPCABackend(PCABackend):
         n_iter: int = 20,
         n_oversamples: Optional[int] = None,
         variant_chunk_size: Optional[int] = None,
+        fit_chunk_size: Optional[int] = None,
     ):
         """
         Args:
@@ -56,6 +57,13 @@ class SklearnPCABackend(PCABackend):
             variant_chunk_size: Variants per chunk when projecting. ``None``
                 reads the cohort in one pass. Chunking bounds peak memory for
                 large cohorts and must not change the result.
+            fit_chunk_size: Variants per chunk when fitting. ``None`` holds the
+                whole standardised matrix in memory, which is fine for a few
+                thousand samples and impossible for tens of thousands: 60,000
+                samples at 172,152 variants is 82 GB. Setting this switches to a
+                streaming range finder whose peak memory is
+                ``O((n_variants + n_samples) * (n_components + n_oversamples))``
+                -- about 110 MB at those sizes, independent of cohort size.
 
         Accuracy: a genotype eigenvalue spectrum has a long flat tail -- on the
         HGDP cohort, PC13-PC20 span 2.81 to 2.28 with gaps as small as 0.010 --
@@ -74,6 +82,7 @@ class SklearnPCABackend(PCABackend):
             n_oversamples if n_oversamples is not None else max(40, 2 * n_components)
         )
         self.variant_chunk_size = variant_chunk_size
+        self.fit_chunk_size = fit_chunk_size
 
     @staticmethod
     def _dims(prefix: PathLike):
@@ -88,19 +97,23 @@ class SklearnPCABackend(PCABackend):
             )
 
         logger.info(f"Fitting PCA on {n_samples} samples x {n_variants} variants")
-        dosages = read_bed_dosages(plink_prefix, n_samples=n_samples, n_variants=n_variants)
-        mean, sd = binom2_stats(dosages)
-        X = standardize_dosages(dosages, mean, sd)
-        del dosages
 
-        U, S, Vt = randomized_svd(
-            X,
-            n_components=self.n_components,
-            n_iter=self.n_iter,
-            n_oversamples=self.n_oversamples,
-            random_state=self.random_state,
-        )
-        del X
+        if self.fit_chunk_size:
+            mean, sd = self._streaming_stats(plink_prefix, n_samples, n_variants)
+            U, S, Vt = self._streaming_svd(plink_prefix, n_samples, n_variants, mean, sd)
+        else:
+            dosages = read_bed_dosages(plink_prefix, n_samples=n_samples, n_variants=n_variants)
+            mean, sd = binom2_stats(dosages)
+            X = standardize_dosages(dosages, mean, sd)
+            del dosages
+            U, S, Vt = randomized_svd(
+                X,
+                n_components=self.n_components,
+                n_iter=self.n_iter,
+                n_oversamples=self.n_oversamples,
+                random_state=self.random_state,
+            )
+            del X
 
         eigenvalues = S**2 / n_variants
         variant_ids, ref_alleles = read_bim_variants(plink_prefix)
@@ -115,6 +128,77 @@ class SklearnPCABackend(PCABackend):
             fit_coords=U * np.sqrt(eigenvalues),
             fit_sample_ids=read_fam_ids(plink_prefix),
         )
+
+    def _chunks(self, n_variants: int):
+        size = self.fit_chunk_size or n_variants
+        for start in range(0, n_variants, size):
+            yield start, min(start + size, n_variants)
+
+    def _streaming_stats(self, prefix, n_samples, n_variants):
+        """Per-variant mean/SD accumulated chunk by chunk.
+
+        Exact rather than approximate: a chunk holds every sample for the
+        variants it covers, so each variant's statistics are complete within it.
+        """
+        mean = np.empty(n_variants)
+        sd = np.empty(n_variants)
+        for start, stop in self._chunks(n_variants):
+            dosages = read_bed_dosages(
+                prefix,
+                n_samples=n_samples,
+                n_variants=n_variants,
+                variants=slice(start, stop),
+            )
+            mean[start:stop], sd[start:stop] = binom2_stats(dosages)
+        return mean, sd
+
+    def _standardised_chunks(self, prefix, n_samples, n_variants, mean, sd):
+        for start, stop in self._chunks(n_variants):
+            dosages = read_bed_dosages(
+                prefix,
+                n_samples=n_samples,
+                n_variants=n_variants,
+                variants=slice(start, stop),
+            )
+            yield start, stop, standardize_dosages(dosages, mean[start:stop], sd[start:stop])
+
+    def _streaming_svd(self, prefix, n_samples, n_variants, mean, sd):
+        """Randomized SVD that never materialises the standardised matrix.
+
+        Halko-Martinsson-Tropp with re-orthonormalised power iterations, with
+        every product against X accumulated over variant chunks. Peak memory is
+        the two thin blocks (n_variants x width and n_samples x width) plus one chunk.
+        """
+        width = min(self.n_components + self.n_oversamples, n_samples, n_variants)
+        rng = np.random.default_rng(self.random_state)
+
+        def stream():
+            return self._standardised_chunks(prefix, n_samples, n_variants, mean, sd)
+
+        Z = rng.standard_normal((n_variants, width))
+        Y = np.zeros((n_samples, width))
+        for start, stop, Xc in stream():
+            Y += Xc @ Z[start:stop]
+
+        for _ in range(self.n_iter):
+            Y, _ = np.linalg.qr(Y)
+            Z = np.empty((n_variants, width))
+            for start, stop, Xc in stream():
+                Z[start:stop] = Xc.T @ Y
+            Z, _ = np.linalg.qr(Z)
+            Y = np.zeros((n_samples, width))
+            for start, stop, Xc in stream():
+                Y += Xc @ Z[start:stop]
+
+        Q, _ = np.linalg.qr(Y)
+
+        B = np.empty((width, n_variants))
+        for start, stop, Xc in stream():
+            B[:, start:stop] = Q.T @ Xc
+
+        Ub, S, Vt = np.linalg.svd(B, full_matrices=False)
+        k = self.n_components
+        return (Q @ Ub)[:, :k], S[:k], Vt[:k]
 
     def project(self, plink_prefix: PathLike, model: PCAModel) -> np.ndarray:
         n_samples, n_variants = self._dims(plink_prefix)
