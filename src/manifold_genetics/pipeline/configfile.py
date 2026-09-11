@@ -62,10 +62,6 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "subsample": {
         "embedding_input": "fit",
-        # set_subsample_mode_defaults also carried this; leaving it out would
-        # have silently changed neural-admixture's batch size for every
-        # subsample example.
-        "admix_batch_size": 400,
         "embedding": {
             "knn": 500,
             "t": 50,

@@ -186,7 +186,7 @@ class Pipeline:
         skip_metrics: bool = False,
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
-        admix_batch_size: Optional[int] = None,
+        admix_batch_size: Optional[int] = 400,
     ) -> PipelineResult:
         """
         Run full pipeline.

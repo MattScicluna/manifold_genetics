@@ -142,27 +142,21 @@ class TestPresets:
         assert kwargs["embedding_params"]["n_landmark"] == 10000
         assert kwargs["embedding_params"]["random_landmarking"] is True
 
-    def test_subsample_preset_carries_the_admixture_batch_size(self, tmp_path):
-        """set_subsample_mode_defaults set this too, and the first version of
-        PRESETS dropped it.
+    def test_no_preset_sets_an_admixture_batch_size(self, tmp_path):
+        """It is a package default now, not a preset value.
 
-        Caught by comparing each converted example against the shell script it
-        replaced. Omitting it would have silently changed neural-admixture's
-        batch size for every subsample example -- the exact class of drift the
-        config file exists to stop.
+        It started life as a subsample-only shell default, which left
+        aou/hgdp_1kgp_proj with none at all while projecting onto a large
+        cohort. Since it exists to stop neural-admixture batching the entire
+        dataset -- a bug in that tool -- it cannot be something a mode selection
+        turns on. See tests/unit/test_admixture_batch_size_default.py.
         """
-        path = write_config(tmp_path, {**MINIMAL, "preset": "subsample"})
+        for preset in ("subsample", "projection", "transform"):
+            path = write_config(tmp_path, {**MINIMAL, "preset": preset}, f"{preset}.yaml")
 
-        kwargs = load_config(path)
+            assert "admix_batch_size" not in load_config(path)
 
-        assert kwargs["admix_batch_size"] == 400
-
-    def test_other_presets_do_not_set_an_admixture_batch_size(self, tmp_path):
-        path = write_config(tmp_path, {**MINIMAL, "preset": "projection"})
-
-        assert "admix_batch_size" not in load_config(path)
-
-    def test_an_explicit_batch_size_overrides_the_preset(self, tmp_path):
+    def test_an_explicit_batch_size_is_still_carried_through(self, tmp_path):
         path = write_config(
             tmp_path,
             {**MINIMAL, "preset": "subsample", "admixture": {"batch_size": 64}},
