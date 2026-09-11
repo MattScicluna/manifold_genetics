@@ -161,18 +161,40 @@ work (plink2, wget) — and gains a `config.yaml`. Geosketch stops breaking the
 pattern: its only remaining difference is a preparation step, and
 `_shared/select_samples_geosketch.py` already exists.
 
-### Phase 3 — three-cohort test suite
+### Phase 3 — cohort test suite (done)
 
-Cohort-parametrised pipeline tests: HGDP (public, CI-runnable after Phase 1),
-UKBB projection and subsample, AoU. A `requires_private_data` marker and a
-conftest fixture resolving roots from `MG_UKBB_DATA` / `MG_AOU_DATA`, so no test
-hardcodes a cluster path and all of them skip cleanly without access.
+Seven cohorts, one per shipped example, registered in
+`tests/integration/cohorts.py`: HGDP (public), UKBB projection / subsample /
+geosketch, AoU projection / subsample / geosketch. A `requires_private_data`
+marker and one environment variable per cohort, so no test hardcodes a cluster
+path and every one skips cleanly without access.
 
-Assertions state science, in the manner of `test_hgdp_pipeline_real.py` (region
-accuracy, geographic preservation), not smoke tests — coverage percentage is not
-verification, and this repo has already found smoke tests hiding real bugs.
+Delivered as two tiers, because they answer different questions:
 
-Expensive tests get a documented sbatch entry point.
+**`test_cohort_preflight.py` — seconds.** Cross-checks a cohort's real data
+against the config describing it: label coverage of the `.fam`, plot columns
+present, colormap covering the values it will colour, `.bed` size implied by its
+`.bim` and `.fam`. This is where the open defects of 2026-09-10 land as tests;
+writing it immediately reproduced the stale-labels one (`ukbb/geosketch_phate`
+fit labels, 40.6% coverage of a 60,000-sample selection), which is now fixed.
+
+**`test_cohort_pipeline_real.py` — minutes to hours.** Drives each cohort
+through exactly the `config.yaml` it ships. Selection is explicit: public
+cohorts run by default, controlled-access ones only when named with `--cohort`,
+admixture only under `--cohort-admixture`. An hour-scale run must not start
+because somebody typed `pytest`.
+
+Assertions state science and are **chance-corrected** (`tests/science.py`,
+unit-tested on synthetic data): the cohorts span 3,400 to 486,748 samples and 7
+to 300-odd label groups, so a fixed threshold on a raw statistic is vacuous at
+one end and impossible at the other. Group separation is measured against the
+same statistic under permuted labels; neighbourhood preservation compares
+neighbour sets, so it is invariant to the rotation and reflection an embedding
+is only defined up to.
+
+Entry points: `tests/integration/submit_cohort_tests.sh` (SLURM; runs preflight
+first and stops if it fails) and `docs/testing-real-cohorts.md`, which doubles
+as the All of Us procedure.
 
 ### Phase 4 — packaging and release
 
@@ -201,9 +223,13 @@ belonged to a superseded sample selection, is precisely what a manifest catches.
 paths; the migration note is now at `docs/migrations/`. Cheap now, expensive once
 there are users.
 
-**Three open defects** found 2026-09-10:
-1. `examples/ukbb/geosketch_phate/data/fit_labels.csv` is stale — 40.6% overlap
-   with the selection it claims to describe.
+**Three defects** found 2026-09-10, all now closed:
+1. `examples/ukbb/geosketch_phate/data/fit_labels.csv` was stale — 40.6% overlap
+   with the selection it claims to describe. Regenerated 2026-09-11 from
+   `ukbb/hgdp_1kgp_proj/data/project_labels.csv` filtered to the fit `.fam`
+   (60,000/60,000 covered); the previous file is kept as `fit_labels.csv.stale`.
+   Any figure in `examples/ukbb/geosketch_phate/outputs/` predating that is
+   coloured from the wrong selection and needs regenerating.
 2. `validate_sample_id_overlap` (`utils/validation.py:438`) raises only at *zero*
    overlap, which is why (1) passed silently. It needs a minimum-overlap
    threshold.

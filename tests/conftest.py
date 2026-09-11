@@ -15,6 +15,30 @@ import pandas as pd
 import pytest
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--cohort",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=(
+            "Run the real-cohort pipeline test for NAME (repeatable, or 'all'). "
+            "Without it only public cohorts run: a controlled-access cohort takes "
+            "hours and must never start by accident. See tests/integration/cohorts.py."
+        ),
+    )
+    parser.addoption(
+        "--cohort-admixture",
+        action="store_true",
+        default=False,
+        help=(
+            "Include neural admixture in the real-cohort pipeline test. Off by "
+            "default -- it wants a GPU and hours, and the rest of the pipeline is "
+            "what these tests are checking."
+        ),
+    )
+
+
 @pytest.fixture
 def temp_dir():
     """Create a temporary directory for test outputs."""

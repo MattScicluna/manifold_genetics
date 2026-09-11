@@ -25,7 +25,6 @@ pca:
 admixture:
   k_min: 2
   k_max: 10
-  batch_size: 400
 
 embedding:
   method: phate

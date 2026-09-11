@@ -462,9 +462,31 @@ Tests require dev dependencies:
 # Install dev dependencies (includes pytest)
 uv sync --frozen --extra dev
 
-# Run all tests
-uv run pytest -v
+# The fast suite: ~2-3 minutes, no external data or tools
+uv run pytest -m "not slow and not integration and not network"
 ```
+
+### Testing against real data
+
+The fast suite proves the code is self-consistent. Whether a run on *your*
+genotypes produces something meaningful is a different question, and there is a
+separate suite for it:
+
+```bash
+# Seconds: does the data agree with the config that describes it?
+uv run pytest tests/integration/test_cohort_preflight.py -v
+
+# Minutes to hours: run a shipped example end to end and check the science
+uv run pytest tests/integration/test_cohort_pipeline_real.py -m "slow and integration"
+```
+
+Preflight cross-checks label coverage, plot columns, colormap coverage and PLINK
+file consistency before anything expensive starts. Cohorts whose data is absent
+skip rather than fail, and controlled-access ones (UK Biobank, All of Us) run
+only when named explicitly.
+
+See [docs/testing-real-cohorts.md](docs/testing-real-cohorts.md) for the full
+procedure, including the SLURM entry point and the All of Us workbench steps.
 
 ## Additional Examples
 

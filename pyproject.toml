@@ -83,6 +83,7 @@ markers = [
     "slow: marks tests as slow (true admixture compute, large datasets)",
     "integration: marks tests as integration tests (multi-module, filesystem)",
     "network: marks tests requiring network access (downloads, remote data)",
+    "requires_private_data: marks tests needing controlled-access cohorts (UK Biobank, All of Us); they skip when the data is absent",
 ]
 
 [tool.black]
