@@ -51,7 +51,11 @@ class AdmixtureConfig:
     k_max: int = 10
     threads: Optional[int] = None
     num_gpus: Optional[int] = None
-    batch_size: Optional[int] = None
+    # neural-admixture batches the whole dataset at once when no batch size is
+    # given, which is a bug in the tool; 400 is the workaround this project has
+    # used. It is a correctness guard, not a tuning knob, so it defaults on rather
+    # than being something each caller must remember. Pass None to opt out.
+    batch_size: Optional[int] = 400
 
 
 @dataclass(frozen=True)
@@ -112,7 +116,7 @@ def build_configs(
     k_max: int = 10,
     admix_threads: Optional[int] = None,
     admix_gpus: Optional[int] = None,
-    admix_batch_size: Optional[int] = None,
+    admix_batch_size: Optional[int] = 400,
     embedding: str = "phate",
     embedding_input: str = "both",
     embedding_params: Optional[dict] = None,

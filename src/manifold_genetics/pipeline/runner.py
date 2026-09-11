@@ -37,7 +37,7 @@ def run_pipeline(
     k_max: int = 10,
     admix_threads: Optional[int] = None,
     admix_gpus: Optional[int] = None,
-    admix_batch_size: Optional[int] = None,
+    admix_batch_size: Optional[int] = 400,
     admixture_backend: Optional[object] = None,
     # Embedding parameters
     embedding: str = "phate",

@@ -25,6 +25,12 @@ from .base import AdmixtureBackend
 logger = logging.getLogger(__name__)
 
 
+# neural-admixture uses the entire dataset as one batch when --batch_size is
+# absent. That is a bug in the tool; this is the workaround value this project
+# has used, applied by default so no caller can forget it.
+DEFAULT_BATCH_SIZE = 400
+
+
 class NeuralAdmixtureBackend(AdmixtureBackend):
     """
     Neural-admixture backend for real admixture computation.
@@ -41,19 +47,23 @@ class NeuralAdmixtureBackend(AdmixtureBackend):
         neural_admixture_path: Optional[str] = None,
         threads: Optional[int] = None,
         num_gpus: Optional[int] = None,
-        batch_size: Optional[int] = None,
+        batch_size: Optional[int] = DEFAULT_BATCH_SIZE,
     ):
         """
-        Initialize neural-admixture backend.
+            Initialize neural-admixture backend.
 
-        Args:
-            k_min: Minimum number of ancestral populations
-            k_max: Maximum number of ancestral populations
-            force: If True, retrain even if models exist
-            neural_admixture_path: Path to executable (None = auto-detect)
-            threads: Number of threads to use (None = auto-detect)
-            num_gpus: Number of GPUs to use (None = auto-detect)
-            batch_size: Batch size for training and inference
+            Args:
+                k_min: Minimum number of ancestral populations
+                k_max: Maximum number of ancestral populations
+                force: If True, retrain even if models exist
+                neural_admixture_path: Path to executable (None = auto-detect)
+                threads: Number of threads to use (None = auto-detect)
+                num_gpus: Number of GPUs to use (None = auto-detect)
+                batch_size: Batch size for training and inference.
+                    neural-admixture batches the whole dataset at once when no batch size is
+        given, which is a bug in the tool; 400 is the workaround this project has
+        used. It is a correctness guard, not a tuning knob, so it defaults on rather
+        than being something each caller must remember. Pass None to opt out.
         """
         super().__init__(k_min, k_max, force)
 
