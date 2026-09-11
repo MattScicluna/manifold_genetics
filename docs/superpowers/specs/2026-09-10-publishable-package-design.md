@@ -113,6 +113,37 @@ to ``O((n_variants + n_samples) * l)`` -- about 110 MB at those sizes,
 independent of cohort size -- at the cost of streaming the ``.bed`` once per
 half-iteration.
 
+#### Open decision: what the default flip costs
+
+The backend is complete, tested and selectable (`--pca-backend python`), but the
+default is still `flashpca`. Flipping it is **not** only a config change:
+
+`tests/integration/test_pipeline_contract.py:185` asserts that
+`pca/flashpca_outputs/` is always non-empty. That is a pinned output-layout
+contract, and the Python backend does not write those files -- it writes
+`pca_model.npz`. So the flip forces a choice:
+
+1. **Make the Python backend write flashpca-format artefacts**
+   (`.meansd`, `.loadings`, `.eigenval`, `.PC`). The contract test stays green,
+   the two backends become genuinely interchangeable mid-project, and the files
+   stay human-inspectable. Costs a text-format writer.
+2. **Change the contract**: the output tree gains `pca_model.npz` and loses
+   `flashpca_outputs/` when the Python backend runs. Cheaper, but it is a
+   breaking change to a documented layout, and mixing backends across runs in one
+   output directory stops working.
+
+Option 1 is the better package behaviour; option 2 is less work. This needs a
+human decision rather than a default.
+
+Two further notes for whoever does the flip:
+
+* **Streaming must be automatic, not opt-in, once Python is the default.** With
+  `fit_chunk_size=None` a 60,000-sample cohort tries to allocate 82 GB. The
+  backend should pick a chunk size from a memory budget rather than OOM.
+* **Streaming is ~19x slower than the in-memory path** on HGDP (11m39s vs 36s),
+  because it reads the `.bed` once per half-iteration. Auto-selection should
+  therefore stream only when the dense matrix genuinely does not fit.
+
 **Exit:** integration tests pass on a GitHub ubuntu runner with no binary present.
 
 ### Phase 2 — config-driven examples
