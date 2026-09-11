@@ -356,11 +356,26 @@ class TestValidateSampleIdOverlap:
         with pytest.raises(ValidationError, match="No overlapping"):
             validate_sample_id_overlap(path1, path2, "file1", "file2")
 
-    def test_low_overlap_warns(self, tmp_path, caplog):
+    def test_low_overlap_raises(self, tmp_path):
+        """1 of 5 shared is two different datasets, not a filtered one.
+
+        This previously only warned. A stale label file overlapping its
+        selection by 40.6% then sailed through and produced figures colouring
+        40% of their points, so the shortfall is now an error.
+        """
         path1 = tmp_path / "a.csv"
         path2 = tmp_path / "b.csv"
         pd.DataFrame({"sample_id": ["s1", "s2", "s3", "s4", "s5"]}).to_csv(path1, index=False)
         pd.DataFrame({"sample_id": ["s1", "x2", "x3", "x4", "x5"]}).to_csv(path2, index=False)
+        with pytest.raises(ValidationError, match="20.0%"):
+            validate_sample_id_overlap(path1, path2, "file1", "file2")
+
+    def test_a_dropped_sample_still_only_warns(self, tmp_path, caplog):
+        """The normal case -- upstream filtering -- must stay non-fatal."""
+        path1 = tmp_path / "a.csv"
+        path2 = tmp_path / "b.csv"
+        pd.DataFrame({"sample_id": [f"s{i}" for i in range(10)]}).to_csv(path1, index=False)
+        pd.DataFrame({"sample_id": [f"s{i}" for i in range(1, 10)]}).to_csv(path2, index=False)
         with caplog.at_level(logging.WARNING):
             validate_sample_id_overlap(path1, path2, "file1", "file2")
         assert "Sample_id mismatch" in caplog.text

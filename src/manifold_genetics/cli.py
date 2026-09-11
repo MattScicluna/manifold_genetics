@@ -41,13 +41,35 @@ from .visualization import (
     visualize,
 )
 
+_LOG_FORMAT = "%(asctime)s - %(name)-40s - %(levelname)s - %(message)s"
+_OUR_HANDLER = "_manifold_genetics_handler"
+
 
 def setup_logging(verbose: bool = False):
-    """Setup logging configuration."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level, format="%(asctime)s - %(name)-40s - %(levelname)s - %(message)s"
-    )
+    """Configure logging for this package only.
+
+    Two problems with the previous ``logging.basicConfig(level=...)``:
+
+    * it sets the **root** logger, so ``--verbose`` turned on DEBUG for every
+      library too. One embed run put 665 KB of numba SSA dumps in a log file in
+      two minutes, burying the pipeline's own output;
+    * ``basicConfig`` is a no-op once the root logger has handlers, so in any
+      process where logging was already configured it did nothing at all.
+
+    Root is pinned at WARNING, which suppresses third-party INFO and DEBUG while
+    still letting their warnings through. The package logger carries the chosen
+    level; its records reach root's handler regardless of root's level, because
+    propagation checks handler levels, not ancestor logger levels.
+    """
+    root = logging.getLogger()
+    if not any(getattr(h, _OUR_HANDLER, False) for h in root.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        setattr(handler, _OUR_HANDLER, True)
+        root.addHandler(handler)
+
+    root.setLevel(logging.WARNING)
+    logging.getLogger("manifold_genetics").setLevel(logging.DEBUG if verbose else logging.INFO)
 
 
 def _resolve_k_values(

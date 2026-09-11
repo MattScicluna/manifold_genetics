@@ -108,11 +108,11 @@ echo ""
 echo ""
 echo "Running subsample pipeline..."
 echo "  Mode: subsample (fit on subset, transform on subset by default)"
-echo "  Performance: Large dataset mode (knn=500, t=50, spectral landmarking)"
+echo "  Performance: Large dataset mode (knn=500, t=50, 10k random landmarking)"
 echo "  Note: Add --embedding-input both to project on full dataset (more expensive)"
 echo ""
 
-# Build command - subsample mode has landmarking by default
+# Build command - subsample mode uses 10,000 random landmarks by default
 bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --mode subsample \
     --fit-plink "$FIT_PLINK" \
