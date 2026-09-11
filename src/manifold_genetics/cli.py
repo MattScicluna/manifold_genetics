@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .pipeline import run_pipeline
+from .pipeline.configfile import load_config
 from .pipeline.steps import (
     plot_pca_pair_grids,
     run_admixture,
@@ -186,6 +187,51 @@ def cmd_pca(args):
     n_pcs = pca_coords.shape[1] - 1  # Exclude sample_id column
     print(f"Shape: ({n_samples}, {n_pcs}) [excluding sample_id column]")
     return 0
+
+
+def cmd_run(args):
+    """Run a pipeline described by a YAML config file."""
+    setup_logging(args.verbose)
+
+    kwargs = load_config(args.config)
+
+    if args.output:
+        kwargs["output_dir"] = Path(args.output)
+    # Command-line skips add to the config's own rather than replacing them: a
+    # flag says "also skip this", never "skip only this".
+    for stage in ("pca", "admixture", "embedding", "metrics"):
+        if getattr(args, f"skip_{stage}", False):
+            kwargs[f"skip_{stage}"] = True
+
+    if args.dry_run:
+        _print_resolved_config(args.config, kwargs)
+        return 0
+
+    run_pipeline(**kwargs)
+    print(f"Pipeline complete. Results in: {kwargs['output_dir']}")
+    return 0
+
+
+def _print_resolved_config(config_path, kwargs) -> None:
+    """Show what would run, with presets and relative paths already resolved.
+
+    The settings worth checking are exactly the ones not visible in the file --
+    preset-derived embedding parameters, and relative paths resolved against the
+    config's own directory.
+    """
+    params = kwargs.get("embedding_params") or {}
+    plain = {k: v for k, v in kwargs.items() if k != "embedding_params"}
+
+    print(f"Resolved configuration from {config_path}:\n")
+    width = max((len(k) for k in plain), default=0)
+    for key in sorted(plain):
+        print(f"  {key:<{width}}  {plain[key]}")
+    if params:
+        print("\n  embedding_params:")
+        pwidth = max(len(k) for k in params)
+        for key in sorted(params):
+            print(f"    {key:<{pwidth}}  {params[key]}")
+    print("\nNothing was run (--dry-run).")
 
 
 def cmd_admixture(args):
@@ -1406,6 +1452,40 @@ def main(argv: Optional[List[str]] = None):
     pipeline_parser.add_argument("--skip-metrics", action="store_true", help="Skip metrics")
     pipeline_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     pipeline_parser.set_defaults(func=cmd_pipeline)
+
+    # run command
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run a pipeline from a YAML config file",
+        description=(
+            "Run the full pipeline as described by a YAML config file.\n\n"
+            "The config names its inputs, an output directory, and optionally a\n"
+            "preset ('projection', 'subsample' or 'transform') supplying that mode's\n"
+            "embedding defaults. Relative paths resolve against the config file's own\n"
+            "directory, so an example runs from anywhere.\n\n"
+            "Use --dry-run first to see the resolved settings, including anything the\n"
+            "preset supplied, before committing to a long run."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n"
+            "  manifold-genetics run examples/hgdp_1kgp/config.yaml --dry-run\n"
+            "  manifold-genetics run examples/hgdp_1kgp/config.yaml\n"
+        ),
+    )
+    run_parser.add_argument("config", help="Path to the YAML config file")
+    run_parser.add_argument("--output", help="Override the config's output_dir")
+    run_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the resolved configuration and exit without running",
+    )
+    run_parser.add_argument("--skip-pca", action="store_true", help="Also skip PCA")
+    run_parser.add_argument("--skip-admixture", action="store_true", help="Also skip admixture")
+    run_parser.add_argument("--skip-embedding", action="store_true", help="Also skip embedding")
+    run_parser.add_argument("--skip-metrics", action="store_true", help="Also skip metrics")
+    run_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    run_parser.set_defaults(func=cmd_run)
 
     # Parse and execute
     args = parser.parse_args(argv)

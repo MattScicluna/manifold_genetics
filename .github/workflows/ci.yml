@@ -27,6 +27,11 @@ jobs:
       
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          # Pinned so the `uv lock` drift check below is deterministic. Unpinned,
+          # CI installs whatever uv is latest that day, and a lock file written by
+          # a different version fails the check for reasons unrelated to the PR.
+          version: "0.12.13"
       
       - name: Cache uv dependencies
         uses: actions/cache@v4
@@ -89,6 +94,11 @@ jobs:
       
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          # Pinned so the `uv lock` drift check below is deterministic. Unpinned,
+          # CI installs whatever uv is latest that day, and a lock file written by
+          # a different version fails the check for reasons unrelated to the PR.
+          version: "0.12.13"
       
       - name: Cache uv dependencies
         uses: actions/cache@v4
