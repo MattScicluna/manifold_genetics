@@ -37,6 +37,10 @@ class PCAModel:
             ``U * sqrt(eigenvalues)``. Optional so a model can be reconstructed
             from flashpca's text artefacts, which do not include it.
         fit_sample_ids: sample IIDs of the fit cohort, if known.
+        fit_family_ids: sample FIDs, so a .fam where FID differs from IID
+            survives a round trip through flashpca's text formats.
+        total_variance: total variance of the standardised matrix, used for
+            flashpca's pve.txt. ``None`` when it was not recorded.
     """
 
     mean: np.ndarray
@@ -47,43 +51,8 @@ class PCAModel:
     ref_alleles: Sequence[str]
     fit_coords: Optional[np.ndarray] = None
     fit_sample_ids: Optional[List[str]] = field(default=None)
-
-    def save(self, path: PathLike) -> None:
-        """Persist to a .npz so a re-run can skip refitting."""
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
-            path,
-            mean=self.mean,
-            sd=self.sd,
-            loadings=self.loadings,
-            eigenvalues=self.eigenvalues,
-            variant_ids=np.asarray(self.variant_ids, dtype=object),
-            ref_alleles=np.asarray(self.ref_alleles, dtype=object),
-            fit_coords=(self.fit_coords if self.fit_coords is not None else np.empty(0)),
-            fit_sample_ids=np.asarray(self.fit_sample_ids or [], dtype=object),
-        )
-
-    @classmethod
-    def load(cls, path: PathLike) -> "PCAModel":
-        """Load a model written by :meth:`save`.
-
-        Raises whatever numpy raises on a file that is not a readable .npz; the
-        caller decides whether a corrupt checkpoint is fatal or merely ignored.
-        """
-        with np.load(Path(path), allow_pickle=True) as z:
-            coords = z["fit_coords"]
-            ids = list(z["fit_sample_ids"])
-            return cls(
-                mean=z["mean"],
-                sd=z["sd"],
-                loadings=z["loadings"],
-                eigenvalues=z["eigenvalues"],
-                variant_ids=list(z["variant_ids"]),
-                ref_alleles=list(z["ref_alleles"]),
-                fit_coords=coords if coords.size else None,
-                fit_sample_ids=ids or None,
-            )
+    fit_family_ids: Optional[List[str]] = field(default=None)
+    total_variance: Optional[float] = None
 
     @property
     def n_variants(self) -> int:

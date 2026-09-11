@@ -263,3 +263,79 @@ class TestStreamingFitParity:
         ours = coords * sign_alignment(coords, theirs)
         corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
         assert min(corr) > 0.9999, f"worst streamed projection correlation {min(corr):.6f}"
+
+
+class TestCrossBackendInterchange:
+    """A model fitted by one backend must be usable by the other.
+
+    This is what the shared artefact format buys beyond a green contract test,
+    and it is only demonstrable against the real binary: flashpca reads the
+    .loadings/.meansd files our writer produced, with no knowledge that Python
+    wrote them.
+    """
+
+    @pytest.fixture(scope="class")
+    def python_fit_dir(self, tmp_path_factory):
+        """Fit with the Python backend, written in flashpca's own format."""
+        from manifold_genetics.pca.flashpca_format import write_model
+
+        out = tmp_path_factory.mktemp("py_fit")
+        model = SklearnPCABackend(n_components=N_PCS, random_state=42).fit(FIT)
+        write_model(model, out / "fit")
+        return out, model
+
+    def test_flashpca_can_project_using_a_python_fitted_model(
+        self, python_fit_dir, flashpca_outputs
+    ):
+        out, model = python_fit_dir
+        subprocess.run(
+            [
+                str(FLASHPCA),
+                "--bfile",
+                str(PROJECT),
+                "--project",
+                "--inload",
+                str(out / "fit.loadings"),
+                "--inmeansd",
+                str(out / "fit.meansd"),
+                "--outproj",
+                str(out / "cross.PC"),
+                "-d",
+                str(N_PCS),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=out,
+        )
+        theirs = flashpca_outputs["project_pc"][:, :N_PCS]
+        ours = pd.read_csv(out / "cross.PC", sep="\t").filter(like="PC").to_numpy()[:, :N_PCS]
+        ours = ours * sign_alignment(ours, theirs)
+
+        corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
+        assert min(corr) > 0.9999, f"worst cross-backend correlation {min(corr):.6f}"
+
+    def test_python_can_project_using_a_flashpca_fitted_model(self, flashpca_outputs, tmp_path):
+        """The other direction: our projection driven by the binary's own model."""
+        model = PCAModelFromFlashpca(flashpca_outputs)
+        coords = SklearnPCABackend(n_components=N_PCS).project(PROJECT, model)
+
+        theirs = flashpca_outputs["project_pc"][:, :N_PCS]
+        ours = coords * sign_alignment(coords, theirs)
+        corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
+        assert min(corr) > 0.9999, f"worst reverse cross-backend correlation {min(corr):.6f}"
+
+
+def PCAModelFromFlashpca(outputs):
+    """Build a PCAModel straight from flashpca's parsed outputs."""
+    from manifold_genetics.pca.backends.base import PCAModel
+
+    msd = outputs["meansd"]
+    return PCAModel(
+        mean=msd.Mean.to_numpy(),
+        sd=msd.SD.to_numpy(),
+        loadings=outputs["loadings"][:, :N_PCS],
+        eigenvalues=outputs["eigenval"][:N_PCS],
+        variant_ids=[str(v) for v in msd.SNP],
+        ref_alleles=[str(v) for v in msd.RefAllele],
+    )

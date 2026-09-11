@@ -18,9 +18,8 @@ from ..utils.io import (
 )
 from ..utils.tools import ToolResolver
 from .backends import PCAModel, SklearnPCABackend
-from .plink import count_lines, read_fam_ids
-
-PY_MODEL_FILENAME = "pca_model.npz"
+from .flashpca_format import model_files_exist, read_model, write_model
+from .plink import count_lines, read_fam
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +169,9 @@ class PCA:
 
         if self.backend == "python":
             coords = self._py_backend.project(plink_prefix, self._model)
-            df = self._coords_to_df(coords, read_fam_ids(plink_prefix))
+            fids, iids = read_fam(plink_prefix)
+            self._write_projection_pc(coords, fids, iids, plink_prefix, output_dir)
+            df = self._coords_to_df(coords, iids)
             if output_path:
                 write_embedding_csv(df, output_path)
             return df
@@ -400,14 +401,14 @@ class PCA:
         dataset has loadings of the wrong length, and applying it would produce
         a confident, meaningless projection.
         """
-        checkpoint = Path(output_dir) / PY_MODEL_FILENAME
+        checkpoint = Path(output_dir) / "fit"
 
-        if not self.force and checkpoint.exists():
+        if not self.force and model_files_exist(checkpoint):
             n_variants = count_lines(f"{plink_prefix}.bim")
             try:
-                cached = PCAModel.load(checkpoint)
-            except Exception as exc:  # unreadable or truncated .npz
-                logger.warning(f"Ignoring unreadable PCA checkpoint {checkpoint}: {exc}")
+                cached = read_model(checkpoint)
+            except Exception as exc:  # unreadable or truncated artefacts
+                logger.warning(f"Ignoring unreadable PCA checkpoint {checkpoint}.*: {exc}")
             else:
                 if cached.n_components != self.n_components:
                     logger.info(
@@ -420,12 +421,34 @@ class PCA:
                         f"this cohort has {n_variants}; refitting"
                     )
                 else:
-                    logger.info(f"PCA checkpoint found: {checkpoint}. Skipping fit")
+                    logger.info(f"PCA checkpoint found: {checkpoint}.*. Skipping fit")
                     return cached
 
         model = self._py_backend.fit(plink_prefix)
-        model.save(checkpoint)
+        write_model(model, checkpoint)
         return model
+
+    def _write_projection_pc(self, coords, fids, iids, plink_prefix, output_dir) -> None:
+        """Mirror flashpca's project_<dataset>.PC so the output tree matches.
+
+        The layout under pca/ is a contract that downstream tooling and the
+        contract test both rely on; it must not depend on which backend ran.
+        """
+        target = output_dir or self._fit_output_dir
+        if target is None:
+            return
+        target = Path(target)
+        target.mkdir(parents=True, exist_ok=True)
+
+        frame = pd.DataFrame(coords, columns=[f"PC{i + 1}" for i in range(coords.shape[1])])
+        frame.insert(0, "IID", iids)
+        frame.insert(0, "FID", fids)
+        frame.to_csv(
+            target / f"project_{Path(plink_prefix).name}.PC",
+            sep="\t",
+            index=False,
+            float_format="%.10g",
+        )
 
     @staticmethod
     def _coords_to_df(coords, sample_ids) -> pd.DataFrame:

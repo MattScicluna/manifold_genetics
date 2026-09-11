@@ -23,7 +23,7 @@ from typing import Optional, Union
 import numpy as np
 from sklearn.utils.extmath import randomized_svd
 
-from ..plink import count_lines, read_bed_dosages, read_bim_variants, read_fam_ids
+from ..plink import count_lines, read_bed_dosages, read_bim_variants, read_fam
 from ..standardize import binom2_stats, standardize_dosages
 from .base import PCABackend, PCAModel
 
@@ -45,6 +45,7 @@ class SklearnPCABackend(PCABackend):
         n_oversamples: Optional[int] = None,
         variant_chunk_size: Optional[int] = None,
         fit_chunk_size: Optional[int] = None,
+        max_fit_memory_gb: float = 8.0,
     ):
         """
         Args:
@@ -57,13 +58,17 @@ class SklearnPCABackend(PCABackend):
             variant_chunk_size: Variants per chunk when projecting. ``None``
                 reads the cohort in one pass. Chunking bounds peak memory for
                 large cohorts and must not change the result.
-            fit_chunk_size: Variants per chunk when fitting. ``None`` holds the
-                whole standardised matrix in memory, which is fine for a few
-                thousand samples and impossible for tens of thousands: 60,000
-                samples at 172,152 variants is 82 GB. Setting this switches to a
-                streaming range finder whose peak memory is
-                ``O((n_variants + n_samples) * (n_components + n_oversamples))``
-                -- about 110 MB at those sizes, independent of cohort size.
+            fit_chunk_size: Variants per chunk when fitting. ``None`` lets
+                ``max_fit_memory_gb`` decide; an explicit value always wins.
+            max_fit_memory_gb: Budget for the dense standardised matrix. Below it
+                the matrix is held whole; above it the fit streams, with peak
+                memory ``O((n_variants + n_samples) * (n_components +
+                n_oversamples))`` -- about 110 MB at real cohort sizes.
+                60,000 samples at 172,152 variants would be 82 GB dense, so an
+                unguarded default would not degrade, it would die. Streaming is
+                not free either: it reads the ``.bed`` once per half-iteration
+                (42 times at ``n_iter=20``; 11m39s on HGDP against 36s), so it
+                must stay off whenever the matrix does fit.
 
         Accuracy: a genotype eigenvalue spectrum has a long flat tail -- on the
         HGDP cohort, PC13-PC20 span 2.81 to 2.28 with gaps as small as 0.010 --
@@ -83,6 +88,7 @@ class SklearnPCABackend(PCABackend):
         )
         self.variant_chunk_size = variant_chunk_size
         self.fit_chunk_size = fit_chunk_size
+        self.max_fit_memory_gb = max_fit_memory_gb
 
     @staticmethod
     def _dims(prefix: PathLike):
@@ -98,14 +104,22 @@ class SklearnPCABackend(PCABackend):
 
         logger.info(f"Fitting PCA on {n_samples} samples x {n_variants} variants")
 
-        if self.fit_chunk_size:
-            mean, sd = self._streaming_stats(plink_prefix, n_samples, n_variants)
-            U, S, Vt = self._streaming_svd(plink_prefix, n_samples, n_variants, mean, sd)
+        chunk = self._resolve_fit_chunk_size(n_samples, n_variants)
+        if chunk:
+            logger.info(
+                f"Streaming fit in chunks of {chunk} variants "
+                f"(dense matrix would be {n_samples * n_variants * 8 / 1024**3:.1f} GB)"
+            )
+            mean, sd = self._streaming_stats(plink_prefix, n_samples, n_variants, chunk)
+            U, S, Vt, sum_sq = self._streaming_svd(
+                plink_prefix, n_samples, n_variants, mean, sd, chunk
+            )
         else:
             dosages = read_bed_dosages(plink_prefix, n_samples=n_samples, n_variants=n_variants)
             mean, sd = binom2_stats(dosages)
             X = standardize_dosages(dosages, mean, sd)
             del dosages
+            sum_sq = float(np.sum(X**2))
             U, S, Vt = randomized_svd(
                 X,
                 n_components=self.n_components,
@@ -117,6 +131,7 @@ class SklearnPCABackend(PCABackend):
 
         eigenvalues = S**2 / n_variants
         variant_ids, ref_alleles = read_bim_variants(plink_prefix)
+        fids, iids = read_fam(plink_prefix)
 
         return PCAModel(
             mean=mean,
@@ -126,15 +141,32 @@ class SklearnPCABackend(PCABackend):
             variant_ids=variant_ids,
             ref_alleles=ref_alleles,
             fit_coords=U * np.sqrt(eigenvalues),
-            fit_sample_ids=read_fam_ids(plink_prefix),
+            fit_sample_ids=iids,
+            fit_family_ids=fids,
+            total_variance=sum_sq / n_variants,
         )
 
-    def _chunks(self, n_variants: int):
-        size = self.fit_chunk_size or n_variants
+    def _resolve_fit_chunk_size(self, n_samples: int, n_variants: int) -> Optional[int]:
+        """Variants per chunk, or None to hold the whole matrix.
+
+        A pure function of the dimensions and the budget, so the choice can be
+        tested directly rather than inferred from timings.
+        """
+        if self.fit_chunk_size:
+            return self.fit_chunk_size
+
+        budget = self.max_fit_memory_gb * 1024**3
+        if n_samples * n_variants * 8 <= budget:
+            return None
+
+        return max(1, int(budget // (n_samples * 8)))
+
+    def _chunks(self, n_variants: int, chunk: Optional[int] = None):
+        size = chunk or n_variants
         for start in range(0, n_variants, size):
             yield start, min(start + size, n_variants)
 
-    def _streaming_stats(self, prefix, n_samples, n_variants):
+    def _streaming_stats(self, prefix, n_samples, n_variants, chunk=None):
         """Per-variant mean/SD accumulated chunk by chunk.
 
         Exact rather than approximate: a chunk holds every sample for the
@@ -142,7 +174,7 @@ class SklearnPCABackend(PCABackend):
         """
         mean = np.empty(n_variants)
         sd = np.empty(n_variants)
-        for start, stop in self._chunks(n_variants):
+        for start, stop in self._chunks(n_variants, chunk):
             dosages = read_bed_dosages(
                 prefix,
                 n_samples=n_samples,
@@ -152,8 +184,8 @@ class SklearnPCABackend(PCABackend):
             mean[start:stop], sd[start:stop] = binom2_stats(dosages)
         return mean, sd
 
-    def _standardised_chunks(self, prefix, n_samples, n_variants, mean, sd):
-        for start, stop in self._chunks(n_variants):
+    def _standardised_chunks(self, prefix, n_samples, n_variants, mean, sd, chunk=None):
+        for start, stop in self._chunks(n_variants, chunk):
             dosages = read_bed_dosages(
                 prefix,
                 n_samples=n_samples,
@@ -162,7 +194,7 @@ class SklearnPCABackend(PCABackend):
             )
             yield start, stop, standardize_dosages(dosages, mean[start:stop], sd[start:stop])
 
-    def _streaming_svd(self, prefix, n_samples, n_variants, mean, sd):
+    def _streaming_svd(self, prefix, n_samples, n_variants, mean, sd, chunk=None):
         """Randomized SVD that never materialises the standardised matrix.
 
         Halko-Martinsson-Tropp with re-orthonormalised power iterations, with
@@ -173,12 +205,14 @@ class SklearnPCABackend(PCABackend):
         rng = np.random.default_rng(self.random_state)
 
         def stream():
-            return self._standardised_chunks(prefix, n_samples, n_variants, mean, sd)
+            return self._standardised_chunks(prefix, n_samples, n_variants, mean, sd, chunk)
 
         Z = rng.standard_normal((n_variants, width))
         Y = np.zeros((n_samples, width))
+        sum_sq = 0.0
         for start, stop, Xc in stream():
             Y += Xc @ Z[start:stop]
+            sum_sq += float(np.sum(Xc**2))  # free on a pass we already make
 
         for _ in range(self.n_iter):
             Y, _ = np.linalg.qr(Y)
@@ -198,7 +232,7 @@ class SklearnPCABackend(PCABackend):
 
         Ub, S, Vt = np.linalg.svd(B, full_matrices=False)
         k = self.n_components
-        return (Q @ Ub)[:, :k], S[:k], Vt[:k]
+        return (Q @ Ub)[:, :k], S[:k], Vt[:k], sum_sq
 
     def project(self, plink_prefix: PathLike, model: PCAModel) -> np.ndarray:
         n_samples, n_variants = self._dims(plink_prefix)

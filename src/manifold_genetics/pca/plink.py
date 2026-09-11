@@ -26,6 +26,7 @@ __all__ = [
     "count_lines",
     "read_bed_dosages",
     "read_bim_variants",
+    "read_fam",
     "read_fam_ids",
 ]
 
@@ -123,8 +124,24 @@ def count_lines(path: PathLike) -> int:
 
 def read_fam_ids(prefix: PathLike) -> list:
     """Sample IIDs (column 2) from ``<prefix>.fam``, in file order."""
+    return read_fam(prefix)[1]
+
+
+def read_fam(prefix: PathLike) -> Tuple[list, list]:
+    """``(FIDs, IIDs)`` from ``<prefix>.fam``, in file order.
+
+    Both are needed because flashpca's text outputs carry FID and IID as separate
+    columns, and a .fam where they differ must survive the round trip.
+    """
+    fids, iids = [], []
     with open(f"{prefix}.fam") as fh:
-        return [line.split()[1] for line in fh if line.strip()]
+        for line in fh:
+            if not line.strip():
+                continue
+            parts = line.split()
+            fids.append(parts[0])
+            iids.append(parts[1])
+    return fids, iids
 
 
 def read_bim_variants(prefix: PathLike) -> Tuple[list, list]:
