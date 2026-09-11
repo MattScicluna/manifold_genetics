@@ -42,8 +42,13 @@ source "${PROJECT_ROOT}/examples/_shared/detect_cluster.sh"
 # Run pipeline with subsample mode
 # ============================================================================
 #
-# subsample mode defaults: knn=500, t=50, n-landmark=10000 (spectral landmarking)
-# knn, t, and n-landmark are overridden below to match Shuang's manylatents settings.
+# No performance overrides: this script inherits the subsample mode defaults in
+# full -- knn=500, t=50, n-landmark=10000 with random landmarking -- so every large
+# cohort is embedded with identical settings regardless of how its fit subset was
+# selected (geometric sketch here, majority-capping in 10k_WB_5K_Irish / 10k_WBH).
+#
+# Previously this script set --t 100 and --n-landmark 2000 (spectral), from Shuang's
+# manylatents settings. Both were dropped on 2026-09-10 for cross-dataset consistency.
 #
 
 bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
@@ -58,9 +63,6 @@ bash "${PROJECT_ROOT}/examples/_shared/run_pipeline.sh" \
     --k-min 2 \
     --k-max 10 \
     --embedding "phate" \
-    --knn 500 \
-    --t 100 \
-    --n-landmark 2000 \
     --admixture-group-column "self_described_ancestry" \
     --threads "$CLUSTER_CPUS" \
     ${CLUSTER_GPUS:+--num-gpus "$CLUSTER_GPUS"} \
