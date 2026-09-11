@@ -46,7 +46,9 @@ def test_python_api_pca_fit_and_project(monkeypatch, tmp_path):
         lambda p: Path(p),
     )
 
-    pca = PCA(n_components=2, force=True)
+    # Patches _run_flashpca_*, so it must be on the flashpca path; the fake
+    # path both selects that backend and keeps ToolResolver out of it.
+    pca = PCA(n_components=2, force=True, flashpca_path="/fake/flashpca")
 
     # Fit + project separately
     pca.fit("fit_prefix", output_dir=tmp_path)

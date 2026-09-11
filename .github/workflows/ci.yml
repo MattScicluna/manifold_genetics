@@ -46,9 +46,13 @@ jobs:
         run: |
           uv sync --frozen --extra dev
       
+      # `integration` is no longer deselected: since the PCA step gained an
+      # in-process backend, the pipeline runs end to end on a runner with no
+      # flashpca binary. Those are the tests that would catch a scientific
+      # regression, so they are the ones worth running here.
       - name: Run tests
         run: |
-          uv run pytest -m "not slow and not integration and not network" --cov=manifold_genetics --cov-report=term-missing --cov-report=lcov
+          uv run pytest -m "not slow and not network" --cov=manifold_genetics --cov-report=term-missing --cov-report=lcov
 
       - name: Upload coverage to Coveralls
         if: matrix.python-version == '3.12'

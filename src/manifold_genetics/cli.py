@@ -170,6 +170,7 @@ def cmd_pca(args):
         flashpca_dir=model_dir,
         n_pcs=args.n_pcs,
         force=args.force,
+        backend=getattr(args, "pca_backend", "python"),
     )
 
     if args.project_plink:
@@ -633,6 +634,7 @@ def cmd_pipeline(args):
         project_colormap=project_colormap,
         geographic_coords=args.geographic if hasattr(args, "geographic") else None,
         n_pcs=args.n_pcs,
+        pca_backend=getattr(args, "pca_backend", "python"),
         k_min=args.k_min,
         k_max=args.k_max,
         admix_threads=args.threads,
@@ -746,6 +748,15 @@ def main(argv: Optional[List[str]] = None):
     pca_parser.add_argument("--output", help="Output CSV file (projected subset)")
     pca_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")
     pca_parser.add_argument("--force", action="store_true", help="Force recomputation")
+    pca_parser.add_argument(
+        "--pca-backend",
+        choices=["python", "flashpca"],
+        default="python",
+        help=(
+            "PCA implementation: 'python' runs in process and needs no binary; "
+            "'flashpca' shells out to the external binary (default: python)"
+        ),
+    )
     pca_parser.add_argument(
         "--model-dir",
         help="Directory for flashpca intermediate outputs (default: ./pca_outputs)",
@@ -1318,6 +1329,15 @@ def main(argv: Optional[List[str]] = None):
         help="Batch size for neural admixture training and inference (helps avoid OOM on large datasets)",
     )
     pipeline_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")
+    pipeline_parser.add_argument(
+        "--pca-backend",
+        choices=["python", "flashpca"],
+        default="python",
+        help=(
+            "PCA implementation: 'python' runs in process and needs no binary; "
+            "'flashpca' shells out to the external binary (default: python)"
+        ),
+    )
     pipeline_parser.add_argument("--k-min", type=int, default=2, help="Min K (admixture)")
     pipeline_parser.add_argument("--k-max", type=int, default=10, help="Max K (admixture)")
     pipeline_parser.add_argument(

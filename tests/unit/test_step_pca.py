@@ -33,9 +33,10 @@ class FakePCA:
 
     instances = []
 
-    def __init__(self, n_components, force=False):
+    def __init__(self, n_components, force=False, backend="flashpca"):
         self.n_components = n_components
         self.force = force
+        self.backend = backend
         self.calls = []
         FakePCA.instances.append(self)
 

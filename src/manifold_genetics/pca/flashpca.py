@@ -17,6 +17,9 @@ from ..utils.io import (
     write_embedding_csv,
 )
 from ..utils.tools import ToolResolver
+from .backends import PCAModel, SklearnPCABackend
+from .flashpca_format import model_files_exist, read_model, write_model
+from .plink import count_lines, read_fam
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ class PCA:
         n_components: int = 20,
         flashpca_path: Optional[str] = None,
         force: bool = False,
+        backend: Optional[str] = None,
     ):
         """
         Initialize PCA analyzer.
@@ -50,17 +54,41 @@ class PCA:
             n_components: Number of principal components to compute
             flashpca_path: Path to flashpca executable (None = auto-detect)
             force: If True, recompute even if outputs exist
+            backend: ``"python"`` uses the in-process implementation, which
+                needs no binary; ``"flashpca"`` shells out to the external one.
+                They match to 1.5e-7 and write the same artefact set
+                (tests/integration/test_pca_flashpca_parity.py), so a model
+                fitted by either is usable by the other. ``None`` (the default)
+                means ``"flashpca"`` when ``flashpca_path`` was supplied and
+                ``"python"`` otherwise -- so passing a path is never silently
+                ignored, while a plain ``PCA()`` needs no binary.
+
+        The binary is resolved only for the flashpca backend. Resolving it
+        unconditionally would make merely constructing this object fail on a
+        machine without it -- i.e. anywhere that is not Linux x86-64.
         """
+        if backend is None:
+            backend = "flashpca" if flashpca_path is not None else "python"
+        if backend not in ("flashpca", "python"):
+            raise ValueError(f"Unknown PCA backend {backend!r}; choose 'flashpca' or 'python'")
+
         self.n_components = n_components
         self.force = force
+        self.backend = backend
 
-        # Resolve flashpca path
-        if flashpca_path is None:
-            resolver = ToolResolver()
-            flashpca_path = resolver.resolve_flashpca()
+        self.flashpca: Optional[str] = None
+        self._py_backend: Optional[SklearnPCABackend] = None
+        self._model: Optional[PCAModel] = None
 
-        self.flashpca = flashpca_path
-        logger.debug(f"Using flashpca: {self.flashpca}")
+        if backend == "flashpca":
+            if flashpca_path is None:
+                resolver = ToolResolver()
+                flashpca_path = resolver.resolve_flashpca()
+            self.flashpca = flashpca_path
+            logger.debug(f"Using flashpca: {self.flashpca}")
+        else:
+            self._py_backend = SklearnPCABackend(n_components=n_components)
+            logger.debug("Using in-process Python PCA backend")
 
         # Fitted state
         self._is_fitted = False
@@ -102,6 +130,12 @@ class PCA:
         output_dir.mkdir(parents=True, exist_ok=True)
         self._fit_output_dir = output_dir
 
+        if self.backend == "python":
+            self._model = self._fit_python(plink_prefix, output_dir)
+            self._is_fitted = True
+            logger.info(f"PCA fitted with {self.n_components} components (python backend)")
+            return self
+
         # Run FlashPCA fit
         output_prefix = output_dir / "fit"
         outputs = self._run_flashpca_fit(plink_prefix, output_prefix)
@@ -138,6 +172,15 @@ class PCA:
         plink_prefix = Path(plink_prefix).expanduser()
         if not plink_prefix.is_absolute():
             plink_prefix = Path.cwd() / plink_prefix
+
+        if self.backend == "python":
+            coords = self._py_backend.project(plink_prefix, self._model)
+            fids, iids = read_fam(plink_prefix)
+            self._write_projection_pc(coords, fids, iids, plink_prefix, output_dir)
+            df = self._coords_to_df(coords, iids)
+            if output_path:
+                write_embedding_csv(df, output_path)
+            return df
 
         # Run FlashPCA projection
         if output_dir is None:
@@ -187,6 +230,15 @@ class PCA:
             output_dir = Path.cwd() / output_dir
 
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.backend == "python":
+            self._model = self._fit_python(plink_prefix, output_dir)
+            self._is_fitted = True
+            self._fit_output_dir = output_dir
+            df = self._coords_to_df(self._model.fit_coords, self._model.fit_sample_ids)
+            if output_path:
+                write_embedding_csv(df, output_path)
+            return df
 
         # Run FlashPCA fit
         output_dir = output_dir if output_dir.is_absolute() else (Path.cwd() / output_dir)
@@ -345,6 +397,77 @@ class PCA:
 
         logger.info(f"✓ Projection complete: {output_pc}")
         return output_pc
+
+    def _fit_python(self, plink_prefix: Path, output_dir: Path) -> PCAModel:
+        """Fit with the in-process backend, reusing a checkpoint when valid.
+
+        Mirrors what ``_run_flashpca_fit`` gets for free from its own output
+        files. A checkpoint is reused only when it matches both the requested
+        component count and this cohort's variant count -- a model from another
+        dataset has loadings of the wrong length, and applying it would produce
+        a confident, meaningless projection.
+        """
+        checkpoint = Path(output_dir) / "fit"
+
+        if not self.force and model_files_exist(checkpoint):
+            n_variants = count_lines(f"{plink_prefix}.bim")
+            try:
+                cached = read_model(checkpoint)
+            except Exception as exc:  # unreadable or truncated artefacts
+                logger.warning(f"Ignoring unreadable PCA checkpoint {checkpoint}.*: {exc}")
+            else:
+                if cached.n_components != self.n_components:
+                    logger.info(
+                        f"PCA checkpoint has {cached.n_components} components, "
+                        f"{self.n_components} requested; refitting"
+                    )
+                elif cached.n_variants != n_variants:
+                    logger.info(
+                        f"PCA checkpoint was fitted on {cached.n_variants} variants, "
+                        f"this cohort has {n_variants}; refitting"
+                    )
+                else:
+                    logger.info(f"PCA checkpoint found: {checkpoint}.*. Skipping fit")
+                    return cached
+
+        model = self._py_backend.fit(plink_prefix)
+        write_model(model, checkpoint)
+        return model
+
+    def _write_projection_pc(self, coords, fids, iids, plink_prefix, output_dir) -> None:
+        """Mirror flashpca's project_<dataset>.PC so the output tree matches.
+
+        The layout under pca/ is a contract that downstream tooling and the
+        contract test both rely on; it must not depend on which backend ran.
+        """
+        target = output_dir or self._fit_output_dir
+        if target is None:
+            return
+        target = Path(target)
+        target.mkdir(parents=True, exist_ok=True)
+
+        frame = pd.DataFrame(coords, columns=[f"PC{i + 1}" for i in range(coords.shape[1])])
+        frame.insert(0, "IID", iids)
+        frame.insert(0, "FID", fids)
+        frame.to_csv(
+            target / f"project_{Path(plink_prefix).name}.PC",
+            sep="\t",
+            index=False,
+            float_format="%.10g",
+        )
+
+    @staticmethod
+    def _coords_to_df(coords, sample_ids) -> pd.DataFrame:
+        """Build the standard ``sample_id, dim_1, ...`` frame from raw coordinates.
+
+        sample_id is coerced to str for the same reason ``_convert_pc_to_csv``
+        does it: an int64 column will not merge with a label frame's object one.
+        """
+        dim_cols = [f"dim_{i + 1}" for i in range(coords.shape[1])]
+        df = pd.DataFrame(coords, columns=dim_cols)
+        df.insert(0, "sample_id", [str(s) for s in sample_ids])
+        logger.info(f"Converted {len(df)} samples with {coords.shape[1]} PCs")
+        return df
 
     def _convert_pc_to_csv(self, pc_file: Path, plink_prefix: Path) -> pd.DataFrame:
         """
