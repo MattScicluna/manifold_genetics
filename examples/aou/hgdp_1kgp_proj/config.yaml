@@ -1,0 +1,31 @@
+# All of Us projected onto the HGDP+1KGP reference panel.
+#
+#   manifold-genetics run examples/aou/hgdp_1kgp_proj/config.yaml --dry-run
+#
+# Prepare the data first with prepare_data.sh. Paths are relative to this file.
+preset: projection
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  fit_colormap: ../../colormaps/hgdp_1kgp_aou_aligned.json
+  project_colormap: ../../colormaps/aou.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+  embed_batch_size: 60000
+
+visualization:
+  admix_group_column: race
+  projection_plot_fit_column: Population
+  projection_plot_project_column: race_ethnicity

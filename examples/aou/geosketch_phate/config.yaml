@@ -1,0 +1,30 @@
+# All of Us embedded on its own, using a geometric sketch as the fit subset.
+#
+#   manifold-genetics run examples/aou/geosketch_phate/config.yaml --dry-run
+#
+# Select the sketch first with prepare_data.sh. Paths are relative to this file.
+#
+# Identical settings to 10k_WBH on purpose: how the fit subset was chosen should
+# not change how it is embedded.
+preset: subsample
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  colormap: ../../colormaps/aou.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+
+visualization:
+  admix_group_column: race_ethnicity

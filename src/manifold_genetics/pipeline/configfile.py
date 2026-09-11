@@ -62,6 +62,10 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "subsample": {
         "embedding_input": "fit",
+        # set_subsample_mode_defaults also carried this; leaving it out would
+        # have silently changed neural-admixture's batch size for every
+        # subsample example.
+        "admix_batch_size": 400,
         "embedding": {
             "knn": 500,
             "t": 50,
@@ -216,8 +220,9 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
         kwargs.setdefault(arg, False)
 
     # --- embedding: preset defaults, then the file's own values ---
-    if "embedding_input" in preset:
-        kwargs["embedding_input"] = preset["embedding_input"]
+    for key, value in preset.items():
+        if key != "embedding":
+            kwargs.setdefault(key, value)
     params: Dict[str, Any] = dict(preset.get("embedding", {}))
 
     section = data.get("embedding") or {}

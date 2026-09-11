@@ -1,0 +1,27 @@
+# All of Us embedded on its own, using a majority-capped fit subset.
+#
+#   manifold-genetics run examples/aou/10k_WBH/config.yaml --dry-run
+#
+# Paths are relative to this file.
+preset: subsample
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  colormap: ../../colormaps/aou.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+
+visualization:
+  admix_group_column: race_ethnicity

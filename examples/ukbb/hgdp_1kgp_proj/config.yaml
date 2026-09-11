@@ -1,0 +1,38 @@
+# UKBB projected onto the HGDP+1KGP reference panel.
+#
+#   manifold-genetics run examples/ukbb/hgdp_1kgp_proj/config.yaml --dry-run
+#
+# Prepare the data first with prepare_data.sh.
+# Paths are relative to this file.
+
+# "projection" fits on the reference panel and transforms the cohort onto it.
+# Supplies embedding_input=both, knn=100, t=3 and no landmarking -- the fit set
+# is ~3.3k samples, where exact diffusion is affordable and better.
+preset: projection
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  fit_colormap: ../../colormaps/hgdp_1kgp.json
+  project_colormap: ../../colormaps/ukbb.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+  batch_size: 400
+
+embedding:
+  method: phate
+  # 486,748 samples are transformed; batching keeps peak memory bounded.
+  embed_batch_size: 60000
+
+visualization:
+  admix_group_column: self_described_ancestry
+  projection_plot_fit_column: Population
+  projection_plot_project_column: self_described_ancestry

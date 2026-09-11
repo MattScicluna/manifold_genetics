@@ -1,0 +1,42 @@
+# TEMPLATE: embed a cohort on its own, using a subsample as the fit set.
+#
+# Copy this next to your data, edit the paths, then:
+#   manifold-genetics run path/to/config.yaml --dry-run   # check the settings
+#   manifold-genetics run path/to/config.yaml             # run it
+#
+# Paths are relative to this file, so the whole directory can be moved.
+
+# "subsample" fits and transforms on the fit subset alone -- the cheap option for
+# a large cohort with no reference panel. It supplies knn=500, t=50 and 10,000
+# random landmarks; --dry-run prints exactly what it set.
+#
+# Use "projection" instead to fit on a reference panel and transform your cohort
+# onto it, or "transform" when the project set already contains the fit set.
+preset: subsample
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  # One `labels:` for both cohorts, or `fit_labels:` and `project_labels:`.
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  colormap: ../../colormaps/your_colormap.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate        # phate | umap | tsne | diffusion_map
+
+visualization:
+  # Column to group by in the admixture barplots. Must exist in your colormap.
+  admix_group_column: population
+
+# Stages are all on by default; uncomment to skip one.
+# skip:
+#   admixture: true
