@@ -440,12 +440,27 @@ def validate_sample_id_overlap(
     path2: Union[str, Path],
     name1: str,
     name2: str,
+    min_overlap_fraction: float = 0.5,
 ) -> None:
     """Validate that two files share sample_ids.
 
-    Raises ValidationError if there is zero overlap.
-    Logs a warning if any samples are dropped (i.e. the overlap is not identical
-    to both files).
+    Args:
+        path1, path2: CSVs carrying a ``sample_id`` column.
+        name1, name2: Human names for the two files, used in messages.
+        min_overlap_fraction: The overlap must cover at least this fraction of
+            the smaller file. Below it, the two files are treated as describing
+            different datasets and a ValidationError is raised.
+
+    Raising only at *zero* overlap is not enough. On 2026-09-10 a stale label
+    file overlapped the selection it claimed to describe by 40.6%; the pipeline
+    ran to completion and published figures colouring 40% of their points,
+    because the shortfall was merely logged. Zero overlap is a typo; a large
+    partial overlap is two datasets being confused for each other, which is
+    worse -- it yields a plausible result instead of an error.
+
+    Raises:
+        ValidationError: no overlap at all, or less than ``min_overlap_fraction``
+            of the smaller file.
     """
     path1 = Path(path1)
     path2 = Path(path2)
@@ -468,6 +483,19 @@ def validate_sample_id_overlap(
             f"  {name2}: {path2} ({len(ids2)} samples)\n\n"
             f"  The files share 0 sample_ids. Check that both files use the same "
             f"sample ID format."
+        )
+
+    fraction = len(overlap) / min(len(ids1), len(ids2))
+    if fraction < min_overlap_fraction:
+        raise ValidationError(
+            f"Only {fraction:.1%} of sample_ids are shared between {name1} and {name2}.\n\n"
+            f"  {name1}: {path1} ({len(ids1)} samples)\n"
+            f"  {name2}: {path2} ({len(ids2)} samples)\n"
+            f"  shared: {len(overlap)}\n\n"
+            f"  That is below the {min_overlap_fraction:.0%} minimum, which usually means "
+            f"the two files describe different datasets -- for example a label file left "
+            f"over from a superseded sample selection. Regenerate the stale one, or pass "
+            f"min_overlap_fraction if a small overlap is genuinely expected."
         )
 
     dropped_from_1 = len(ids1) - len(overlap)
