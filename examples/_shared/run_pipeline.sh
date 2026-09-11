@@ -17,19 +17,35 @@
 #   - Scripts override PERFORMANCE PARAMETERS (knn/t/landmarking) based on dataset size
 #
 # Mode-specific defaults:
-#   projection: --embedding-input both --knn 100 --t 3 (no landmarking)
+#   projection: --embedding-input both --knn 100 --t 3 --n-landmark none
 #               Semantic: fit embedding on reference, transform on target
 #               Use Case: Projecting a large biobank (UKBB, AoU) onto a smaller reference dataset (HGDP+1KGP)
 #
-#   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000
+#   subsample:  --embedding-input fit --knn 500 --t 50 --n-landmark 10000 --random-landmarking
 #               Semantic: fit+transform on subsampled fit set only (cheaper)
 #               Use Case: visualize large biobanks (UKBB, AoU) without any reference set.
 #
-#   transform:  --embedding-input project --knn 100 --t 3 (no landmarking)
+#   transform:  --embedding-input project --knn 100 --t 3 --n-landmark none
 #               Semantic: fit+transform embedding on target dataset only
 #               Use case: Use when transform set contains fit set, so no need to re-project (HGDP+1KGP)
 #
-# All mode defaults can be overridden with explicit arguments.
+# LANDMARKING (measured 2026-09-10, see Experiments/manifold_genetics_landmarking_ab_2026-09-10):
+#   Small fit set (projection/transform, ~3-4k samples): no landmarking. Exact
+#   diffusion and exact MDS are affordable at that size and strictly better than
+#   approximating. Passed as an explicit --n-landmark none so the intent is on the
+#   command line rather than reached by fall-through.
+#
+#   Large fit set (subsample, 10k-100k samples): 10,000 RANDOM landmarks. An A/B on
+#   60,000 geosketch-selected UKBB samples (knn=500, t=100 fixed, landmarking the only
+#   variable) found 10k random preserved kNN neighbourhoods from the 20-PC space better
+#   than 2k spectral for EVERY ancestry group -- +9.4% overall, +31% for CSA, +13% EAS,
+#   no group worse -- while running 2.7x faster (144s vs 388s). Spectral pays for a
+#   randomized SVD plus MiniBatchKMeans at k=n_landmark; random pays one dense
+#   N x n_landmark distance matrix. Spectral draws thinner, prettier filaments, but thin
+#   is not faithful.
+#
+# All mode defaults can be overridden with explicit arguments
+# (--n-landmark N, --n-landmark none, --random-landmarking, --no-random-landmarking).
 #
 
 set -e
@@ -64,7 +80,9 @@ set_projection_mode_defaults() {
     EMBEDDING_INPUT="${EMBEDDING_INPUT:-both}"
     KNN="${KNN:-100}"
     T="${T:-3}"
-    N_LANDMARK="${N_LANDMARK:-}"
+    # Fit set is the small reference panel (~3.3k), so no landmarking: exact is
+    # affordable and better. Explicit "none" rather than an empty fall-through.
+    N_LANDMARK="${N_LANDMARK:-none}"
     RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-false}"
     NEURALADMIXTURE_BATCH_SIZE="${NEURALADMIXTURE_BATCH_SIZE:-}"
     EMBED_BATCH_SIZE="${EMBED_BATCH_SIZE:-}"
@@ -77,8 +95,12 @@ set_subsample_mode_defaults() {
     EMBEDDING_INPUT="${EMBEDDING_INPUT:-fit}"
     KNN="${KNN:-500}"
     T="${T:-50}"
+    # Large fit set: landmarking is mandatory. 10k random beats 2k spectral on
+    # neighbourhood preservation for every ancestry group and is 2.7x faster (see
+    # header). These two are set together -- n_landmark without random landmarking
+    # silently selects the far more expensive spectral path.
     N_LANDMARK="${N_LANDMARK:-10000}"
-    RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-false}"
+    RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-true}"
     NEURALADMIXTURE_BATCH_SIZE="${NEURALADMIXTURE_BATCH_SIZE:-400}"
     EMBED_BATCH_SIZE="${EMBED_BATCH_SIZE:-}"
 }
@@ -89,7 +111,9 @@ set_transform_mode_defaults() {
     EMBEDDING_INPUT="${EMBEDDING_INPUT:-project}"
     KNN="${KNN:-100}"
     T="${T:-3}"
-    N_LANDMARK="${N_LANDMARK:-}"
+    # Target dataset is small (~4k), so no landmarking: exact is affordable and
+    # better. Explicit "none" rather than an empty fall-through.
+    N_LANDMARK="${N_LANDMARK:-none}"
     RANDOM_LANDMARKING="${RANDOM_LANDMARKING:-false}"
     NEURALADMIXTURE_BATCH_SIZE="${NEURALADMIXTURE_BATCH_SIZE:-}"
     EMBED_BATCH_SIZE="${EMBED_BATCH_SIZE:-}"
