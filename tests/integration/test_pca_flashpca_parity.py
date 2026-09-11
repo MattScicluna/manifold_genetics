@@ -176,3 +176,53 @@ class TestProjectionParity:
             n_components=N_PCS, random_state=42, variant_chunk_size=20000
         ).project(PROJECT, model)
         np.testing.assert_allclose(chunked, projected, atol=1e-10)
+
+
+class TestFacadeParity:
+    """The two backends through the public PCA facade, on the real cohort.
+
+    This is the gate for making the Python backend the default: it compares the
+    `sample_id, dim_1, ...` frames the pipeline actually consumes, not internal
+    arrays, so a discrepancy in sample ordering or ID formatting shows up too.
+    """
+
+    @pytest.fixture(scope="class")
+    def frames(self, tmp_path_factory):
+        from manifold_genetics.pca.flashpca import PCA
+
+        out = tmp_path_factory.mktemp("facade")
+        flash = PCA(n_components=N_PCS, flashpca_path=str(FLASHPCA), backend="flashpca")
+        flash_fit = flash.fit_transform(FIT, output_path=out / "flash_fit.csv")
+        flash_proj = flash.project(PROJECT, output_path=out / "flash_proj.csv")
+
+        py = PCA(n_components=N_PCS, backend="python")
+        py_fit = py.fit_transform(FIT, output_path=out / "py_fit.csv")
+        py_proj = py.project(PROJECT, output_path=out / "py_proj.csv")
+        return flash_fit, flash_proj, py_fit, py_proj
+
+    def test_sample_ids_and_order_are_identical(self, frames):
+        flash_fit, flash_proj, py_fit, py_proj = frames
+        assert py_fit.sample_id.tolist() == flash_fit.sample_id.tolist()
+        assert py_proj.sample_id.tolist() == flash_proj.sample_id.tolist()
+
+    def test_column_layout_is_identical(self, frames):
+        flash_fit, _, py_fit, _ = frames
+        assert list(py_fit.columns) == list(flash_fit.columns)
+
+    def test_fit_coordinates_agree_up_to_sign(self, frames):
+        flash_fit, _, py_fit, _ = frames
+        theirs = flash_fit.filter(like="dim_").to_numpy()
+        ours = py_fit.filter(like="dim_").to_numpy() * sign_alignment(
+            py_fit.filter(like="dim_").to_numpy(), theirs
+        )
+        corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
+        assert min(corr) > 0.9999, f"worst fit correlation {min(corr):.6f}"
+
+    def test_projected_coordinates_agree_up_to_sign(self, frames):
+        _, flash_proj, _, py_proj = frames
+        theirs = flash_proj.filter(like="dim_").to_numpy()
+        ours = py_proj.filter(like="dim_").to_numpy() * sign_alignment(
+            py_proj.filter(like="dim_").to_numpy(), theirs
+        )
+        corr = [abs(np.corrcoef(ours[:, i], theirs[:, i])[0, 1]) for i in range(N_PCS)]
+        assert min(corr) > 0.9999, f"worst projection correlation {min(corr):.6f}"
