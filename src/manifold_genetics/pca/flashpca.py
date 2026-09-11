@@ -18,7 +18,9 @@ from ..utils.io import (
 )
 from ..utils.tools import ToolResolver
 from .backends import PCAModel, SklearnPCABackend
-from .plink import read_fam_ids
+from .plink import count_lines, read_fam_ids
+
+PY_MODEL_FILENAME = "pca_model.npz"
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +126,7 @@ class PCA:
         self._fit_output_dir = output_dir
 
         if self.backend == "python":
-            self._model = self._py_backend.fit(plink_prefix)
+            self._model = self._fit_python(plink_prefix, output_dir)
             self._is_fitted = True
             logger.info(f"PCA fitted with {self.n_components} components (python backend)")
             return self
@@ -223,7 +225,7 @@ class PCA:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if self.backend == "python":
-            self._model = self._py_backend.fit(plink_prefix)
+            self._model = self._fit_python(plink_prefix, output_dir)
             self._is_fitted = True
             self._fit_output_dir = output_dir
             df = self._coords_to_df(self._model.fit_coords, self._model.fit_sample_ids)
@@ -388,6 +390,42 @@ class PCA:
 
         logger.info(f"✓ Projection complete: {output_pc}")
         return output_pc
+
+    def _fit_python(self, plink_prefix: Path, output_dir: Path) -> PCAModel:
+        """Fit with the in-process backend, reusing a checkpoint when valid.
+
+        Mirrors what ``_run_flashpca_fit`` gets for free from its own output
+        files. A checkpoint is reused only when it matches both the requested
+        component count and this cohort's variant count -- a model from another
+        dataset has loadings of the wrong length, and applying it would produce
+        a confident, meaningless projection.
+        """
+        checkpoint = Path(output_dir) / PY_MODEL_FILENAME
+
+        if not self.force and checkpoint.exists():
+            n_variants = count_lines(f"{plink_prefix}.bim")
+            try:
+                cached = PCAModel.load(checkpoint)
+            except Exception as exc:  # unreadable or truncated .npz
+                logger.warning(f"Ignoring unreadable PCA checkpoint {checkpoint}: {exc}")
+            else:
+                if cached.n_components != self.n_components:
+                    logger.info(
+                        f"PCA checkpoint has {cached.n_components} components, "
+                        f"{self.n_components} requested; refitting"
+                    )
+                elif cached.n_variants != n_variants:
+                    logger.info(
+                        f"PCA checkpoint was fitted on {cached.n_variants} variants, "
+                        f"this cohort has {n_variants}; refitting"
+                    )
+                else:
+                    logger.info(f"PCA checkpoint found: {checkpoint}. Skipping fit")
+                    return cached
+
+        model = self._py_backend.fit(plink_prefix)
+        model.save(checkpoint)
+        return model
 
     @staticmethod
     def _coords_to_df(coords, sample_ids) -> pd.DataFrame:
