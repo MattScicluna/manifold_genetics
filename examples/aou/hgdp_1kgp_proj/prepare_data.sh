@@ -192,11 +192,14 @@ print_header "Step 14: Labels and Colormaps"
 # Create fit labels (HGDP+1KGP reference)
 print_status "Creating fit_labels.csv (HGDP+1KGP)..."
 
-if [[ -f "${DATA_DIR}/fit_labels.csv" ]]; then
-    print_success "fit_labels.csv already exists"
+# Reuse only when the file actually covers the current .fam; skipping on mere
+# existence is how ukbb/geosketch_phate's labels went stale.
+if labels_match_fam "${DATA_DIR}/fit_labels.csv" "${DATA_DIR}/fit_subset.fam"; then
+    print_success "fit_labels.csv is up to date"
     FIT_LABEL_COUNT=$(wc -l < "${DATA_DIR}/fit_labels.csv")
     echo "  Existing labels: $((FIT_LABEL_COUNT - 1)) samples"
 else
+    [[ -f "${DATA_DIR}/fit_labels.csv" ]] && print_warning "fit_labels.csv is stale; regenerating"
     python3 << EOF
 import pandas as pd
 
@@ -227,11 +230,14 @@ fi
 # Create project labels (AoU)
 print_status "Creating project_labels.csv (AoU)..."
 
-if [[ -f "${DATA_DIR}/project_labels.csv" ]]; then
-    print_success "project_labels.csv already exists"
+# Reuse only when the file actually covers the current .fam; skipping on mere
+# existence is how ukbb/geosketch_phate's labels went stale.
+if labels_match_fam "${DATA_DIR}/project_labels.csv" "${DATA_DIR}/project_subset.fam"; then
+    print_success "project_labels.csv is up to date"
     PROJECT_LABEL_COUNT=$(wc -l < "${DATA_DIR}/project_labels.csv")
     echo "  Existing labels: $((PROJECT_LABEL_COUNT - 1)) samples"
 else
+    [[ -f "${DATA_DIR}/project_labels.csv" ]] && print_warning "project_labels.csv is stale; regenerating"
     AOU_METADATA="${SHARED_META_DIR}/DemographicData.tsv"
 
     if [[ -f "$AOU_METADATA" ]]; then

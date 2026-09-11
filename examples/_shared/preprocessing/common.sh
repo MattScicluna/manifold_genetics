@@ -279,3 +279,64 @@ get_shared_dir() {
     # Fallback - assume we're in examples/
     echo "$(dirname "$script_dir")/_shared"
 }
+
+# ---------------------------------------------------------------------------
+# Label freshness
+# ---------------------------------------------------------------------------
+
+# labels_match_fam <labels.csv> <subset.fam>
+#
+# Exit 0 when the label file covers the samples currently in the .fam.
+#
+# Every prepare_data.sh used to skip label generation whenever the file merely
+# existed. That is how examples/ukbb/geosketch_phate went wrong: re-running the
+# selection produced a new .fam on 2026-05-16 while the 2026-05-12 label file was
+# left in place. They overlapped by 40.6%, and the pipeline went on to publish
+# figures that coloured 40% of their points. Existence is not freshness.
+#
+# Deliberately stdlib-only. A freshness check must not depend on pandas being
+# importable by whichever python3 is first on PATH -- and since any failure here
+# exits non-zero, i.e. "regenerate", an ImportError would otherwise masquerade
+# as staleness and silently force a rebuild every time.
+labels_match_fam() {
+    local label_file="$1"
+    local fam_file="$2"
+
+    [[ -f "$label_file" && -f "$fam_file" ]] || return 1
+
+    python3 - "$label_file" "$fam_file" <<'MG_FRESHNESS_CHECK'
+import csv
+import os
+import sys
+
+labels_path, fam_path = sys.argv[1], sys.argv[2]
+
+try:
+    with open(labels_path, newline="") as fh:
+        reader = csv.DictReader(fh)
+        if reader.fieldnames is None or "sample_id" not in reader.fieldnames:
+            print("    no sample_id column; regenerating")
+            sys.exit(1)
+        have = {row["sample_id"] for row in reader}
+
+    wanted = set()
+    with open(fam_path) as fh:
+        for line in fh:
+            parts = line.split()
+            if len(parts) >= 2:
+                wanted.add(parts[1])
+except OSError as exc:
+    print(f"    could not read labels or .fam ({exc}); regenerating")
+    sys.exit(1)
+
+missing = wanted - have
+if missing:
+    pct = 100.0 * (len(wanted) - len(missing)) / len(wanted) if wanted else 0.0
+    print(
+        f"    stale: {len(missing)} of {len(wanted)} samples in "
+        f"{os.path.basename(fam_path)} have no label ({pct:.1f}% covered)"
+    )
+    sys.exit(1)
+sys.exit(0)
+MG_FRESHNESS_CHECK
+}

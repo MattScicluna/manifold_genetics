@@ -157,10 +157,13 @@ fi
 
 for subset in "fit" "project"; do
     LABEL_FILE="${DATA_DIR}/${subset}_labels.csv"
-    if [[ -f "$LABEL_FILE" ]]; then
-        print_success "${subset}_labels.csv already exists"
+    # Reuse only when the file actually covers the current .fam. Skipping on
+    # mere existence is how these went stale once already.
+    if labels_match_fam "$LABEL_FILE" "${DATA_DIR}/${subset}_subset.fam"; then
+        print_success "${subset}_labels.csv is up to date"
         continue
     fi
+    [[ -f "$LABEL_FILE" ]] && print_warning "${subset}_labels.csv is stale; regenerating"
 
     echo "  Creating ${subset} subset labels..."
     python3 << EOF
