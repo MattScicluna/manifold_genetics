@@ -8,14 +8,14 @@
 #
 # Prerequisites:
 #   1. Run examples/ukbb/hgdp_1kgp_proj/prepare_data.sh  (intersected PLINK data)
-#   2. Run examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh (produces PCA for UKBB samples)
+#   2. Run examples/ukbb/10k_WB_5K_Irish/config.yaml (produces PCA for UKBB samples)
 #
 # The PCA CSV used for geosketch is from the 10k_WB_5K_Irish pipeline
 # (PCA fit on 10K WB + 5K Irish, projected to all UKBB samples):
 #   examples/ukbb/10k_WB_5K_Irish/outputs/pca/project_pca_20.csv
 #
 # The same PCA coordinates are written to outputs/pca/fit_pca_20.csv (for the
-# selected samples) so that run_pipeline.sh --skip-pca uses the correct space.
+# selected samples) so that `manifold-genetics run ... --skip-pca` uses the correct space.
 #
 # Usage:
 #   bash examples/ukbb/geosketch_phate/prepare_data.sh
@@ -88,7 +88,7 @@ if [[ ! -f "${PCA_CSV}" ]]; then
     echo "  Please run it first (or submit as a batch job):"
     echo ""
     echo "    bash examples/_shared/submit_batch.sh \\"
-    echo "        examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh"
+    echo "        examples/ukbb/10k_WB_5K_Irish/config.yaml"
     echo ""
     echo "  Alternatively, provide a different PCA CSV via:"
     echo "    PCA_CSV=/path/to/pca.csv bash prepare_data.sh"
@@ -191,7 +191,7 @@ print_success "Labels created"
 # =============================================================================
 print_subheader "Step 5: Create fit PCA file"
 
-# Subset PCA_CSV to the selected fit samples so that run_pipeline.sh --skip-pca
+# Subset PCA_CSV to the selected fit samples so that `manifold-genetics run ... --skip-pca`
 # uses the same 10k_WB_5K_Irish coordinate space that geosketch ran in.
 OUTPUT_PCA_DIR="${SCRIPT_DIR}/outputs/pca"
 FIT_PCA_FILE="${OUTPUT_PCA_DIR}/fit_pca_${N_PCS}.csv"
@@ -246,7 +246,7 @@ echo "  fit_labels.csv               (Fit sample metadata)"
 echo "  project_labels.csv           (Project sample metadata)"
 echo ""
 echo "Next step: Run the PHATE pipeline"
-echo "  bash run_pipeline.sh"
+echo "  manifold-genetics run config.yaml"
 echo "  # or submit as a batch job:"
-echo "  bash examples/_shared/submit_batch.sh examples/ukbb/geosketch_phate/run_pipeline.sh"
+echo "  bash examples/_shared/submit_batch.sh examples/ukbb/geosketch_phate/config.yaml"
 echo ""

@@ -1,0 +1,36 @@
+# HGDP+1KGP pipeline.
+#
+# Run it with:
+#   manifold-genetics run examples/hgdp_1kgp/config.yaml --dry-run   # inspect
+#   manifold-genetics run examples/hgdp_1kgp/config.yaml             # execute
+#
+# Prepare the data first with download_data.sh and prepare_data.sh.
+#
+# Paths are relative to this file, so the example runs from any directory.
+
+# "transform" fits and transforms on the target cohort: the project set contains
+# the fit set, so there is nothing to cross-project. It supplies knn=100, t=3 and
+# no landmarking -- at ~4k samples, exact diffusion is affordable and better than
+# approximating. `manifold-genetics run <config> --dry-run` prints what it set.
+preset: transform
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  labels: data/hgdp_project_labels.csv
+  colormap: ../colormaps/hgdp_1kgp.json
+  geographic_coords: data/hgdp_project_geographic.csv
+  output_dir: outputs
+
+pca:
+  n_pcs: 50
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+
+visualization:
+  admix_group_column: Genetic_region_merged

@@ -1,0 +1,32 @@
+# UKBB embedded on its own, using a geometric sketch as the fit subset.
+#
+#   manifold-genetics run examples/ukbb/geosketch_phate/config.yaml --dry-run
+#
+# Select the sketch first with prepare_data.sh. Paths are relative to this file.
+#
+# Identical settings to 10k_WB_5K_Irish on purpose: how the fit subset was chosen
+# (geometric sketch vs majority-capping) should not change how it is embedded.
+# A 2026-09-10 comparison at matched settings found the two give the same branch
+# topology, differing only in the European region.
+preset: subsample
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  colormap: ../../colormaps/ukbb.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+
+visualization:
+  admix_group_column: self_described_ancestry

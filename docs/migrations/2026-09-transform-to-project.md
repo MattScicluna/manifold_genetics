@@ -56,7 +56,7 @@ find . -depth -name 'transform*' -print
 
 ## Out of scope for this PR (separate decisions)
 
-- `--mode transform` in `examples/_shared/run_pipeline.sh` — this is the wrapper's
+- the `transform` preset (now `manifold_genetics.pipeline.configfile.PRESETS`) — this is the
   "fit_transform-only, no cross-projection" mode name, not the dataset role. Left as-is.
 - `transform_subset.bed` input PLINK filename in `examples/hgdp_1kgp/download_data.sh`
   — externally hosted data; the integration test already expects `project_subset`,

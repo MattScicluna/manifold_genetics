@@ -1,0 +1,38 @@
+# TEMPLATE: project your cohort onto the HGDP+1KGP reference panel.
+#
+# Copy this next to your data, edit the paths, then:
+#   manifold-genetics run path/to/config.yaml --dry-run
+#   manifold-genetics run path/to/config.yaml
+#
+# Paths are relative to this file.
+
+# "projection" fits on the reference panel and transforms your cohort onto it,
+# so both land in the same space. Supplies knn=100, t=3 and no landmarking --
+# the reference panel is small enough that exact diffusion is affordable.
+preset: projection
+
+data:
+  fit_plink: data/fit_subset          # HGDP+1KGP reference
+  project_plink: data/project_subset  # your cohort
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  fit_colormap: ../../colormaps/hgdp_1kgp.json
+  project_colormap: ../../colormaps/custom.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+  # Uncomment for a large project cohort; bounds peak memory during transform.
+  # embed_batch_size: 60000
+
+visualization:
+  # Which column colours each cohort in the combined projection plot.
+  projection_plot_fit_column: Population
+  # projection_plot_project_column: your_column

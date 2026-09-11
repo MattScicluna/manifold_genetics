@@ -7,13 +7,13 @@
 # is tied to one cluster.
 #
 # Usage:
-#   bash examples/_shared/submit_batch.sh <script_path> [SLURM_options] [-- pipeline_options]
+#   bash examples/_shared/submit_batch.sh <config.yaml> [SLURM_options] [-- run_options]
 #
 # Examples:
-#   bash examples/_shared/submit_batch.sh examples/hgdp_1kgp/run_pipeline.sh
-#   bash examples/_shared/submit_batch.sh examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh --cpus=16 --mem=128GB
-#   bash examples/_shared/submit_batch.sh examples/ukbb/hgdp_1kgp_proj/run_pipeline.sh -- --skip-admixture
-#   bash examples/_shared/submit_batch.sh examples/aou/60k_white/run_pipeline.sh --time=48:00:00 --job=my_job -- --skip-pca
+#   bash examples/_shared/submit_batch.sh examples/hgdp_1kgp/config.yaml
+#   bash examples/_shared/submit_batch.sh examples/ukbb/10k_WB_5K_Irish/config.yaml --cpus=16 --mem=128GB
+#   bash examples/_shared/submit_batch.sh examples/ukbb/hgdp_1kgp_proj/config.yaml -- --skip-admixture
+#   bash examples/_shared/submit_batch.sh examples/aou/10k_WBH/config.yaml --time=48:00:00 --job=my_job
 #
 # SLURM Options (before --):
 #   --cpus=N         Number of CPUs (default: 8)
@@ -23,8 +23,9 @@
 #   --gpus=N         Number of GPUs (default: 0, loads cuda module if >0)
 #   --account=NAME   SLURM account (default: $SLURM_ACCOUNT)
 #
-# Pipeline Options (after --):
-#   Any arguments after -- are passed directly to the pipeline script
+# Run Options (after --):
+#   Any arguments after -- are passed to `manifold-genetics run`
+#   (e.g. --skip-admixture, --output DIR)
 #
 
 set -e
@@ -34,22 +35,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${MANIFOLD_GENETICS_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 
-# Check if script path is provided
+# Check if a config path is provided
 if [ $# -lt 1 ]; then
-    echo "Error: script path required"
+    echo "Error: config path required"
     echo ""
-    echo "Usage: bash examples/_shared/submit_batch.sh <script_path> [SLURM_options] [-- pipeline_options]"
+    echo "Usage: bash examples/_shared/submit_batch.sh <config.yaml> [SLURM_options] [-- run_options]"
     echo ""
     echo "Examples:"
-    echo "  bash examples/_shared/submit_batch.sh examples/hgdp_1kgp/run_pipeline.sh"
-    echo "  bash examples/_shared/submit_batch.sh examples/ukbb/10k_WB_5K_Irish/run_pipeline.sh --cpus=16 --mem=128GB"
-    echo "  bash examples/_shared/submit_batch.sh examples/ukbb/hgdp_1kgp_proj/run_pipeline.sh -- --skip-admixture"
+    echo "  bash examples/_shared/submit_batch.sh examples/hgdp_1kgp/config.yaml"
+    echo "  bash examples/_shared/submit_batch.sh examples/ukbb/10k_WB_5K_Irish/config.yaml --cpus=16 --mem=128GB"
+    echo "  bash examples/_shared/submit_batch.sh examples/ukbb/hgdp_1kgp_proj/config.yaml -- --skip-admixture"
     echo ""
     exit 1
 fi
 
-# Get script path (first argument)
-RUN_SCRIPT="$1"
+# Get config path (first argument)
+CONFIG="$1"
 shift
 
 # Separate SLURM options from pipeline options (split on --)
@@ -71,22 +72,19 @@ done
 set -- "${SLURM_ARGS[@]}"
 
 # Resolve to absolute path relative to PROJECT_ROOT
-if [[ "$RUN_SCRIPT" = /* ]]; then
-    # Already absolute
-    RUN_SCRIPT_ABS="$RUN_SCRIPT"
+if [[ "$CONFIG" = /* ]]; then
+    CONFIG_ABS="$CONFIG"
 else
-    # Make absolute relative to PROJECT_ROOT
-    RUN_SCRIPT_ABS="${PROJECT_ROOT}/${RUN_SCRIPT}"
+    CONFIG_ABS="${PROJECT_ROOT}/${CONFIG}"
 fi
 
-# Check if run_pipeline.sh exists
-if [ ! -f "$RUN_SCRIPT_ABS" ]; then
-    echo "Error: run_pipeline.sh not found: $RUN_SCRIPT_ABS"
+if [ ! -f "$CONFIG_ABS" ]; then
+    echo "Error: config not found: $CONFIG_ABS"
     exit 1
 fi
 
-# Get example directory
-EXAMPLE_DIR="$(dirname "$RUN_SCRIPT_ABS")"
+# Get example directory (used only for the default job name)
+EXAMPLE_DIR="$(dirname "$CONFIG_ABS")"
 
 # Default SLURM parameters
 CPUS=8
@@ -134,7 +132,7 @@ fi
 # Create logs directory if it doesn't exist
 mkdir -p "${PROJECT_ROOT}/logs"
 
-# Convert pipeline args array to string for embedding in heredoc
+# Convert run args array to string for embedding in heredoc
 PIPELINE_ARGS_STR="${PIPELINE_ARGS[*]}"
 
 # Create temporary batch script
@@ -192,10 +190,11 @@ source .venv/bin/activate
 echo "✓ Virtual environment activated"
 echo ""
 
-# Run the example pipeline
-echo "Running: ${RUN_SCRIPT_ABS} ${PIPELINE_ARGS_STR}"
+# Run the pipeline. Paths inside the config resolve against the config's own
+# directory, so the working directory here does not matter.
+echo "Running: manifold-genetics run ${CONFIG_ABS} ${PIPELINE_ARGS_STR}"
 echo ""
-bash ${RUN_SCRIPT_ABS} ${PIPELINE_ARGS_STR}
+manifold-genetics run ${CONFIG_ABS} ${PIPELINE_ARGS_STR}
 
 echo ""
 echo "=========================================="
@@ -204,7 +203,7 @@ echo "=========================================="
 echo "Finished: \$(date)"
 echo "Job ID: \$SLURM_JOB_ID"
 echo ""
-echo "Outputs saved to: ${EXAMPLE_DIR}/outputs/"
+echo "Outputs: see output_dir in ${CONFIG_ABS}"
 echo "Logs saved to: ${PROJECT_ROOT}/logs/${JOB_NAME}_\${SLURM_JOB_ID}.{out,err}"
 echo ""
 EOF
@@ -217,9 +216,9 @@ echo "=========================================="
 echo "  Submitting Batch Job"
 echo "=========================================="
 echo ""
-echo "Script: $RUN_SCRIPT_ABS"
+echo "Config: $CONFIG_ABS"
 if [ -n "$PIPELINE_ARGS_STR" ]; then
-    echo "Pipeline args: $PIPELINE_ARGS_STR"
+    echo "Run args: $PIPELINE_ARGS_STR"
 fi
 echo "Job name: $JOB_NAME"
 echo "CPUs: $CPUS"

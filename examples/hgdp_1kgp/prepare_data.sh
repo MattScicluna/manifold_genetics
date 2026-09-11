@@ -80,7 +80,7 @@ if [[ -f "${FIT_BED}" ]] && [[ -f "${PROJECT_BED}" ]] && \
     echo "  - hgdp_fit_geographic.csv"
     echo "  - hgdp_project_geographic.csv"
     echo ""
-    echo "You can run: bash examples/hgdp_1kgp/run_pipeline.sh"
+    echo "You can run: manifold-genetics run examples/hgdp_1kgp/config.yaml"
     exit 0
 fi
 
@@ -450,5 +450,5 @@ echo "  - hgdp_fit_geographic.csv (geographic coordinates, Americas excluded)"
 echo "  - hgdp_project_geographic.csv (geographic coordinates, Americas excluded)"
 echo ""
 echo "Next steps:"
-echo "  bash examples/hgdp_1kgp/run_pipeline.sh"
+echo "  manifold-genetics run examples/hgdp_1kgp/config.yaml"
 echo ""

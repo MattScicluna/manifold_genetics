@@ -1,0 +1,32 @@
+# UKBB embedded on its own, using a majority-capped fit subset
+# (10k British + 5k Irish + every other ancestry).
+#
+#   manifold-genetics run examples/ukbb/10k_WB_5K_Irish/config.yaml --dry-run
+#
+# Paths are relative to this file.
+
+# "subsample" fits and transforms on the fit subset alone. Supplies knn=500,
+# t=50 and 10,000 random landmarks -- at ~59k samples landmarking is mandatory,
+# and random beats spectral here (see PR #82).
+preset: subsample
+
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  fit_labels: data/fit_labels.csv
+  project_labels: data/project_labels.csv
+  colormap: ../../colormaps/ukbb.json
+  output_dir: outputs
+
+pca:
+  n_pcs: 20
+
+admixture:
+  k_min: 2
+  k_max: 10
+
+embedding:
+  method: phate
+
+visualization:
+  admix_group_column: self_described_ancestry

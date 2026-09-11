@@ -5,7 +5,8 @@ in-process (Tasks 1-3 of this PR), and ``test_pipeline_output_layout`` here is
 the independent, from-the-outside check on that migration. It exercises a
 real ``Pipeline(...).run()`` — real FlashPCA, a precomputed admixture backend,
 real embedding — for each of the three shapes the example scripts drive
-(``examples/_shared/run_pipeline.sh``: projection / subsample / transform) and
+(``manifold_genetics.pipeline.configfile.PRESETS``: projection / subsample /
+transform) and
 asserts the *complete* output tree for that shape, including which files must
 NOT exist. A test that only checked presence would pass against an
 orchestrator that wrote every file in every mode — exactly the branch bug T2
@@ -105,7 +106,7 @@ def test_pipeline_output_layout(
 ):
     """Run a full pipeline for one mode and assert the complete output tree.
 
-    Modes (from ``examples/_shared/run_pipeline.sh``):
+    Modes (from ``manifold_genetics.pipeline.configfile.PRESETS``):
       - projection: embedding_input="both" — cross-cohort, fit AND project
         embeddings, projection plot.
       - subsample:  embedding_input="fit" — within-cohort, fit subset only.
