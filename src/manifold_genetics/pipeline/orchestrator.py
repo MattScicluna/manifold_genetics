@@ -169,7 +169,7 @@ class Pipeline:
     def run(
         self,
         n_pcs: int = 50,
-        pca_backend: str = "flashpca",
+        pca_backend: str = "python",
         k_min: int = 2,
         k_max: int = 10,
         embedding: str = "phate",

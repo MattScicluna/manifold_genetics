@@ -14,8 +14,10 @@ from manifold_genetics.pipeline.steps.pca import run_pca
 
 
 class TestPCAConfig:
-    def test_defaults_to_flashpca(self):
-        assert PCAConfig().backend == "flashpca"
+    def test_defaults_to_python(self):
+        # The package must work after a plain pip install, which means the
+        # default cannot require a Linux-x86-64 binary.
+        assert PCAConfig().backend == "python"
 
     def test_carries_an_explicit_backend(self):
         assert PCAConfig(backend="python").backend == "python"
@@ -33,11 +35,11 @@ class TestRunPCAPassesBackendThrough:
 
         assert MockPCA.call_args.kwargs["backend"] == "python"
 
-    def test_default_backend_is_still_flashpca(self, tmp_path):
+    def test_default_backend_needs_no_external_binary(self, tmp_path):
         with patch("manifold_genetics.pipeline.steps.pca.PCA") as MockPCA:
             run_pca("fit_prefix", project_output=tmp_path / "out.csv", n_pcs=5)
 
-        assert MockPCA.call_args.kwargs["backend"] == "flashpca"
+        assert MockPCA.call_args.kwargs["backend"] == "python"
 
 
 class TestCLIFlag:

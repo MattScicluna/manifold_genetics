@@ -51,9 +51,29 @@ class TestBackendSelection:
     def test_python_backend_constructs_without_the_flashpca_binary(self, no_flashpca):
         PCA(n_components=3, backend="python")
 
+    def test_the_default_constructs_without_the_flashpca_binary(self, no_flashpca):
+        # The whole point of the default flip: a pip-installed package works.
+        assert PCA(n_components=3).backend == "python"
+
     def test_flashpca_backend_still_resolves_the_binary_eagerly(self, no_flashpca):
         with pytest.raises(ToolNotFoundError):
             PCA(n_components=3, backend="flashpca")
+
+    def test_supplying_a_flashpca_path_selects_the_flashpca_backend(self, no_flashpca):
+        """Otherwise the argument would be silently ignored under the new default.
+
+        no_flashpca makes resolution fail, so this also proves the explicit path
+        is used instead of being re-resolved.
+        """
+        pca = PCA(n_components=3, flashpca_path="/fake/flashpca")
+
+        assert pca.backend == "flashpca"
+        assert pca.flashpca == "/fake/flashpca"
+
+    def test_an_explicit_backend_overrides_that_inference(self, no_flashpca):
+        pca = PCA(n_components=3, flashpca_path="/fake/flashpca", backend="python")
+
+        assert pca.backend == "python"
 
     def test_unknown_backend_is_rejected_by_name(self, no_flashpca):
         with pytest.raises(ValueError, match="backend"):

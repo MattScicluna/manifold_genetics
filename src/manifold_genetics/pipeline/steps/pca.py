@@ -50,7 +50,7 @@ def run_pca(
     flashpca_dir: Optional[PathLike] = None,
     n_pcs: int = 50,
     force: bool = False,
-    backend: str = "flashpca",
+    backend: str = "python",
 ) -> pd.DataFrame:
     """Run FlashPCA and write coordinate CSVs.
 

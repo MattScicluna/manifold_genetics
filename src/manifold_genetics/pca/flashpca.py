@@ -45,7 +45,7 @@ class PCA:
         n_components: int = 20,
         flashpca_path: Optional[str] = None,
         force: bool = False,
-        backend: str = "flashpca",
+        backend: Optional[str] = None,
     ):
         """
         Initialize PCA analyzer.
@@ -54,15 +54,21 @@ class PCA:
             n_components: Number of principal components to compute
             flashpca_path: Path to flashpca executable (None = auto-detect)
             force: If True, recompute even if outputs exist
-            backend: ``"flashpca"`` shells out to the external binary;
-                ``"python"`` uses the in-process implementation, which needs no
-                binary and matches flashpca to 1.5e-7 (see
-                tests/integration/test_pca_flashpca_parity.py).
+            backend: ``"python"`` uses the in-process implementation, which
+                needs no binary; ``"flashpca"`` shells out to the external one.
+                They match to 1.5e-7 and write the same artefact set
+                (tests/integration/test_pca_flashpca_parity.py), so a model
+                fitted by either is usable by the other. ``None`` (the default)
+                means ``"flashpca"`` when ``flashpca_path`` was supplied and
+                ``"python"`` otherwise -- so passing a path is never silently
+                ignored, while a plain ``PCA()`` needs no binary.
 
         The binary is resolved only for the flashpca backend. Resolving it
         unconditionally would make merely constructing this object fail on a
         machine without it -- i.e. anywhere that is not Linux x86-64.
         """
+        if backend is None:
+            backend = "flashpca" if flashpca_path is not None else "python"
         if backend not in ("flashpca", "python"):
             raise ValueError(f"Unknown PCA backend {backend!r}; choose 'flashpca' or 'python'")
 

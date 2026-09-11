@@ -31,7 +31,7 @@ def run_pipeline(
     geographic_coords: Optional[Union[str, Path]] = None,
     # PCA parameters
     n_pcs: int = 50,
-    pca_backend: str = "flashpca",
+    pca_backend: str = "python",
     # Admixture parameters
     k_min: int = 2,
     k_max: int = 10,

@@ -38,9 +38,11 @@ class IOConfig:
 class PCAConfig:
     n_pcs: int = 50
     force: bool = False
-    # "flashpca" shells out to the binary; "python" runs in process and needs no
-    # binary. They agree to 1.5e-7 (tests/integration/test_pca_flashpca_parity.py).
-    backend: str = "flashpca"
+    # "python" runs in process and needs no binary; "flashpca" shells out to the
+    # external one. They agree to 1.5e-7 and write the same artefact set
+    # (tests/integration/test_pca_flashpca_parity.py). Python is the default so a
+    # pip-installed package works on any platform.
+    backend: str = "python"
 
 
 @dataclass(frozen=True)
