@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+dist/
 develop-eggs/
 dist/
 downloads/
@@ -136,10 +137,16 @@ Thumbs.db
 
 # Project-specific (keep local only)
 CLAUDE.md
-docs/
-examples/hgdp_1kgp/run_pipeline_batch.sh
+
+# docs/ used to be ignored wholesale, which made every design doc and plan in the
+# repo invisible to collaborators and made a docs site unbuildable. Only build
+# artefacts are ignored now.
+docs/_build/
+docs/site/
+
+# Scripts that ship with the examples are tracked; only the Dropbox packaging
+# helper stays local (it encodes personal paths).
 examples/hgdp_1kgp/package_data_for_dropbox.sh
-examples/_shared/submit_batch.sh
 
 # Binary tools and data
 bin/
@@ -182,3 +189,8 @@ examples/aou/*/outputs/
 examples/CaG/
 examples/ukbb/60k_random/data/
 examples/ukbb/60k_random/outputs/
+
+# Local-only working dirs: superseded code kept for reference, and stray run
+# output. Neither is part of the package; kept out of git rather than deleted.
+deprecated/
+admixture_outputs/
