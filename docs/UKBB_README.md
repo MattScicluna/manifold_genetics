@@ -44,7 +44,7 @@ This step:
 ```bash
 # Interactive (on compute node)
 salloc --account=<your-slurm-account> --cpus-per-task=8 --mem=64GB --time=4:00:00
-bash run_pipeline.sh
+manifold-genetics run config.yaml
 
 # Or batch job
 sbatch run_pipeline_batch.sh

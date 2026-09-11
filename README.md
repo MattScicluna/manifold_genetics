@@ -109,7 +109,7 @@ bash examples/hgdp_1kgp/prepare_data.sh
 
 ```bash
 # From repository root
-bash examples/hgdp_1kgp/run_pipeline.sh
+manifold-genetics run examples/hgdp_1kgp/config.yaml
 ```
 
 **Runtime:** a couple of hours on CPU (faster with GPU for admixture)
