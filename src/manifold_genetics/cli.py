@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from manifold_genetics import __version__
+
 from .pipeline import run_pipeline
 from .pipeline.configfile import load_config
 from .pipeline.steps import (
@@ -763,7 +765,9 @@ def main(argv: Optional[List[str]] = None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    # Read from the package, not repeated here: this argument carried its own
+    # copy of the number and spent a whole release cycle a minor version behind.
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 

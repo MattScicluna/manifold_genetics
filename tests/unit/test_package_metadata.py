@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from manifold_genetics.cli import main
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -72,6 +74,31 @@ class TestVersion:
     def test_it_is_a_release_version(self, project):
         # PEP 440, and no leftover dev/rc suffix on something about to be tagged.
         assert re.fullmatch(r"\d+\.\d+\.\d+", project["version"]), project["version"]
+
+    def test_the_command_line_reports_it(self, project, capsys):
+        """``--version`` had the number typed into it a third time.
+
+        It said 0.1.0 for the whole of 0.2.0's development, and the first thing
+        anyone runs after installing is ``--version``. Caught by a TestPyPI
+        rehearsal, which is what rehearsals are for.
+        """
+        with pytest.raises(SystemExit):
+            main(["--version"])
+
+        assert project["version"] in capsys.readouterr().out
+
+    def test_it_is_written_down_in_exactly_one_source_file(self, project):
+        """Three copies is how one of them ends up stale.
+
+        ``__init__.py`` is the single place; everything else must read it.
+        """
+        elsewhere = [
+            str(path.relative_to(REPO))
+            for path in PACKAGE.rglob("*.py")
+            if path.name != "__init__.py" and project["version"] in path.read_text()
+        ]
+
+        assert elsewhere == []
 
     def test_the_changelog_documents_it(self, project):
         changelog = (REPO / "CHANGELOG.md").read_text()

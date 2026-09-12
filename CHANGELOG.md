@@ -7,6 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **`manifold-genetics --version` reported `0.1.0`.** The number was typed into
+  the argparse argument as a third copy and spent the whole of 0.2.0's
+  development a minor version behind, while `manifold_genetics.__version__` said
+  `0.2.0`. It now reads the package. Caught by the TestPyPI rehearsal of 0.2.0,
+  which is what a rehearsal is for.
+
+  A test pinned the stale literal, so it passed while the command was wrong; it
+  now compares against the package. Two further tests assert that the CLI
+  reports the declared version and that the version appears in exactly one
+  source file.
+- The wheel is now checked to contain no untracked module. It picks files by the
+  same "everything not gitignored" rule that put untracked working files in the
+  0.2.0 sdist; there are stale `.ipynb_checkpoints` copies of two real backends
+  under `src/` today, kept out only by a `.gitignore` entry.
+
 ## [0.2.0] - 2026-09-12
 
 First public release. 0.1.0 was never published, so everything here is new to
