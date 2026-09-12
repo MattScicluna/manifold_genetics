@@ -9,6 +9,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **External tools are cached per user and fetched on first use.** They were
+  downloaded to a directory computed from `__file__`, which in a git checkout is
+  the repository's `bin/` and in a `pip install` is a directory *beside*
+  site-packages: the wrong place, frequently not writable, and discarded on
+  upgrade. Worse, the constructor created it eagerly, so merely building a
+  `ToolResolver` — which `PCA(backend="flashpca")` does — left a stray directory
+  behind.
+
+  Now: `$MANIFOLD_GENETICS_TOOL_DIR` if set, else the checkout's `bin/` when
+  running from one, else a per-user cache (`~/.cache/manifold-genetics/bin`).
+  Nothing is created until something is actually downloaded.
+  `manifold-genetics setup` stays, as the pre-fetch you want before submitting a
+  job to a compute node with no internet.
+- **The right binary is downloaded for the platform.** Every URL was
+  `linux_x86_64`, so on macOS the resolver fetched a Linux binary and then
+  failed to execute it — which reads as a corrupt download rather than as "there
+  is no build for you". plink2 and plink now resolve per platform (Linux x86-64,
+  macOS arm64 and Intel, Windows x64), and `flashpca`, which upstream publishes
+  only for Linux x86-64, says exactly that and points at the in-process PCA
+  backend that needs no binary.
+
 - **The `transform` preset is now `whole_cohort`.** This project used
   `transform` for two things — the second cohort's dataset role and the
   sklearn-style method verb. The role was renamed to `project` earlier; this

@@ -17,6 +17,18 @@ uv sync --frozen --extra dev       # resolving needs the index
 bash examples/hgdp_1kgp/download_data.sh
 ```
 
+This is the one reason `manifold-genetics setup` still matters. Tools are
+otherwise fetched on first use and cached, but "first use" inside a batch job is
+a network timeout. Pre-fetching on the login node populates the same cache the
+job will read.
+
+If `$HOME` is not shared with the compute nodes, or you want one copy per
+project rather than per user, point both at the same place:
+
+```bash
+export MANIFOLD_GENETICS_TOOL_DIR=/project/shared/manifold-tools
+```
+
 Then submit the work. A job that fails minutes in with a network timeout is
 almost always this.
 

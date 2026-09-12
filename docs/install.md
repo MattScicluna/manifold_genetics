@@ -32,13 +32,30 @@ imports it.
 the example `prepare_data.sh` scripts use them to build fit and project subsets
 from a full cohort, intersect variants across cohorts, and handle strand flips.
 
+You do not normally have to fetch them yourself. The first time something needs
+one, it is downloaded and cached per user — `~/.cache/manifold-genetics/bin` on
+Linux, `~/Library/Caches/manifold-genetics/bin` on macOS — and reused
+thereafter. The right build for your platform is selected; where upstream
+publishes none (`flashpca` exists only for Linux x86-64) you get a message
+saying so rather than a Linux binary that will not run.
+
 ```bash
 manifold-genetics setup
 ```
 
-downloads them into `bin/`, along with `flashpca` if you want the accelerated
-PCA backend. It needs internet, which on an HPC cluster means running it on a
-login node — see [Running on a cluster](hpc.md).
+is therefore optional: it pre-fetches everything in one go, which is what you
+want **before** submitting a job, because compute nodes on most clusters have no
+internet. See [Running on a cluster](hpc.md).
+
+To keep the binaries somewhere else — a shared project directory, say — set:
+
+```bash
+export MANIFOLD_GENETICS_TOOL_DIR=/project/shared/manifold-tools
+```
+
+Resolution order for each tool is: that variable, then the module system, then
+`PATH`, then the cache. In a git checkout the cache is the repository's `bin/`,
+so an existing development setup keeps working unchanged.
 
 `manifold-genetics setup` does not touch your Python environment. It only
 fetches binaries.
