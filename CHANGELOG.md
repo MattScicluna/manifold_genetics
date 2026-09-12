@@ -7,40 +7,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Changed
+## [0.2.0] - 2026-09-12
 
-- **External tools are cached per user and fetched on first use.** They were
-  downloaded to a directory computed from `__file__`, which in a git checkout is
-  the repository's `bin/` and in a `pip install` is a directory *beside*
-  site-packages: the wrong place, frequently not writable, and discarded on
-  upgrade. Worse, the constructor created it eagerly, so merely building a
-  `ToolResolver` — which `PCA(backend="flashpca")` does — left a stray directory
-  behind.
+First public release.
 
-  Now: `$MANIFOLD_GENETICS_TOOL_DIR` if set, else the checkout's `bin/` when
-  running from one, else a per-user cache (`~/.cache/manifold-genetics/bin`).
-  Nothing is created until something is actually downloaded.
-  `manifold-genetics setup` stays, as the pre-fetch you want before submitting a
-  job to a compute node with no internet.
-- **The right binary is downloaded for the platform.** Every URL was
-  `linux_x86_64`, so on macOS the resolver fetched a Linux binary and then
-  failed to execute it — which reads as a corrupt download rather than as "there
-  is no build for you". plink2 and plink now resolve per platform (Linux x86-64,
-  macOS arm64 and Intel, Windows x64), and `flashpca`, which upstream publishes
-  only for Linux x86-64, says exactly that and points at the in-process PCA
-  backend that needs no binary.
+The headline is that `pip install manifold-genetics` gives you a working
+pipeline. Until this release it did not: PCA required the `flashpca` binary,
+which ships only as a Linux x86-64 executable and had to be fetched and placed
+by hand.
 
-- **The `transform` preset is now `whole_cohort`.** This project used
-  `transform` for two things — the second cohort's dataset role and the
-  sklearn-style method verb. The role was renamed to `project` earlier; this
-  preset was the last holdout, naming a *mode* while every other use of the word
-  names an *operation*. The rule is now: `fit` estimates, `transform` applies,
-  `project` is the second cohort and its outputs, and a preset is named for the
-  shape of the run.
-
-  `transform` still works as a deprecated alias and warns, naming its
-  replacement. It is deliberately not listed among the valid choices in the
-  error message, because an advertised alias is a name people keep choosing.
+The version number is deliberately low. The API is not frozen, the
+`transform` -> `whole_cohort` rename landed days before this, and All of Us has
+not yet been verified end to end -- so expect further breaking changes before
+1.0.
 
 ### Added
 
@@ -53,36 +32,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cluster paths. Public cohort identifiers (`HG00096`) deliberately do not
   trigger it. Exemptions live in `.sensitive-allow`, scoped to a single rule, so
   that overriding the check leaves a reviewable trace.
-
-### Fixed
-
-- **`manifold-genetics --version` reported `0.1.0`.** The number was typed into
-  the argparse argument as a third copy and spent the whole of 0.2.0's
-  development a minor version behind, while `manifold_genetics.__version__` said
-  `0.2.0`. It now reads the package. Caught by the TestPyPI rehearsal of 0.2.0,
-  which is what a rehearsal is for.
-
-  A test pinned the stale literal, so it passed while the command was wrong; it
-  now compares against the package. Two further tests assert that the CLI
-  reports the declared version and that the version appears in exactly one
-  source file.
-- The wheel is now checked to contain no untracked module. It picks files by the
-  same "everything not gitignored" rule that put untracked working files in the
-  0.2.0 sdist; there are stale `.ipynb_checkpoints` copies of two real backends
-  under `src/` today, kept out only by a `.gitignore` entry.
-
-## [0.2.0] - 2026-09-12
-
-First public release. 0.1.0 was never published, so everything here is new to
-anybody installing this package.
-
-The headline change is that `pip install manifold-genetics` now gives you a
-working pipeline. Before this release it did not: PCA required the `flashpca`
-binary, which ships only as a Linux x86-64 executable and had to be fetched and
-placed by hand.
-
-### Added
-
 - **A pure-Python PCA backend**, selected by default. Reads PLINK 1 `.bed`
   directly (about forty lines of numpy, no new dependency) and computes a
   randomized SVD. It reproduces `flashpca`'s conventions rather than inventing
@@ -120,6 +69,38 @@ placed by hand.
 
 ### Changed
 
+- **External tools are cached per user and fetched on first use.** They were
+  downloaded to a directory computed from `__file__`, which in a git checkout is
+  the repository's `bin/` and in a `pip install` is a directory *beside*
+  site-packages: the wrong place, frequently not writable, and discarded on
+  upgrade. Worse, the constructor created it eagerly, so merely building a
+  `ToolResolver` — which `PCA(backend="flashpca")` does — left a stray directory
+  behind.
+
+  Now: `$MANIFOLD_GENETICS_TOOL_DIR` if set, else the checkout's `bin/` when
+  running from one, else a per-user cache (`~/.cache/manifold-genetics/bin`).
+  Nothing is created until something is actually downloaded.
+  `manifold-genetics setup` stays, as the pre-fetch you want before submitting a
+  job to a compute node with no internet.
+- **The right binary is downloaded for the platform.** Every URL was
+  `linux_x86_64`, so on macOS the resolver fetched a Linux binary and then
+  failed to execute it — which reads as a corrupt download rather than as "there
+  is no build for you". plink2 and plink now resolve per platform (Linux x86-64,
+  macOS arm64 and Intel, Windows x64), and `flashpca`, which upstream publishes
+  only for Linux x86-64, says exactly that and points at the in-process PCA
+  backend that needs no binary.
+
+- **The `transform` preset is now `whole_cohort`.** This project used
+  `transform` for two things — the second cohort's dataset role and the
+  sklearn-style method verb. The role was renamed to `project` earlier; this
+  preset was the last holdout, naming a *mode* while every other use of the word
+  names an *operation*. The rule is now: `fit` estimates, `transform` applies,
+  `project` is the second cohort and its outputs, and a preset is named for the
+  shape of the run.
+
+  `transform` still works as a deprecated alias and warns, naming its
+  replacement. It is deliberately not listed among the valid choices in the
+  error message, because an advertised alias is a name people keep choosing.
 - **PCA's default backend is now `python`.** `flashpca` produced the reference
   outputs and still reproduces them bit-for-bit; the change is about being
   installable, not about accuracy.
@@ -139,6 +120,19 @@ placed by hand.
 
 ### Fixed
 
+- **`manifold-genetics --version` disagreed with the package.** The number was
+  typed into the argparse argument as a third copy and drifted a minor version
+  behind `manifold_genetics.__version__`. It now reads the package. Caught by a
+  TestPyPI rehearsal, which is what a rehearsal is for.
+
+  A test pinned the stale literal, so it passed while the command was wrong; it
+  now compares against the package. Two further tests assert that the CLI
+  reports the declared version and that the version appears in exactly one
+  source file.
+- The wheel is now checked to contain no untracked module. It picks files by the
+  same "everything not gitignored" rule that put untracked working files in a
+  pre-release sdist; there are stale `.ipynb_checkpoints` copies of two real
+  backends under `src/` today, kept out only by a `.gitignore` entry.
 - **The declared license was MIT; the LICENSE file is BSD 3-Clause.** The
   LICENSE file is authoritative and the metadata now matches it. A release
   cannot be re-uploaded under the same version, so this would have been
@@ -157,18 +151,14 @@ placed by hand.
   rather than being kept because they exist.
 - **The source distribution contained untracked working files.** hatchling's
   default is to include everything not gitignored, which is not the same as
-  everything tracked; the sdist carried local tool state and an example script
-  whose header says "NOT for external users". Its contents are now declared
-  explicitly and checked by a test.
+  everything tracked; a pre-release sdist carried local tool state and an
+  example script whose header says "NOT for external users". Its contents are now
+  declared explicitly and checked by a test.
 
 ### Removed
 
 - `examples/_shared/run_pipeline.sh`, `examples/_shared/detect_cluster.sh` and
   the nine per-example `run_pipeline.sh` wrappers, superseded by config files.
-
-## [0.1.0]
-
-Internal only; never published to PyPI.
 
 [Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.0
