@@ -5,7 +5,7 @@ A lightweight, batteries-included Python package for genetic analysis with
 dimensionality reduction and visualization.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 from .admixture.neural import NeuralAdmixture
 from .embeddings.diffusion_map import DiffusionMap
