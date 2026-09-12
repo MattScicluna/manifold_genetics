@@ -18,7 +18,7 @@ from manifold_genetics.metrics.geographic import compute_geographic_preservation
 
 def _embedding(n, dims=2, seed=0):
     rng = np.random.default_rng(seed)
-    df = pd.DataFrame(rng.normal(size=(n, dims)), columns=[f"dim_{i+1}" for i in range(dims)])
+    df = pd.DataFrame(rng.normal(size=(n, dims)), columns=[f"dim_{i + 1}" for i in range(dims)])
     df.insert(0, "sample_id", [f"s{i}" for i in range(n)])
     return df
 
@@ -64,7 +64,7 @@ def test_geographic_too_few_samples_raises():
 def _q_file(tmp_path, name, k, n, seed=0):
     rng = np.random.default_rng(seed)
     q = rng.dirichlet(np.ones(k), n)
-    df = pd.DataFrame(q, columns=[f"component_{i+1}" for i in range(k)])
+    df = pd.DataFrame(q, columns=[f"component_{i + 1}" for i in range(k)])
     df.insert(0, "sample_id", [f"s{i}" for i in range(n)])
     p = tmp_path / name
     df.to_csv(p, index=False)
