@@ -4,6 +4,12 @@
 pip install manifold-genetics
 ```
 
+Or from source, for an unreleased change:
+
+```bash
+pip install git+https://github.com/MattScicluna/manifold_genetics
+```
+
 Python 3.10–3.12, tested on Linux and macOS. No compiler, no external binary:
 the default PCA backend reads PLINK `.bed` files and computes a randomized SVD
 in process.
@@ -45,7 +51,7 @@ manifold-genetics setup
 
 is therefore optional: it pre-fetches everything in one go, which is what you
 want **before** submitting a job, because compute nodes on most clusters have no
-internet. See [Running on a cluster](hpc.md).
+internet.
 
 To keep the binaries somewhere else — a shared project directory, say — set:
 
@@ -72,8 +78,14 @@ uv sync --frozen --extra dev
 uv run pytest -m "not slow and not network"      # ~2 minutes
 ```
 
-`uv sync --extra docs` adds the documentation toolchain; `mkdocs serve` then
-builds this site locally, executing the tutorial notebook as it goes.
+`uv sync --extra docs` adds the documentation toolchain, and `mkdocs serve`
+then builds this site locally. The tutorial renders without its outputs, because
+the build does not execute it — CI does that in a separate step. To see the
+outputs locally, execute it first:
+
+```bash
+uv run jupyter nbconvert --to notebook --inplace --execute docs/tutorial.ipynb
+```
 
 Testing against real genotypes is a separate suite with its own entry points —
-see [Testing against real cohorts](testing-real-cohorts.md).
+see `docs/testing-real-cohorts.md` in the repository.

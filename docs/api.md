@@ -1,15 +1,46 @@
-# API reference
+# Python API
 
-The public surface, for using this as a library rather than a command-line tool.
+Most people should use the [command line](cli.md) — it is what the pipeline is
+built around. This page is for driving it from a notebook or another package.
 
 ```python
-from manifold_genetics import PCA, PHATE, UMAP, TSNE, DiffusionMap, Pipeline
-from manifold_genetics.pipeline.runner import run_pipeline
+from manifold_genetics import run_pipeline, load_config, PCA, PHATE
 ```
+
+## What is public
+
+`manifold_genetics.__all__` is the contract. Everything in it is importable from
+the top level and will not change without a deprecation:
+
+| name | what it is |
+|---|---|
+| `run_pipeline` | run a whole pipeline from keyword arguments |
+| `load_config` | read a config file into those arguments |
+| `PCA` | fit and project principal components |
+| `PHATE`, `UMAP`, `TSNE`, `DiffusionMap` | embeddings |
+| `NeuralAdmixture` | ancestry proportions |
+| `visualize`, `plot_embedding` | figures |
+| `Pipeline` | the orchestrator, if you want the stages without the runner |
+
+**Everything else is an implementation detail** and may change in a patch
+release — the PCA backends, the PLINK reader, the standardisation helpers, the
+admixture backend ABC. They exist to serve the surface above, not to be called
+directly. If you find yourself reaching for one, that is worth reporting as a
+missing piece of the public API rather than working around.
+
+The package ships `py.typed`, so these signatures are visible to type checkers.
+
+!!! note "The version number is doing real work here"
+
+    At 0.2.x the API is not frozen. The surface above is deliberately small so
+    that it *can* be kept stable while the rest moves.
+
+## Embeddings are interchangeable
 
 Every embedding has the same three methods — `fit`, `transform`, `fit_transform`
 — and each accepts a numpy array, a DataFrame, or a path to a CSV in the
-standard format. That is what makes them interchangeable.
+standard `sample_id, dim_1 … dim_n` format. That is what makes them swappable,
+and what lets you start from principal components you already have.
 
 For a worked example, see the [tutorial](tutorial.ipynb).
 
@@ -21,19 +52,11 @@ For a worked example, see the [tutorial](tutorial.ipynb).
 
 ::: manifold_genetics.pipeline.orchestrator.Pipeline
 
-## Results
-
 ::: manifold_genetics.pipeline.result.PipelineResult
 
 ## PCA
 
 ::: manifold_genetics.pca.flashpca.PCA
-
-::: manifold_genetics.pca.backends.base.PCAModel
-
-::: manifold_genetics.pca.plink.read_bed_dosages
-
-::: manifold_genetics.pca.standardize.binom2_stats
 
 ## Embeddings
 
@@ -50,8 +73,6 @@ For a worked example, see the [tutorial](tutorial.ipynb).
 ## Admixture
 
 ::: manifold_genetics.admixture.neural.NeuralAdmixture
-
-::: manifold_genetics.admixture.backends.base.AdmixtureBackend
 
 ## Visualisation
 

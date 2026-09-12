@@ -9,10 +9,19 @@ edit_uri: edit/main/docs/
 # error rather than a line in a build log nobody reads.
 strict: true
 
-# Internal design notes and planning documents live under docs/ so they sit
-# beside the code they describe, but they are not the manual.
+# Internal notes live under docs/ so they sit beside the code they describe,
+# but they are not the manual and are not published: how this project is tested,
+# released and developed is not something a user of it needs to read.
 exclude_docs: |
   superpowers/
+  working-with-agents.md
+  releasing.md
+  testing-real-cohorts.md
+  UKBB_README.md
+  migrations/
+  hpc.md
+  controlled-access.md
+  concepts.md
 
 theme:
   name: material
@@ -88,18 +97,11 @@ plugins:
 nav:
   - Home: index.md
   - Getting started:
-      - Installation: install.md
+      - Install: install.md
+      - Quickstart: quickstart.md
       - Tutorial: tutorial.ipynb
   - Guides:
-      - Concepts: concepts.md
       - Configuration: configuration.md
       - Command line: cli.md
-      - Running on a cluster: hpc.md
-      - Controlled-access data: controlled-access.md
-      - Working safely with agents: working-with-agents.md
-      - UK Biobank cross-projection: UKBB_README.md
   - Reference:
-      - API: api.md
-      - Testing against real cohorts: testing-real-cohorts.md
-      - Releasing: releasing.md
-      - Migration notes: migrations/2026-09-transform-to-project.md
+      - Python API: api.md

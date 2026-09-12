@@ -2,541 +2,96 @@
 
 <a href="https://github.com/MattScicluna/manifold_genetics/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/MattScicluna/manifold_genetics/ci.yml?branch=main&label=CI"></a>
 <a href="https://coveralls.io/github/MattScicluna/manifold_genetics?branch=main"><img alt="Coverage Status" src="https://img.shields.io/coverallsCoverage/github/MattScicluna/manifold_genetics?branch=main"></a>
+<a href="https://pypi.org/project/manifold-genetics/"><img alt="PyPI" src="https://img.shields.io/pypi/v/manifold-genetics"></a>
 <a href="https://mattscicluna.github.io/manifold_genetics/"><img alt="Documentation" src="https://img.shields.io/badge/docs-mkdocs--material-teal"></a>
 
-A lightweight, batteries-included Python package for genetic analysis with dimensionality reduction and visualization.
+An end-to-end pipeline from PLINK genotypes to publication figures: PCA →
+admixture → manifold embedding → visualisation → metrics.
 
 **[Documentation](https://mattscicluna.github.io/manifold_genetics/)** ·
+**[Quickstart](https://mattscicluna.github.io/manifold_genetics/quickstart/)** ·
 **[Tutorial](https://mattscicluna.github.io/manifold_genetics/tutorial/)** (a full
-run on a simulated cohort, under a minute, nothing to download) ·
-**[Concepts](https://mattscicluna.github.io/manifold_genetics/concepts/)**
+run on a simulated cohort, under a minute, nothing to download)
 
 <p align="center">
   <img src="assets/ukbb_phate.png" width="30%" alt="UKBB PHATE embedding coloured by self-described ancestry"/>
   <img src="assets/aou_phate.png" width="30%" alt="All of Us PHATE embedding coloured by ancestry"/>
 </p>
 
-## Features
-
-- **PCA**: in-process, pure-Python by default — reads PLINK `.bed` directly and
-  reproduces FlashPCA's conventions to 5e-7; FlashPCA remains an opt-in accelerator
-- **Admixture**: Neural admixture analysis
-- **Embeddings**: PHATE, UMAP, t-SNE, and Diffusion Maps for manifold learning
-- **Visualization**: Publication-ready plots with customizable colormaps
-- **Metrics**: Geographic and admixture preservation metrics
-- **Pipeline**: End-to-end orchestration from PLINK files to visualizations
-- **No external binary required**: the default path is pure Python.
-  `manifold-genetics setup` fetches plink2 and plink v1.9 for data preparation,
-  and flashPCA if you want it (run it where there is internet — on an HPC
-  cluster, the login node)
-
-## Quick Start
-
-### Step 1: Installation
+## Install
 
 ```bash
 pip install manifold-genetics
 ```
 
-That is the whole install for PCA, embeddings, visualization and metrics. No
-compiler, no external binary: PCA runs in-process. Tested on Linux and macOS,
-Python 3.10-3.12.
+That is the whole install. PCA runs in process — it reads PLINK `.bed` directly
+and computes a randomized SVD — so there is no binary to fetch and no platform it
+only works on. FlashPCA remains an opt-in accelerator and writes the same
+artefacts, so a model fitted by either is readable by the other.
 
-Two optional extras:
+Admixture is an optional extra, because it pulls in torch:
 
 ```bash
-pip install 'manifold-genetics[admixture]'   # torch + neural-admixture
-pip install 'manifold-genetics[geosketch]'   # geometric-sketch subsetting
+pip install 'manifold-genetics[admixture]'
 ```
 
-The core install is deliberately torch-free so the common path stays
-lightweight. `manifold-genetics admixture` (and the admixture stage of
-`pipeline`) need the `admixture` extra.
-
-`plink2` and `plink` are only needed to *prepare* data — the example
-`prepare_data.sh` scripts use them. `manifold-genetics setup` downloads them,
-along with `flashpca` if you want the accelerated backend. Run it where there is
-internet; on an HPC cluster that means the login node.
-
-<details>
-<summary>Developing on the repository instead</summary>
-
-#### Installing uv
-
-First, install `uv` (a fast Python package installer and resolver):
+## Run
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+manifold-genetics run config.yaml --dry-run   # print the resolved settings
+manifold-genetics run config.yaml             # do the work
 ```
 
-#### Setting up the Python environment
+A config names two genotype sets, the labels describing them, and a colormap:
 
-Clone the repository and create the Python environment (we recommend Python 3.11):
+```yaml
+preset: whole_cohort
 
-```bash
-git clone https://github.com/MattScicluna/manifold_genetics
-cd manifold_genetics
+data:
+  fit_plink: data/fit_subset
+  project_plink: data/project_subset
+  labels: data/labels.csv
+  colormap: colormaps/mine.json
+  output_dir: outputs
 
-# Create virtual environment with Python 3.11 (recommended)
-uv venv --python python3.11
+pca:
+  n_pcs: 50
 
-# Install dependencies
-uv sync --frozen
-
-# Admixture support (torch + neural-admixture) is an optional extra —
-# add it only if you need the admixture step:
-uv sync --frozen --extra admixture
-
-# For contributors (includes dev tools like pytest, black, etc.)
-uv sync --frozen --extra dev
+embedding:
+  method: phate
 ```
 
-The core install is deliberately torch-free so PCA, embeddings, visualization,
-and metrics stay lightweight. `manifold-genetics admixture` (and the admixture
-stage of `pipeline`) require the `admixture` extra.
+Which set the model is **fitted** on is the choice that defines the analysis.
+`projection` fits a reference panel and places your cohort in it; `subsample`
+fits and embeds a subset of your own cohort; `whole_cohort` fits a subset and
+embeds everything. See
+**[Configuration](https://mattscicluna.github.io/manifold_genetics/configuration/)**
+for every key, and
+**[Command line](https://mattscicluna.github.io/manifold_genetics/cli/)** for the
+individual stages.
 
-#### External tools
+Input and output formats — what goes in, what comes out — are documented in the
+**[Quickstart](https://mattscicluna.github.io/manifold_genetics/quickstart/)**.
 
-The package requires external command-line tools (plink2, flashpca, and plink v1.9) that are not Python packages.
+## Examples
 
-Run the setup command to download these tools (requires internet access):
+`examples/` ships a config per cohort. `examples/hgdp_1kgp/` is the one you can
+run without applying for anything: download and preparation scripts included,
+4,094 samples across seven genetic regions.
 
-```bash
-uv run manifold-genetics setup
-```
-
-This command does NOT manage the Python environment. It only downloads external binaries to the `bin/` directory.
-
-This will download:
-- **plink2** to `bin/plink2` (~20MB) — data preparation
-- **plink v1.9** to `bin/plink` (~2MB) — data preparation
-- **flashpca** to `bin/flashpca` (~2MB) — optional; the default PCA backend is
-  in-process and needs no binary
-
-</details>
-
-### Step 2: Verify Installation (Optional but Recommended)
-
-Run the test suite to confirm everything is working:
+## Development
 
 ```bash
-# Install dev dependencies (includes pytest)
+uv venv --python python3.11 && source .venv/bin/activate
 uv sync --frozen --extra dev
 
-# Run tests
-uv run pytest -m "not slow and not integration and not network"
+uv run pytest -m "not slow and not network"   # the fast suite
+uv run black src tests && uv run isort src tests && uv run flake8 src tests
 ```
 
-Expected: the fast test suite passes in ~2–3 minutes. See the [Testing](#testing) section for details.
-
-### Step 3: Run HGDP+1KGP Example
-
-The package includes a complete working example using HGDP+1000 Genomes Project data.
-
-#### Download and prepare data (first time only):
-
-```bash
-cd /path/to/manifold_genetics
-
-# Download data (~200MB, requires internet)
-bash examples/hgdp_1kgp/download_data.sh
-
-# Prepare data for analysis
-bash examples/hgdp_1kgp/prepare_data.sh
-```
-
-#### Run the full pipeline:
-
-```bash
-# From repository root
-manifold-genetics run examples/hgdp_1kgp/config.yaml
-```
-
-**Runtime:** a couple of hours on CPU (faster with GPU for admixture)
-
-**Outputs** saved to `examples/hgdp_1kgp/outputs/`:
-- `pca/` - PCA coordinates (fit: 3,400 samples, project: 4,094 samples)
-- `admixture/` - Ancestry proportions for K=2 to 10
-- `embeddings/` - PHATE 2D embedding (4,094 samples)
-- `figures/` - All visualization plots
-- `metrics/` - Geographic and admixture preservation metrics
-
-#### About the Example Data
-
-- **Fit subset:** 3,400 unrelated samples (for model training)
-- **Project subset:** 4,094 QC-passing samples (for model application)
-- **172,152 SNPs** (LD-pruned, MAF ≥0.01)
-- **7 genetic regions:** Africa, Americas, Central/South Asia, East Asia, Europe, Middle East, Oceania
-
-## Command-Line Interface
-
-The CLI provides a built-in help system. Run `manifold-genetics --help` for the full command list,
-or `manifold-genetics <subcommand> --help` (or `manifold-genetics <subcommand> -h`) for subcommand-specific usage and
-option descriptions.
-
-### Pipeline (recommended)
-
-Run from the repository root. Outputs land under `examples/hgdp_1kgp/outputs/` in subfolders (`pca/`, `admixture/`, `embeddings/`, `figures/`), and metrics are computed from the pipeline run.
-
-```bash
-uv run manifold-genetics pipeline \
-    --fit-plink examples/hgdp_1kgp/data/fit_subset \
-    --project-plink examples/hgdp_1kgp/data/project_subset \
-    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/colormaps/hgdp_1kgp.json \
-    --output examples/hgdp_1kgp/outputs \
-    --n-pcs 50 \
-    --k-min 2 --k-max 5 \
-    --embedding phate --knn 100 --t 3 \
-    --embedding-input project \
-    --threads 8
-# Optional: --num-gpus 1
-# Optional: --geographic examples/hgdp_1kgp/data/hgdp_project_geographic.csv
-```
-
-Skip steps as needed:
-```bash
-uv run manifold-genetics pipeline ... --skip-pca --skip-admixture --skip-metrics
-```
-
-### Equivalent Individual Commands (same outputs as pipeline)
-
-Run from repo root; paths below match the pipeline output layout.
-
-```bash
-# 1) PCA: fit on fit_subset, project on project_subset
-uv run manifold-genetics pca \
-    --fit-plink examples/hgdp_1kgp/data/fit_subset \
-    --project-plink examples/hgdp_1kgp/data/project_subset \
-    --fit-output examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
-    --project-output examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
-    --flashpca-output-dir examples/hgdp_1kgp/outputs/pca/flashpca_outputs \
-    --n-pcs 50
-
-# 2) Admixture: fit on fit_subset, project on project_subset
-uv run manifold-genetics admixture \
-    --fit-plink examples/hgdp_1kgp/data/fit_subset \
-    --project-plink examples/hgdp_1kgp/data/project_subset \
-    --neuraladmixture-output-dir examples/hgdp_1kgp/outputs/admixture/checkpoints \
-    --fit-output examples/hgdp_1kgp/outputs/admixture/fit \
-    --project-output examples/hgdp_1kgp/outputs/admixture/project \
-    --k-min 2 --k-max 5 --threads 8
-# Outputs (per K): examples/hgdp_1kgp/outputs/admixture/fit.{K}.csv and project.{K}.csv
-
-# 3) Embedding (PHATE): fit + transform on the project PCA coordinates
-uv run manifold-genetics embed \
-    --method phate \
-    --fit-input examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
-    --project-output examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --knn 100 --t 3
-
-# 3b) Separate fit / project embeddings (needed for the cross-cohort plots in steps 5-6):
-#     fit PHATE on the fit PCA coordinates, then apply it to the project PCA coordinates.
-uv run manifold-genetics embed \
-    --method phate \
-    --fit-input examples/hgdp_1kgp/outputs/pca/fit_pca_50.csv \
-    --project-input examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
-    --fit-output examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
-    --project-output examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
-    --knn 100 --t 3
-
-# 4) Visualization
-
-# PCA
-uv run manifold-genetics plot-pca \
-    --input examples/hgdp_1kgp/outputs/pca/project_pca_50.csv \
-    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/colormaps/hgdp_1kgp.json \
-    --output examples/hgdp_1kgp/outputs/figures/pca \
-    --n-pcs 50
-
-# PHATE
-uv run manifold-genetics plot \
-    --input examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --colormap examples/colormaps/hgdp_1kgp.json \
-    --output examples/hgdp_1kgp/outputs/figures/embeddings/phate.png
-
-# Admixture barplots (stacked bars per K)
-# Use --component-colors-output to save the component colour assignments to JSON.
-# This lets plot-admixture-embedding use the same colours as the bar chart.
-uv run manifold-genetics plot-admixture \
-    --q-prefix examples/hgdp_1kgp/outputs/admixture/project \
-    --labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --group-column Genetic_region_merged \
-    --colormap examples/colormaps/hgdp_1kgp.json \
-    --k-min 2 --k-max 5 \
-    --output examples/hgdp_1kgp/outputs/figures/admixture/project_bars.png \
-    --component-colors-output examples/hgdp_1kgp/outputs/admixture/component_colors.json
-
-# Admixture embedding grid — coloured by admixture component proportion.
-# Pass --component-colormap (exported by plot-admixture above) so each component
-# subplot uses a white-to-component-colour gradient that matches the bar chart.
-uv run manifold-genetics plot-admixture-embedding \
-    --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --q-prefix examples/hgdp_1kgp/outputs/admixture/project \
-    --k-min 2 --k-max 5 \
-    --output examples/hgdp_1kgp/outputs/figures/admixture/project_embedding.png \
-    --component-colormap examples/hgdp_1kgp/outputs/admixture/component_colors.json
-
-# 5) Overlay reference (fit) and target (project) embeddings (cross-cohort comparison)
-# Note: In practice, --fit-embedding and --project-embedding should come from different
-# biobanks (e.g. fit on HGDP+1KGP, project on UKBB). The same cohort is used here for
-# demonstrative purposes only.
-uv run manifold-genetics plot-projection \
-    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
-    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
-    --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
-    --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --fit-colormap examples/colormaps/hgdp_1kgp.json \
-    --project-colormap examples/colormaps/hgdp_1kgp.json \
-    --fit-column Genetic_region_merged \
-    --project-column Genetic_region_merged \
-    --output examples/hgdp_1kgp/outputs/figures/embeddings/projection.png
-
-# 6) KNN label composition (how well reference labels characterise project individuals)
-# Note: In practice, --fit-embedding and --project-embedding should come from different
-# biobanks (e.g. fit on HGDP+1KGP, project on UKBB). The same cohort is used here for
-# demonstrative purposes only.
-uv run manifold-genetics plot-knn-composition \
-    --fit-embedding examples/hgdp_1kgp/outputs/embeddings/phate_fit_2d.csv \
-    --project-embedding examples/hgdp_1kgp/outputs/embeddings/phate_project_2d.csv \
-    --fit-labels examples/hgdp_1kgp/data/hgdp_fit_labels.csv \
-    --fit-label-column Population \
-    --project-labels examples/hgdp_1kgp/data/hgdp_project_labels.csv \
-    --project-label-column Genetic_region_merged \
-    --fit-colormap examples/colormaps/hgdp_1kgp.json \
-    --k 10 \
-    --output examples/hgdp_1kgp/outputs/figures/embeddings/knn_composition.png
-
-# 7) Metrics (optional, standalone)
-uv run manifold-genetics metrics-geographic \
-    --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --geographic examples/hgdp_1kgp/data/hgdp_project_geographic.csv \
-    --output examples/hgdp_1kgp/outputs/metrics/geographic.json \
-    --num-dists-sampled 50000
-
-uv run manifold-genetics metrics-admixture \
-    --embedding examples/hgdp_1kgp/outputs/embeddings/phate_2d.csv \
-    --admixture-output examples/hgdp_1kgp/outputs/admixture/project \
-    --output examples/hgdp_1kgp/outputs/metrics/admixture.json \
-    --k-min 2 --k-max 5 \
-    --num-dists-sampled 50000
-    # --subsample 5000  # recommended for large biobanks (AoU, UKBB); not needed here (~4K samples)
-```
-
-## Data Formats
-
-### Input Files
-
-**PLINK files** (`.bed`, `.bim`, `.fam`) - Binary genotype data:
-```bash
---fit-plink data/fit_subset          # Training/reference set
---project-plink data/project_subset  # Projection/application set
-```
-Specify the prefix only (tool appends `.bed/.bim/.fam` automatically).
-
-**Labels CSV** - Sample metadata with `sample_id` column:
-```csv
-sample_id,Population,Genetic_region
-HGDP00001,Yoruba,Africa
-HGDP00002,Yoruba,Africa
-HGDP00003,Han,EastAsia
-```
-
-**Colormap JSON** - Maps label values to hex colors:
-```json
-{
-  "Population": {
-    "Yoruba": "#FF0000",
-    "Han": "#00FF00"
-  },
-  "Genetic_region": {
-    "Africa": "#FF6B6B",
-    "EastAsia": "#4ECDC4"
-  }
-}
-```
-
-**Geographic coordinates CSV** (optional, for metrics) - Sample locations:
-```csv
-sample_id,latitude,longitude
-HGDP00001,6.5244,3.3792
-HGDP00002,39.9042,116.4074
-```
-Required columns: `sample_id`, `latitude`, `longitude`. Used with `--geographic` flag for geographic preservation metrics.
-
-### Output Files
-
-**PCA** (`fit_pca_N.csv`, `project_pca_N.csv`) - Principal component coordinates:
-```csv
-sample_id,dim_1,dim_2,...,dim_N
-HGDP00001,0.073308,0.212584,-0.012974,...
-HGDP00002,0.073231,0.210938,-0.012130,...
-```
-Where N = `--n-pcs` (default 50). Each row is a sample, columns are PC coordinates.
-
-**Admixture** (`fit.K.csv`, `project.K.csv`) - Ancestry proportions:
-```csv
-sample_id,component_1,component_2,...,component_K
-HGDP00001,0.9996,0.0004
-HGDP00002,0.9996,0.0004
-```
-Where K = number of ancestral populations (from `--k-min` to `--k-max`). Components sum to 1.0 per sample.
-
-**Embeddings** (e.g., `phate_2d.csv`) - Low-dimensional manifold coordinates:
-```csv
-sample_id,dim_1,dim_2
-HGDP00001,0.123,-0.456
-HGDP00002,0.234,-0.567
-```
-Typically 2D for visualization (controlled by `--n-components`).
-
-## Running on Your Own Data
-
-### Quick Start (3 Steps)
-
-1. **Prepare your files:**
-   - PLINK files (`.bed/.bim/.fam`) - binary genotype data
-   - Labels CSV - sample metadata with `sample_id` column
-   - Colormap JSON - hex colors for each column label from labels CSV file. NOTE: ordering of labels is plotting order for subsequent plots.
-
-2. **Run the pipeline:**
-   ```bash
-   uv run manifold-genetics pipeline \
-       --fit-plink data/your_data \
-       --project-plink data/your_data \
-       --labels data/labels.csv \
-       --colormap data/colormap.json \
-       --output results/
-   ```
-
-**That's it!** Results (PCA, admixture, embeddings, figures, metrics) saved to `results/`.
-
-See [Data Formats](#data-formats) section above for detailed file format specifications.
-
-### Common Options
-
-**Adjust parameters:**
-```bash
-uv run manifold-genetics pipeline \
-    --fit-plink data/your_data \
-    --project-plink data/your_data \
-    --labels data/labels.csv \
-    --colormap data/colormap.json \
-    --output results/ \
-    --n-pcs 50 \                    # Number of PCA components (default: 50)
-    --k-min 2 --k-max 10 \          # Admixture K range (default: 2-10)
-    --embedding phate \              # Method: phate, umap, tsne, diffusion_map
-    --knn 100 --t 3 \               # Embedding parameters
-    --threads 8 \                   # CPU threads
-    --num-gpus 1 \                  # Use GPU for admixture
-    --geographic data/coords.csv    # Optional: for geographic metrics
-```
-
-**For large datasets (>10K samples):**
-```bash
-# Use landmarking for computational efficiency
-uv run manifold-genetics pipeline ... \
-    --n-landmark 10000 \
-    --random-landmarking \
-    --neuraladmixture-batch-size 400
-```
-
-**Skip steps:**
-```bash
-uv run manifold-genetics pipeline ... \
-    --skip-admixture \      # Skip ancestry analysis
-    --skip-metrics          # Skip preservation metrics
-```
-
-### Data Preparation Tips
-
-**Before running the pipeline:**
-- LD-prune your SNPs: `plink2 --indep-pairwise 50 5 0.2`
-- Filter by MAF: `--maf 0.01`
-- Remove related individuals from fit subset
-- Apply standard QC filters
-
-**For large cohorts:**
-- Either Use a subset of unrelated samples for fitting and projection
-- Or fit on a reference panel like HGDP+1KGP and project the samples onto it
-- Expected runtimes: PCA (minutes), Admixture (hours), Embeddings (minutes, but varies based on hyperparameters)
-
-## Embedding Methods
-
-- **PHATE**: `--embedding phate --knn 100` (recommended for population structure)
-- **UMAP**: `--embedding umap --n-neighbors 15 --min-dist 0.1`
-- **t-SNE**: `--embedding tsne --perplexity 30`
-- **Diffusion Maps**: `--embedding diffusion_map --knn 100`
-
-## Requirements
-
-### Python Dependencies (Auto-installed)
-- numpy, pandas, scipy, scikit-learn
-- matplotlib, seaborn
-- phate, umap-learn
-
-### Optional: `admixture` extra
-- torch, neural-admixture — install with `uv sync --frozen --extra admixture`
-  (only needed for the admixture step)
-
-### External Tools (Auto-downloaded)
-- **plink2**: Downloaded to `bin/plink2` (~20MB)
-- **flashPCA**: Downloaded to `bin/flashpca` (~2MB)
-- **plink v1.9**: Downloaded to `bin/plink` (~2MB) — skip with `manifold-genetics setup --skip-plink1`
-
-No manual installation needed! Run `manifold-genetics setup` once on a login node (requires internet).
-
-## Troubleshooting
-
-**Import errors after installation**:
-```bash
-uv sync --frozen --force-reinstall
-```
-
-## Testing
-
-Tests require dev dependencies:
-```bash
-# Install dev dependencies (includes pytest)
-uv sync --frozen --extra dev
-
-# The fast suite: ~2-3 minutes, no external data or tools
-uv run pytest -m "not slow and not integration and not network"
-```
-
-### Testing against real data
-
-The fast suite proves the code is self-consistent. Whether a run on *your*
-genotypes produces something meaningful is a different question, and there is a
-separate suite for it:
-
-```bash
-# Seconds: does the data agree with the config that describes it?
-uv run pytest tests/integration/test_cohort_preflight.py -v
-
-# Minutes to hours: run a shipped example end to end and check the science
-uv run pytest tests/integration/test_cohort_pipeline_real.py -m "slow and integration"
-```
-
-Preflight cross-checks label coverage, plot columns, colormap coverage and PLINK
-file consistency before anything expensive starts. Cohorts whose data is absent
-skip rather than fail, and controlled-access ones (UK Biobank, All of Us) run
-only when named explicitly.
-
-See [docs/testing-real-cohorts.md](docs/testing-real-cohorts.md) for the full
-procedure, including the SLURM entry point and the All of Us workbench steps.
-
-## Additional Examples
-
-Beyond the HGDP+1KGP example, this repository includes:
-
-- **`examples/generic/`** - Template scripts for running on your own data (copy and customize)
-- **`examples/ukbb/`** - UK Biobank pipeline scripts (requires UKBB access)
-- **`examples/aou/`** - All of Us pipeline scripts (requires AoU access)
-
-These examples demonstrate the DRY architecture where biobank-specific wrappers call shared generic templates.
+Testing against real cohorts, the release procedure, and the safeguards this
+repository uses for controlled-access data are documented under `docs/` —
+`testing-real-cohorts.md`, `releasing.md` and `working-with-agents.md`.
 
 ## License
 

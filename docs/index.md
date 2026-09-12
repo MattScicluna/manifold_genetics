@@ -60,17 +60,17 @@ defines the analysis:
 
 Those three are [presets](configuration.md#presets), because the settings that
 follow from the choice — particularly landmarking — are easy to get wrong
-individually. [Concepts](concepts.md) goes through why.
+individually.
 
 ## Where to start
 
 - [Installation](install.md) — including the optional extras
+- [Quickstart](quickstart.md) — a full run on public data, and the file formats
 - [Tutorial](tutorial.ipynb) — a full run on a cohort it simulates as it goes,
   under a minute, nothing to download
-- [Concepts](concepts.md) — fit versus project, the PCA contract, landmarking
+- [Command line](cli.md) — every subcommand, and what each reads and writes
 - [Configuration](configuration.md) — every key a config file accepts
-- [Running on a cluster](hpc.md) — SLURM, and the memory arithmetic
-- [Controlled-access data](controlled-access.md) — UK Biobank, All of Us
+- [Python API](api.md) — the supported surface, for notebooks
 
 ## Citing
 

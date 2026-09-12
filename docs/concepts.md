@@ -21,7 +21,7 @@ method. The preset that used to be called `transform` is now `whole_cohort`;
 the old name still works and warns.
 
 Output files were renamed to match in an earlier release — see
-[the migration note](migrations/2026-09-transform-to-project.md) if you have
+`docs/migrations/2026-09-transform-to-project.md` in the repository if you have
 result directories predating it.
 
 ## Fit and project

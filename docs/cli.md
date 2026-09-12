@@ -66,8 +66,8 @@ manifold-genetics embed --method phate --fit-input out/project_pca.csv \
 ```
 
 `--pca-backend` takes `python` (in process, the default) or `flashpca` (the
-external binary). They agree to 1.5e-7 and write the same artefacts; see
-[the PCA contract](concepts.md#the-pca-contract).
+external binary). They agree to 1.5e-7 and write the same artefacts, so a model fitted by
+either is readable by the other.
 
 ## Setup
 
@@ -75,9 +75,12 @@ external binary). They agree to 1.5e-7 and write the same artefacts; see
 manifold-genetics setup
 ```
 
-Downloads `plink2`, `plink` and `flashpca` into `bin/`. Needed for data
-*preparation*, not for the pipeline — see [Installation](install.md#external-tools).
-Requires internet, so on a cluster run it on a login node.
+Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
+(`~/.cache/manifold-genetics/bin`, or the checkout's `bin/` when you are running
+from one). They are also fetched on first use, so this is optional — what it is
+for is fetching them **before** submitting a job, because compute nodes usually
+have no internet. Needed for data *preparation*, not for the pipeline itself;
+see [Installation](install.md#external-tools).
 
 ## Exit codes and logging
 
