@@ -25,7 +25,7 @@ MINIMAL = {
         "colormap": "colors.json",
         "output_dir": "outputs",
     },
-    "preset": "transform",
+    "preset": "whole_cohort",
 }
 
 
@@ -88,7 +88,7 @@ class TestDryRun:
         main(["run", str(config), "--dry-run"])
 
         out = capsys.readouterr().out
-        assert "project" in out  # embedding_input from the transform preset
+        assert "project" in out  # embedding_input from the whole_cohort preset
         assert "knn" in out
 
     def test_dry_run_prints_settings_that_come_from_package_defaults(self, config, capsys):

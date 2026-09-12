@@ -37,12 +37,13 @@ Two decisions worth knowing:
 """
 
 import difflib
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
 import yaml
 
-__all__ = ["ConfigFileError", "PRESETS", "load_config"]
+__all__ = ["ConfigFileError", "PRESETS", "PRESET_ALIASES", "load_config"]
 
 PathLike = Union[str, Path]
 
@@ -69,11 +70,21 @@ PRESETS: Dict[str, Dict[str, Any]] = {
             "random_landmarking": True,
         },
     },
-    "transform": {
+    "whole_cohort": {
         "embedding_input": "project",
         "embedding": {"knn": 100, "t": 3, "n_landmark": None, "random_landmarking": False},
     },
 }
+
+# Renamed 2026-09-12. This project used `transform` for two different things: the
+# second cohort's dataset role, and the sklearn-style method verb. The role became
+# `project`; this preset was the last holdout, denoting a *mode* while every other
+# use of the word denotes an *operation*. The rule now: `transform` is the verb,
+# `project` is the dataset role, and a preset is named for the shape of the run.
+#
+# Accepted but not advertised -- an alias that appears in the error listing is a
+# name people keep choosing, which defeats renaming it.
+PRESET_ALIASES: Dict[str, str] = {"transform": "whole_cohort"}
 
 # section -> {key in file: keyword argument of run_pipeline}
 _DATA_KEYS = {
@@ -182,6 +193,16 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
     _reject_unknown(data, _SECTIONS, f"section(s) in {path.name}")
 
     preset_name = data.get("preset")
+    if preset_name in PRESET_ALIASES:
+        replacement = PRESET_ALIASES[preset_name]
+        warnings.warn(
+            f"The preset {preset_name!r} has been renamed to {replacement!r}, because "
+            f"{preset_name!r} is the name of a method rather than of a mode. The old "
+            "name still works and will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        preset_name = replacement
     if preset_name is not None and preset_name not in PRESETS:
         raise ConfigFileError(
             f"Unknown preset {preset_name!r}. Choose from: {', '.join(sorted(PRESETS))}"

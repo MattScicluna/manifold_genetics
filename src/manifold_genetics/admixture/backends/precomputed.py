@@ -76,7 +76,7 @@ class PrecomputedAdmixtureBackend(AdmixtureBackend):
         """
         plink_prefix = validate_plink_files(plink_prefix)
 
-        # Extract dataset name from path (e.g., "fit", "transform")
+        # Extract dataset name from path (e.g., "fit", "project")
         self._dataset_name = Path(plink_prefix).stem
 
         logger.info("=" * 60)

@@ -56,13 +56,13 @@ sbatch run_pipeline_batch.sh
 outputs/
 ├── pca/
 │   ├── fit_pca_50.csv              # HGDP PCA coordinates (reference)
-│   ├── transform_pca_50.csv        # UKBB PCA coordinates (projected)
+│   ├── project_pca_50.csv          # UKBB PCA coordinates (projected)
 │   └── figures/pca/
 │       └── pca_pairs_by_*.png      # UKBB ancestry visualizations
 │
 ├── admixture/
 │   ├── fit.{2..5}.csv              # HGDP Q proportions (reference)
-│   ├── transform.{2..5}.csv        # UKBB Q proportions (projected)
+│   ├── project.{2..5}.csv          # UKBB Q proportions (projected)
 │   └── checkpoints/                # Trained neural admixture models
 │
 ├── embeddings/
@@ -70,8 +70,8 @@ outputs/
 │
 ├── figures/
 │   ├── admixture/
-│   │   ├── transform_bars.png                           # UKBB ancestry bars
-│   │   └── transform_admixture_colored_embedding.png    # PHATE colored by admixture
+│   │   ├── project_bars.png                              # UKBB ancestry bars
+│   │   └── project_admixture_colored_embedding.png       # PHATE colored by admixture
 │   └── embeddings/
 │       └── phate_by_*.png          # UKBB ancestry plots
 │

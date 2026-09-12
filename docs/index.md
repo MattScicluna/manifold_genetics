@@ -55,7 +55,7 @@ defines the analysis:
   Places your cohort in a frame of reference somebody else defined.
 - **`subsample`** — fit on a subset of your own cohort, embed that subset. For
   cohorts too large, or too dominated by one group, to embed whole.
-- **`transform`** — fit on a subset, embed the whole cohort. The default shape
+- **`whole_cohort`** — fit on a subset, embed the whole cohort. The default shape
   when the project set contains the fit set.
 
 Those three are [presets](configuration.md#presets), because the settings that

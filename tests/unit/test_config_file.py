@@ -111,8 +111,8 @@ class TestPathResolution:
 class TestPresets:
     """The mode policy from examples/_shared/run_pipeline.sh, now in Python."""
 
-    def test_transform_preset_embeds_the_project_cohort_without_landmarking(self, tmp_path):
-        path = write_config(tmp_path, {**MINIMAL, "preset": "transform"})
+    def test_whole_cohort_preset_embeds_the_project_cohort_without_landmarking(self, tmp_path):
+        path = write_config(tmp_path, {**MINIMAL, "preset": "whole_cohort"})
 
         kwargs = load_config(path)
 
@@ -151,7 +151,7 @@ class TestPresets:
         dataset -- a bug in that tool -- it cannot be something a mode selection
         turns on. See tests/unit/test_admixture_batch_size_default.py.
         """
-        for preset in ("subsample", "projection", "transform"):
+        for preset in ("subsample", "projection", "whole_cohort"):
             path = write_config(tmp_path, {**MINIMAL, "preset": preset}, f"{preset}.yaml")
 
             assert "admix_batch_size" not in load_config(path)

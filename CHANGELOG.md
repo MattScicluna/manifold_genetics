@@ -7,6 +7,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **The `transform` preset is now `whole_cohort`.** This project used
+  `transform` for two things — the second cohort's dataset role and the
+  sklearn-style method verb. The role was renamed to `project` earlier; this
+  preset was the last holdout, naming a *mode* while every other use of the word
+  names an *operation*. The rule is now: `fit` estimates, `transform` applies,
+  `project` is the second cohort and its outputs, and a preset is named for the
+  shape of the run.
+
+  `transform` still works as a deprecated alias and warns, naming its
+  replacement. It is deliberately not listed among the valid choices in the
+  error message, because an advertised alias is a name people keep choosing.
+
 ### Added
 
 - **Guardrails against committing controlled-access data**

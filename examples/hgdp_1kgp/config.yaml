@@ -8,11 +8,11 @@
 #
 # Paths are relative to this file, so the example runs from any directory.
 
-# "transform" fits and transforms on the target cohort: the project set contains
+# "whole_cohort" fits on a subset and embeds everything: the project set contains
 # the fit set, so there is nothing to cross-project. It supplies knn=100, t=3 and
 # no landmarking -- at ~4k samples, exact diffusion is affordable and better than
 # approximating. `manifold-genetics run <config> --dry-run` prints what it set.
-preset: transform
+preset: whole_cohort
 
 data:
   fit_plink: data/fit_subset

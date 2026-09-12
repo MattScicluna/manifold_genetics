@@ -3,6 +3,27 @@
 Four things are worth understanding before running this on a cohort you care
 about. None of them is obvious from the API.
 
+## One word, one meaning
+
+This project used `transform` for two different things, and it caused real
+confusion: the second cohort's *dataset role*, and the sklearn-style *method
+verb*. The rule now, and it is worth knowing before reading anything else:
+
+| word | means | example |
+|---|---|---|
+| **`fit`** | estimating a model | `PCA.fit`, the **fit set** |
+| **`transform`** | applying a fitted model — the method verb, and nothing else | `PHATE.transform` |
+| **`project`** | the second cohort, and its outputs | the **project set**, `project_pca_50.csv` |
+
+So `transform` never names a dataset, and `project` never names an operation.
+Preset names follow from that: they describe the *shape of the run*, never a
+method. The preset that used to be called `transform` is now `whole_cohort`;
+the old name still works and warns.
+
+Output files were renamed to match in an earlier release — see
+[the migration note](migrations/2026-09-transform-to-project.md) if you have
+result directories predating it.
+
 ## Fit and project
 
 Every run takes two PLINK datasets, and the distinction between them is the
@@ -43,7 +64,7 @@ majority-capped subset (10,000 British plus everyone else) or a
 [geometric sketch](#choosing-a-subset) gives the rest of the cohort room to
 appear.
 
-### `transform` — fit on a subset, embed everything
+### `whole_cohort` — fit on a subset, embed everything
 
 Fit on a subset, then project and embed the whole cohort. The natural shape when
 the project set *contains* the fit set: the fit subset is a computational
@@ -106,7 +127,7 @@ why the two are always set together:
 | preset | knn | t | landmarks |
 |---|---|---|---|
 | `projection` | 100 | 3 | none |
-| `transform` | 100 | 3 | none |
+| `whole_cohort` | 100 | 3 | none |
 | `subsample` | 500 | 50 | 10,000, random |
 
 Below roughly 50,000 samples, exact diffusion is affordable and better than

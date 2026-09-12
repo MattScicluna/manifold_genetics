@@ -60,7 +60,7 @@ in the file overrides them.
 |---|---|---|---|---|---|
 | `projection` | `both` | 100 | 3 | none | false |
 | `subsample` | `fit` | 500 | 50 | 10000 | true |
-| `transform` | `project` | 100 | 3 | none | false |
+| `whole_cohort` | `project` | 100 | 3 | none | false |
 
 `n_landmark` and `random_landmarking` are always set together: setting the first
 alone selects a far more expensive code path. See
