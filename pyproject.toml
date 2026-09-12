@@ -36,6 +36,9 @@ dependencies = [
     # Config files for `manifold-genetics run`. Present transitively today, which
     # is not the same as being guaranteed.
     "pyyaml>=6.0",
+    # Where downloaded binaries are cached. Getting per-user cache directories
+    # right across Linux, macOS and Windows is not worth hand-rolling.
+    "platformdirs>=3.0",
     # Dimensionality reduction
     "phate>=2.0.0",
     "umap-learn>=0.5.0",

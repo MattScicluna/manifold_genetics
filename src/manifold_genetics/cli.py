@@ -1484,7 +1484,7 @@ def main(argv: Optional[List[str]] = None):
         description=(
             "Run the full pipeline as described by a YAML config file.\n\n"
             "The config names its inputs, an output directory, and optionally a\n"
-            "preset ('projection', 'subsample' or 'transform') supplying that mode's\n"
+            "preset ('projection', 'subsample' or 'whole_cohort') supplying that mode's\n"
             "embedding defaults. Relative paths resolve against the config file's own\n"
             "directory, so an example runs from anywhere.\n\n"
             "Use --dry-run first to see the resolved settings, including anything the\n"

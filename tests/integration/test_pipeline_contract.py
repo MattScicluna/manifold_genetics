@@ -6,7 +6,7 @@ the independent, from-the-outside check on that migration. It exercises a
 real ``Pipeline(...).run()`` — real FlashPCA, a precomputed admixture backend,
 real embedding — for each of the three shapes the example scripts drive
 (``manifold_genetics.pipeline.configfile.PRESETS``: projection / subsample /
-transform) and
+whole_cohort) and
 asserts the *complete* output tree for that shape, including which files must
 NOT exist. A test that only checked presence would pass against an
 orchestrator that wrote every file in every mode — exactly the branch bug T2
@@ -34,7 +34,7 @@ METHOD = "phate"
 EMBEDDING_INPUT_BY_MODE = {
     "projection": "both",
     "subsample": "fit",
-    "transform": "project",
+    "whole_cohort": "project",
 }
 FIT_PLOT_COLUMN = "Population"
 PROJECT_PLOT_COLUMN = "self_described_ancestry"
@@ -95,7 +95,7 @@ def _assert_nonempty_dir(path: Path, why: str):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("mode", ["projection", "subsample", "transform"])
+@pytest.mark.parametrize("mode", ["projection", "subsample", "whole_cohort"])
 def test_pipeline_output_layout(
     mode,
     fit_plink_files,
@@ -110,7 +110,7 @@ def test_pipeline_output_layout(
       - projection: embedding_input="both" — cross-cohort, fit AND project
         embeddings, projection plot.
       - subsample:  embedding_input="fit" — within-cohort, fit subset only.
-      - transform:  embedding_input="project" — within-cohort, project set
+      - whole_cohort: embedding_input="project" — within-cohort, project set
         only.
 
     Only "projection" mode produces a fit embedding and a projection plot;

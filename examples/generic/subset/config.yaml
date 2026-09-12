@@ -11,7 +11,7 @@
 # random landmarks; --dry-run prints exactly what it set.
 #
 # Use "projection" instead to fit on a reference panel and transform your cohort
-# onto it, or "transform" when the project set already contains the fit set.
+# onto it, or "whole_cohort" when the project set already contains the fit set.
 preset: subsample
 
 data:

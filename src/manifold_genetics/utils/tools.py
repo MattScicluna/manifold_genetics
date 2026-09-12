@@ -8,17 +8,134 @@ a fallback chain: environment variables → module system → PATH → download/
 import gzip
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+#: Where downloaded binaries go, overriding every default.
+TOOL_DIR_ENV = "MANIFOLD_GENETICS_TOOL_DIR"
+
+# Release assets, per tool and platform.
+#
+# Only plink's Linux x86-64 builds have a stable `_latest` alias; the mac and
+# Windows assets are dated, so these need bumping when upstream cuts a release.
+# The error raised on a 404 points at the download page, which is the fallback.
+#
+# flashpca ships exactly one artefact, for Linux x86-64. There is nothing to
+# fetch anywhere else -- which is what the in-process PCA backend is for, and
+# what the error below says.
+_PLINK2 = "https://s3.amazonaws.com/plink2-assets"
+_PLINK1 = "https://s3.amazonaws.com/plink1-assets"
+_PLINK2_DATE = "20260910"
+_PLINK1_DATE = "20231211"
+
+# Values are candidates, tried in order: the stable `_latest` alias where one
+# exists, then a pinned build, so an upstream alias change is survivable.
+_URLS = {
+    "plink2": {
+        ("Linux", "x86_64"): (
+            f"{_PLINK2}/plink2_linux_x86_64_latest.zip",
+            f"{_PLINK2}/alpha7/plink2_linux_x86_64_{_PLINK2_DATE}.zip",
+        ),
+        ("Darwin", "arm64"): (f"{_PLINK2}/alpha7/plink2_mac_arm64_{_PLINK2_DATE}.zip",),
+        ("Darwin", "x86_64"): (f"{_PLINK2}/alpha7/plink2_mac_avx2_{_PLINK2_DATE}.zip",),
+        ("Windows", "x86_64"): (f"{_PLINK2}/alpha7/plink2_win64_{_PLINK2_DATE}.zip",),
+    },
+    "plink1": {
+        ("Linux", "x86_64"): (
+            f"{_PLINK1}/plink_linux_x86_64_latest.zip",
+            f"{_PLINK1}/plink_linux_x86_64_{_PLINK1_DATE}.zip",
+        ),
+        ("Darwin", "arm64"): (f"{_PLINK1}/plink_mac_{_PLINK1_DATE}.zip",),
+        ("Darwin", "x86_64"): (f"{_PLINK1}/plink_mac_{_PLINK1_DATE}.zip",),
+        ("Windows", "x86_64"): (f"{_PLINK1}/plink_win64_{_PLINK1_DATE}.zip",),
+    },
+    "flashpca": {
+        ("Linux", "x86_64"): (
+            "https://github.com/gabraham/flashpca/releases/download/v2.0/flashpca_x86-64.gz",
+        ),
+    },
+}
+
+_HOMEPAGES = {
+    "plink2": "https://www.cog-genomics.org/plink/2.0/",
+    "plink1": "https://www.cog-genomics.org/plink/1.9/",
+    "flashpca": "https://github.com/gabraham/flashpca/releases",
+}
+
+# platform.machine() is not consistent across operating systems.
+_MACHINE_ALIASES = {
+    "amd64": "x86_64",
+    "x86_64": "x86_64",
+    "x64": "x86_64",
+    "arm64": "arm64",
+    "aarch64": "arm64",
+}
 
 
 class ToolNotFoundError(Exception):
     """Raised when a required tool cannot be found."""
+
+
+def download_url(tool: str, *, system: str, machine: str) -> str:
+    """The preferred release asset for ``tool`` on the given platform."""
+    return download_candidates(tool, system=system, machine=machine)[0]
+
+
+def download_candidates(tool: str, *, system: str, machine: str) -> Tuple[str, ...]:
+    """Every release asset to try for ``tool`` on the given platform, in order.
+
+    Raises:
+        ToolNotFoundError: the tool is unknown, or upstream publishes no build
+            for this platform. Both name the platform, because the previous
+            behaviour -- fetching the Linux binary everywhere -- surfaced as a
+            binary that would not execute, which reads as a corrupt download.
+    """
+    if tool not in _URLS:
+        raise ToolNotFoundError(f"Unknown tool {tool!r}; choose from {', '.join(sorted(_URLS))}")
+
+    key = (system, _MACHINE_ALIASES.get(machine.lower(), machine))
+    urls = _URLS[tool].get(key)
+    if urls is not None:
+        return urls
+
+    if tool == "flashpca":
+        raise ToolNotFoundError(
+            f"flashpca is published only for Linux x86-64, so there is no build for "
+            f"{system}/{machine}. Use the in-process PCA backend instead, which is "
+            f"the default and needs no binary: PCA() or --pca-backend python."
+        )
+    raise ToolNotFoundError(
+        f"No {tool} build is known for {system}/{machine}. Download one from "
+        f"{_HOMEPAGES[tool]} and point {TOOL_DIR_ENV} at the directory holding it."
+    )
+
+
+def _repository_bin() -> Optional[Path]:
+    """The checkout's ``bin/``, or None when running from an installed package.
+
+    ``manifold-genetics setup`` has always written there and the example scripts
+    look there, so a development checkout keeps using it. Detected by the
+    presence of ``pyproject.toml``: computing it from ``__file__`` alone is what
+    made an installed package try to write beside site-packages.
+    """
+    root = Path(__file__).resolve().parents[3]
+    return root / "bin" if (root / "pyproject.toml").exists() else None
+
+
+def _user_cache_bin() -> Path:
+    """Per-user cache directory for downloaded binaries."""
+    try:
+        from platformdirs import user_cache_dir
+    except ImportError:  # pragma: no cover - platformdirs is a dependency
+        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        return base / "manifold-genetics" / "bin"
+    return Path(user_cache_dir("manifold-genetics")) / "bin"
 
 
 class ToolResolver:
@@ -37,15 +154,28 @@ class ToolResolver:
         Initialize tool resolver.
 
         Args:
-            download_dir: Directory to download tools (default: package_root/bin)
+            download_dir: Where downloaded binaries live. Defaults, in order, to
+                ``$MANIFOLD_GENETICS_TOOL_DIR``, the checkout's ``bin/`` when
+                running from one, and otherwise a per-user cache directory.
+
+        The directory is *not* created here. This object is constructed by
+        ordinary code paths -- ``PCA(backend="flashpca")`` among them -- and
+        creating a directory as a side effect of that put a stray ``bin/``
+        beside site-packages on every installed copy.
         """
         if download_dir is None:
-            # Default to package bin directory
-            package_root = Path(__file__).resolve().parents[3]
-            download_dir = package_root / "bin"
+            override = os.environ.get(TOOL_DIR_ENV)
+            if override:
+                download_dir = Path(override)
+            else:
+                download_dir = _repository_bin() or _user_cache_bin()
 
-        self.download_dir = Path(download_dir)
+        self.download_dir = Path(download_dir).expanduser()
+
+    def _ensure_download_dir(self) -> Path:
+        """Create the download directory, at the point something is downloaded."""
         self.download_dir.mkdir(parents=True, exist_ok=True)
+        return self.download_dir
 
     def resolve_plink2(self) -> str:
         """
@@ -256,7 +386,8 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If download fails
         """
-        url = "https://github.com/gabraham/flashpca/releases/download/v2.0/flashpca_x86-64.gz"
+        url = download_url("flashpca", system=platform.system(), machine=platform.machine())
+        self._ensure_download_dir()
         output_gz = self.download_dir / "flashpca_x86-64.gz"
         output_bin = self.download_dir / "flashpca_x86-64"
 
@@ -287,7 +418,9 @@ class ToolResolver:
 
         except Exception as e:
             raise ToolNotFoundError(
-                f"Failed to download FlashPCA: {e}\n" f"Please download manually from: {url}"
+                f"Failed to download FlashPCA from {url}: {e}\n"
+                f"It is optional -- the default PCA backend needs no binary. To use it "
+                f"anyway, download it and point {TOOL_DIR_ENV} at the directory."
             )
 
     def _download_plink2(self) -> str:
@@ -300,12 +433,10 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If download fails
         """
-        # PLINK2 release URLs (try most recent first, then fallback)
-        urls = [
-            "https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20260110.zip",
-            "https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_latest.zip",
-            "https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20231211.zip",
-        ]
+        urls = list(
+            download_candidates("plink2", system=platform.system(), machine=platform.machine())
+        )
+        self._ensure_download_dir()
         output_zip = self.download_dir / "plink2.zip"
         output_bin = self.download_dir / "plink2"
 
@@ -348,8 +479,9 @@ class ToolResolver:
 
         except Exception as e:
             raise ToolNotFoundError(
-                f"Failed to download PLINK2: {e}\n"
-                f"Please download manually from: https://www.cog-genomics.org/plink/2.0/"
+                f"Failed to download PLINK2 from {urls[0]}: {e}\n"
+                f"Download it from {_HOMEPAGES['plink2']} and either put it on PATH or "
+                f"point {TOOL_DIR_ENV} at the directory holding it."
             )
 
     def _download_plink1(self) -> str:
@@ -362,7 +494,8 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If download fails
         """
-        url = "https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20231211.zip"
+        url = download_url("plink1", system=platform.system(), machine=platform.machine())
+        self._ensure_download_dir()
         output_zip = self.download_dir / "plink1.zip"
         output_bin = self.download_dir / "plink"
 
@@ -406,8 +539,9 @@ class ToolResolver:
 
         except Exception as e:
             raise ToolNotFoundError(
-                f"Failed to download PLINK v1.9: {e}\n"
-                f"Please download manually from: https://www.cog-genomics.org/plink/1.9/"
+                f"Failed to download PLINK v1.9 from {url}: {e}\n"
+                f"Download it from {_HOMEPAGES['plink1']} and either put it on PATH or "
+                f"point {TOOL_DIR_ENV} at the directory holding it."
             )
 
     def install_tools(self, include_plink1: bool = True) -> dict:

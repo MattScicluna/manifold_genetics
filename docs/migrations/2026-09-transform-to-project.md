@@ -54,10 +54,13 @@ find . -depth -name 'transform*' -print
 - `examples/{aou,ukbb}/60k_random/prepare_data.py`
 - `examples/aou/shared/copy_to_manifoldGenetics.sh`
 
-## Out of scope for this PR (separate decisions)
+## Follow-up, 2026-09-12
 
-- the `transform` preset (now `manifold_genetics.pipeline.configfile.PRESETS`) — this is the
-  "fit_transform-only, no cross-projection" mode name, not the dataset role. Left as-is.
+- the `transform` **preset** (`manifold_genetics.pipeline.configfile.PRESETS`) was left as-is
+  by this change, since it names a mode rather than the dataset role. It has since been
+  renamed to `whole_cohort`, so that `transform` names only the method verb. The old name
+  is accepted as a deprecated alias and warns. Change `preset: transform` to
+  `preset: whole_cohort` in any config you maintain.
 - `transform_subset.bed` input PLINK filename in `examples/hgdp_1kgp/download_data.sh`
   — externally hosted data; the integration test already expects `project_subset`,
   so there is a separate inconsistency to untangle in the data-prep scripts.

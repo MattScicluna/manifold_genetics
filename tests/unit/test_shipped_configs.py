@@ -25,7 +25,7 @@ CONFIGS = sorted(REPO.glob("examples/**/config.yaml"))
 # implies. Written out rather than derived so that changing an example's mode is
 # a deliberate edit here too.
 EXPECTED = {
-    "examples/hgdp_1kgp/config.yaml": ("transform", "project"),
+    "examples/hgdp_1kgp/config.yaml": ("whole_cohort", "project"),
     "examples/ukbb/hgdp_1kgp_proj/config.yaml": ("projection", "both"),
     "examples/ukbb/10k_WB_5K_Irish/config.yaml": ("subsample", "fit"),
     "examples/ukbb/geosketch_phate/config.yaml": ("subsample", "fit"),
