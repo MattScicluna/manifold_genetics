@@ -163,6 +163,12 @@ than an error, which is why preflight checks that the colormap actually covers
 the label values it will be asked to colour.
 
 The admixture batch size must be 400. Left unset, neural-admixture batches the
-entire dataset at once; 400 is the workaround. It is now a package default
-rather than something each config repeats, so `--dry-run` should show it without
-the config mentioning it.
+entire dataset at once; 400 is the workaround. It is a package default rather
+than something each config repeats, so `--dry-run` prints it as
+
+```
+  admix_batch_size  400  (default)
+```
+
+even though no config mentions it. `(default)` marks every setting the package
+supplied rather than the file.
