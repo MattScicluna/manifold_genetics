@@ -59,9 +59,15 @@ markdown_extensions:
 plugins:
   - search
   - mkdocs-jupyter:
-      # Executed at build time, so a tutorial cannot quietly stop working: the
-      # docs build is the test.
-      execute: true
+      # The notebook is executed by a separate step in .github/workflows/docs.yml
+      # rather than here: doing it there gives a per-cell timeout and a log line
+      # naming the cell, where a hang inside this plugin is silent. It is still
+      # executed on every build, so the tutorial still cannot rot.
+      #
+      # Locally, `mkdocs serve` therefore shows it without outputs. To see them:
+      #   uv run jupyter nbconvert --to notebook --inplace --execute \
+      #       docs/tutorial.ipynb
+      execute: false
       allow_errors: false
       include_source: true
       execute_ignore:

@@ -26,6 +26,17 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The default job limit is six hours. A notebook cell that hangs should cost
+    # minutes, not that.
+    timeout-minutes: 25
+    env:
+      # Runners have two cores, and oversubscribed native thread pools are a
+      # known way for a numba/BLAS workload to deadlock in a container rather
+      # than merely run slowly.
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMBA_NUM_THREADS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -47,8 +58,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --extra docs
 
-      # No notebook cache is restored, deliberately: the tutorial must actually
-      # run on every build or it is not being tested.
+      # Executed here rather than inside mkdocs-jupyter so that a cell which
+      # hangs fails with a per-cell timeout and a log line naming it, instead of
+      # sitting silently until the job's limit. mkdocs then renders the outputs
+      # this step produced -- the notebook is still executed on every build, so
+      # it still cannot rot.
+      - name: Execute the tutorial
+        run: |
+          uv run jupyter nbconvert --to notebook --inplace --execute \
+            --ExecutePreprocessor.timeout=300 \
+            --log-level=DEBUG docs/tutorial.ipynb
+
       - name: Build
         run: uv run mkdocs build --strict
 
