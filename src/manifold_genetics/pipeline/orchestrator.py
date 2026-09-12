@@ -170,6 +170,8 @@ class Pipeline:
         self,
         n_pcs: int = 50,
         pca_backend: str = "python",
+        max_fit_memory_gb: float = 8.0,
+        max_project_memory_gb: float = 8.0,
         k_min: int = 2,
         k_max: int = 10,
         embedding: str = "phate",
@@ -193,6 +195,14 @@ class Pipeline:
 
         Args:
             pca_backend: 'flashpca' (external binary) or 'python' (in process)
+            max_fit_memory_gb: GB budget for the dense standardised matrix when
+                fitting the in-process PCA backend. Above it the fit streams, which
+                bounds memory to about 110 MB at roughly nineteen times the wall
+                clock. Raise it to match the node: a 60,000 x 120,849 cohort is 54 GB
+                dense and streams under the default.
+            max_project_memory_gb: GB budget for one chunk when projecting. Peak
+                resident memory runs to about three times this. Both are ignored by
+                the flashpca backend.
             n_pcs: Number of principal components
             k_min: Minimum K for admixture
             k_max: Maximum K for admixture
@@ -226,7 +236,12 @@ class Pipeline:
         failed = []
 
         io = self._io
-        pca_cfg = PCAConfig(n_pcs=n_pcs, backend=pca_backend)
+        pca_cfg = PCAConfig(
+            n_pcs=n_pcs,
+            backend=pca_backend,
+            max_fit_memory_gb=max_fit_memory_gb,
+            max_project_memory_gb=max_project_memory_gb,
+        )
         pca_paths = pca_output_paths(io, pca_cfg)
         # admix_group_column / admix_within_group_order are run()-time parameters,
         # not init-time ones — self._viz_config only carries the init-time

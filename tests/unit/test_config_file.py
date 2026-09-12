@@ -247,3 +247,37 @@ class TestLandmarkNone:
 
         with pytest.raises(ConfigFileError, match="random_landmarking"):
             load_config(path)
+
+
+class TestMemoryBudgets:
+    """The PCA memory budgets must be settable from the file that drives a run.
+
+    They were reachable only by constructing the backend by hand, which the
+    pipeline never does, so both sat at 8 GB however large the node was. A
+    59,264 x 169,829 UK Biobank fit is 75 GB dense: it streamed at roughly
+    nineteen times the wall clock on a node with far more memory free, and
+    `--mem=256GB` could not change that.
+    """
+
+    def test_the_fit_budget_reaches_run_pipeline(self, tmp_path):
+        config = dict(MINIMAL)
+        config["pca"] = {"n_pcs": 20, "max_fit_memory_gb": 64}
+
+        kwargs = load_config(write_config(tmp_path, config))
+
+        assert kwargs["max_fit_memory_gb"] == 64
+
+    def test_the_project_budget_reaches_run_pipeline(self, tmp_path):
+        config = dict(MINIMAL)
+        config["pca"] = {"n_pcs": 20, "max_project_memory_gb": 24}
+
+        kwargs = load_config(write_config(tmp_path, config))
+
+        assert kwargs["max_project_memory_gb"] == 24
+
+    def test_a_misspelt_budget_is_rejected_with_a_suggestion(self, tmp_path):
+        config = dict(MINIMAL)
+        config["pca"] = {"n_pcs": 20, "max_fit_memory": 64}
+
+        with pytest.raises(ConfigFileError, match="max_fit_memory_gb"):
+            load_config(write_config(tmp_path, config))

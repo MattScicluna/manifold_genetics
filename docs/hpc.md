@@ -67,8 +67,12 @@ nineteen times the wall clock. It is selected automatically; you do not choose
 it. If a run is unexpectedly slow, this is a likely reason, and giving it more
 memory is the fix.
 
-Projection chunks over samples and is never the constraint. Embedding a very
-large project set can be, which is what `embedding.embed_batch_size` bounds.
+Projection is bounded by `max_project_memory_gb`, also 8 GB by default, which
+sizes one chunk of variants. Until 2026-09-12 it was not bounded at all: it read
+the whole cohort in one pass, which on UK Biobank is 0.9 TB, and the process was
+OOM-killed with no traceback. Expect resident memory around three times the
+setting. Embedding a very large project set is bounded separately, by
+`embedding.embed_batch_size`.
 
 Admixture wants a GPU and, critically, `batch_size` — left unset,
 neural-admixture batches the whole dataset at once. The package supplies 400;
@@ -102,4 +106,11 @@ bash tests/integration/submit_cohort_tests.sh ukbb_projection \
     --mem=256GB --time=24:00:00
 ```
 
-See [Testing against real cohorts](testing-real-cohorts.md).
+Before any long run, check that the data agrees with the config describing it:
+
+```bash
+pytest tests/integration/test_cohort_preflight.py
+```
+
+It takes seconds and catches the disagreements that would otherwise surface
+hours in.

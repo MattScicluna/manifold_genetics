@@ -43,6 +43,10 @@ class PCAConfig:
     # (tests/integration/test_pca_flashpca_parity.py). Python is the default so a
     # pip-installed package works on any platform.
     backend: str = "python"
+    # Budgets in GB for the in-process backend; see SklearnPCABackend. Ignored by
+    # flashpca, which manages its own memory.
+    max_fit_memory_gb: float = 8.0
+    max_project_memory_gb: float = 8.0
 
 
 @dataclass(frozen=True)

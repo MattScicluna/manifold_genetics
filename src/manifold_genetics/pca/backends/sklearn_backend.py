@@ -34,6 +34,13 @@ __all__ = ["SklearnPCABackend"]
 PathLike = Union[str, Path]
 
 
+# Peak bytes per (sample, variant) while projecting one chunk. read_bed_dosages
+# holds a uint8 code buffer (1) and builds a float64 dosage array (8) from it;
+# standardize_dosages then allocates a second float64 (8) while the first is
+# still referenced. The raw .bed bytes add a further 0.25, inside the rounding.
+PROJECT_BYTES_PER_DOSAGE = 17
+
+
 class SklearnPCABackend(PCABackend):
     """PCA via randomized SVD over genotypes read with the built-in .bed reader."""
 
@@ -46,6 +53,7 @@ class SklearnPCABackend(PCABackend):
         variant_chunk_size: Optional[int] = None,
         fit_chunk_size: Optional[int] = None,
         max_fit_memory_gb: float = 8.0,
+        max_project_memory_gb: float = 8.0,
     ):
         """
         Args:
@@ -56,8 +64,13 @@ class SklearnPCABackend(PCABackend):
             n_oversamples: Extra random vectors for the range finder. Defaults
                 to ``max(40, 2 * n_components)``.
             variant_chunk_size: Variants per chunk when projecting. ``None``
-                reads the cohort in one pass. Chunking bounds peak memory for
-                large cohorts and must not change the result.
+                lets ``max_project_memory_gb`` decide; an explicit value always
+                wins. Chunking bounds peak memory for large cohorts and must not
+                change the result.
+            max_project_memory_gb: Budget for one projection chunk. Unlike the
+                fit, projection has no cheaper streaming mode to fall back to --
+                it is already a single pass over the variants -- so this only
+                sets how much of that pass is held at once.
             fit_chunk_size: Variants per chunk when fitting. ``None`` lets
                 ``max_fit_memory_gb`` decide; an explicit value always wins.
             max_fit_memory_gb: Budget for the dense standardised matrix. Below it
@@ -89,6 +102,7 @@ class SklearnPCABackend(PCABackend):
         self.variant_chunk_size = variant_chunk_size
         self.fit_chunk_size = fit_chunk_size
         self.max_fit_memory_gb = max_fit_memory_gb
+        self.max_project_memory_gb = max_project_memory_gb
 
     @staticmethod
     def _dims(prefix: PathLike):
@@ -160,6 +174,22 @@ class SklearnPCABackend(PCABackend):
             return None
 
         return max(1, int(budget // (n_samples * 8)))
+
+    def _resolve_project_chunk_size(self, n_samples: int, n_variants: int) -> int:
+        """Variants per chunk when projecting, bounded by the memory budget.
+
+        A pure function of the dimensions and the budget, so the choice can be
+        tested directly rather than inferred from an OOM.
+        """
+        if self.variant_chunk_size:
+            return self.variant_chunk_size
+
+        budget = self.max_project_memory_gb * 1024**3
+        per_variant = n_samples * PROJECT_BYTES_PER_DOSAGE
+        if n_variants * per_variant <= budget:
+            return n_variants
+
+        return max(1, int(budget // per_variant))
 
     def _chunks(self, n_variants: int, chunk: Optional[int] = None):
         size = chunk or n_variants
@@ -244,7 +274,7 @@ class SklearnPCABackend(PCABackend):
             )
 
         scale = np.sqrt(model.n_variants)
-        chunk = self.variant_chunk_size or n_variants
+        chunk = self._resolve_project_chunk_size(n_samples, n_variants)
         coords = np.zeros((n_samples, model.n_components), dtype=np.float64)
 
         # Projection is a sum over variants, so chunking over them is exact.

@@ -15,10 +15,17 @@ from .embeddings.umap import UMAP
 
 # Import main user-facing classes and functions
 from .pca.flashpca import PCA
+from .pipeline.configfile import load_config
 from .pipeline.orchestrator import Pipeline
+from .pipeline.runner import run_pipeline
 from .visualization.plotting import plot_embedding, visualize
 
+# The public API. Anything not named here is an implementation detail and may
+# change in a patch release -- including the backends, the PLINK reader and
+# the standardisation helpers, which exist to serve this surface, not users.
 __all__ = [
+    "run_pipeline",
+    "load_config",
     "PCA",
     "NeuralAdmixture",
     "PHATE",

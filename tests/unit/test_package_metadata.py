@@ -146,3 +146,31 @@ class TestDependencies:
         unbounded = [d for d in project["dependencies"] if not re.search(r"[><=~]", d)]
 
         assert not unbounded, unbounded
+
+
+# ---------------------------------------------------------------------------
+# The public API
+# ---------------------------------------------------------------------------
+
+
+def test_every_public_name_is_importable_from_the_top_level():
+    """``__all__`` is the promise; a name in it that cannot be imported breaks it."""
+    import manifold_genetics
+
+    missing = [name for name in manifold_genetics.__all__ if not hasattr(manifold_genetics, name)]
+
+    assert missing == []
+
+
+def test_the_entry_points_the_docs_lead_with_are_public():
+    """``run_pipeline`` and ``load_config`` are what a library user reaches for first.
+
+    They were reachable only as ``manifold_genetics.pipeline.runner.run_pipeline``
+    -- a private-looking path -- while api.md presented them as the headline
+    entry points and the tutorial imported them that way. Either they are public
+    or the docs and the notebook are both wrong; they are public.
+    """
+    from manifold_genetics import load_config, run_pipeline
+
+    assert callable(run_pipeline)
+    assert callable(load_config)

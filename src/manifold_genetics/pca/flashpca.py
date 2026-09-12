@@ -46,6 +46,8 @@ class PCA:
         flashpca_path: Optional[str] = None,
         force: bool = False,
         backend: Optional[str] = None,
+        max_fit_memory_gb: float = 8.0,
+        max_project_memory_gb: float = 8.0,
     ):
         """
         Initialize PCA analyzer.
@@ -62,6 +64,16 @@ class PCA:
                 means ``"flashpca"`` when ``flashpca_path`` was supplied and
                 ``"python"`` otherwise -- so passing a path is never silently
                 ignored, while a plain ``PCA()`` needs no binary.
+
+            max_fit_memory_gb: Budget for the dense standardised matrix when
+                fitting. Above it the fit streams, which bounds memory to about
+                110 MB at roughly nineteen times the wall clock. Raise it on a
+                large node: a 60,000 x 120,849 cohort is 54 GB dense, so it
+                streams under the default and does not under 64.
+            max_project_memory_gb: Budget for one chunk when projecting. Lower
+                it on a small machine; peak resident memory runs to about three
+                times this figure. Both are ignored by the flashpca backend,
+                which manages its own memory.
 
         The binary is resolved only for the flashpca backend. Resolving it
         unconditionally would make merely constructing this object fail on a
@@ -87,7 +99,11 @@ class PCA:
             self.flashpca = flashpca_path
             logger.debug(f"Using flashpca: {self.flashpca}")
         else:
-            self._py_backend = SklearnPCABackend(n_components=n_components)
+            self._py_backend = SklearnPCABackend(
+                n_components=n_components,
+                max_fit_memory_gb=max_fit_memory_gb,
+                max_project_memory_gb=max_project_memory_gb,
+            )
             logger.debug("Using in-process Python PCA backend")
 
         # Fitted state

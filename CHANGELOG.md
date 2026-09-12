@@ -7,6 +7,63 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **PCA projection had no memory budget and was OOM-killed on any large cohort.**
+  `fit()` chose a chunk size from `max_fit_memory_gb`; `project()` read every
+  variant for every sample in one pass, and its `variant_chunk_size` escape hatch
+  was set nowhere outside the test suite. Projecting UK Biobank's 486,748 samples
+  onto a 120,849-variant panel asks for 0.9 TB, of which the 58.8 GB uint8 unpack
+  buffer is the first to land — and because `np.empty` commits lazily, the
+  allocation *succeeds* and the kernel kills the process while it faults the
+  pages in. No MemoryError, no traceback, just a dead job.
+
+  There is now a `max_project_memory_gb` (8 GB, matching the fit budget), so the
+  same run reads 1,038 variants at a time in 117 passes. Note that resident
+  memory was measured at 22 GB against that 8 GB setting, because freed chunks
+  are not all returned to the OS between iterations; budget roughly three times
+  the number you set.
+
+  `docs/hpc.md` had asserted the opposite — "Projection chunks over samples and
+  is never the constraint" — which is corrected.
+
+### Changed
+
+- **`run_pipeline` and `load_config` are now importable from the top level** and
+  named in `__all__`, which is the public API. They were reachable only through
+  `manifold_genetics.pipeline.runner`, a private-looking path, while the API
+  reference presented them as the headline entry points and the tutorial
+  notebook imported them that way. The reference page now documents only the
+  supported surface; the PCA backends, the PLINK reader and the standardisation
+  helpers are explicitly internal.
+- **The documentation site is the seven pages a user needs** — home, install,
+  quickstart, tutorial, configuration, command line, API. How the project is
+  tested, released and developed is no longer published alongside them. A new
+  quickstart carries the input and output formats end to end.
+
+### Fixed (test suite)
+
+- **The real-cohort suite could never have run on UK Biobank or All of Us.** Its
+  `_coords` helper read pipeline CSVs with inferred dtypes while label files are
+  read as strings, so all-digit biobank sample IDs came back as `int64` and every
+  merge raised `ValueError: You are trying to merge on int64 and object columns`.
+  HGDP hid it for a year: its identifiers are not numeric.
+- **`_nearest` built a `(n_probe, n_reference, d)` intermediate** — 155.8 GB when
+  probing 2,000 points against 486,748 at 20 PCs, which OOM-killed the run that
+  was measuring it. It is now chunked over the query, with peak memory
+  `chunk x n_reference x 8` bytes; measured peak for that comparison is 3.4 GB.
+  The ordering is still a full stable sort rather than a partial selection,
+  because `argpartition` breaks exact ties arbitrarily and duplicate or
+  monozygotic samples sit at distance zero.
+- **Neighbourhood preservation is asserted against chance**, like every other
+  statistic in the suite. It was a raw fraction with a floor of 0.05, which UK
+  Biobank failed at 0.011 while HGDP passed at 0.333 — even though against
+  chance UK Biobank scores 182x and HGDP 45x, making the larger cohort the
+  better embedding. Chance overlap is `k / (n - 1)`, so a raw floor can only be
+  calibrated for one cohort size.
+- The command-line page is now checked against the CLI it documents: a test
+  fails if a subcommand is undocumented, or documented but absent.
+
 ## [0.2.1] - 2026-09-12
 
 First public release.
