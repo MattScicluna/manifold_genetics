@@ -59,8 +59,13 @@ jobs:
         run: |
           uv run pytest -m "not slow and not network" --cov=manifold_genetics --cov-report=term-missing --cov-report=lcov
 
+      # Informational, and not a gate (see issue #94), so it must not be able to
+      # block a merge. It already has once: the action failed with "Failed to
+      # download coveralls binary or checksum", a third-party download outage
+      # that has nothing to do with the pull request it blocked.
       - name: Upload coverage to Coveralls
         if: matrix.python-version == '3.12'
+        continue-on-error: true
         uses: coverallsapp/github-action@v2
         with:
           # LCOV preserves coverage.py's line data exactly; the Cobertura XML
