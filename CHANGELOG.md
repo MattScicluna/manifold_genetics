@@ -43,6 +43,11 @@ placed by hand.
   checks that a cohort's data agrees with the config describing it, and an
   end-to-end suite with chance-corrected assertions about the science. Includes
   a SLURM entry point.
+- **A documentation site** built with MkDocs Material and published to GitHub
+  Pages, including a tutorial notebook that runs the whole pipeline on a cohort
+  it simulates as it goes. The notebook is *executed* during the build and the
+  build runs in strict mode, so a tutorial that stopped working or a broken
+  internal link fails CI rather than shipping.
 - **A tag-triggered release workflow** (`docs/releasing.md`) using trusted
   publishing, so there is no API token in the repository and no way to publish
   from a laptop. It builds from a fresh checkout, verifies the package metadata

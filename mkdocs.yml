@@ -1,0 +1,104 @@
+site_name: manifold-genetics
+site_description: Genetic analysis with PCA, admixture, and manifold learning
+site_url: https://mattscicluna.github.io/manifold_genetics/
+repo_url: https://github.com/MattScicluna/manifold_genetics
+repo_name: MattScicluna/manifold_genetics
+edit_uri: edit/main/docs/
+
+# A broken link in the docs is a broken link on the site, so treat it as an
+# error rather than a line in a build log nobody reads.
+strict: true
+
+# Internal design notes and planning documents live under docs/ so they sit
+# beside the code they describe, but they are not the manual.
+exclude_docs: |
+  superpowers/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - mkdocs-jupyter:
+      # The notebook is executed by a separate step in .github/workflows/docs.yml
+      # rather than here: doing it there gives a per-cell timeout and a log line
+      # naming the cell, where a hang inside this plugin is silent. It is still
+      # executed on every build, so the tutorial still cannot rot.
+      #
+      # Locally, `mkdocs serve` therefore shows it without outputs. To see them:
+      #   uv run jupyter nbconvert --to notebook --inplace --execute \
+      #       docs/tutorial.ipynb
+      execute: false
+      allow_errors: false
+      include_source: true
+      execute_ignore:
+        - "superpowers/*"
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            members_order: source
+            separate_signature: true
+            signature_crossrefs: true
+            merge_init_into_class: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: install.md
+      - Tutorial: tutorial.ipynb
+  - Guides:
+      - Concepts: concepts.md
+      - Configuration: configuration.md
+      - Command line: cli.md
+      - Running on a cluster: hpc.md
+      - Controlled-access data: controlled-access.md
+      - UK Biobank cross-projection: UKBB_README.md
+  - Reference:
+      - API: api.md
+      - Testing against real cohorts: testing-real-cohorts.md
+      - Releasing: releasing.md
+      - Migration notes: migrations/2026-09-transform-to-project.md

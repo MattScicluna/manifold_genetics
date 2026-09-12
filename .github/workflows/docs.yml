@@ -1,0 +1,91 @@
+name: Docs
+
+# The build executes docs/tutorial.ipynb (mkdocs-jupyter, execute: true) and runs
+# with strict: true, so a tutorial that stopped working or a broken internal link
+# fails this workflow rather than shipping. That is the point of building on every
+# pull request and not only on deploy.
+#
+# Deployment needs Pages enabled once, under Settings -> Pages, with the source
+# set to "GitHub Actions".
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # The default job limit is six hours. A notebook cell that hangs should cost
+    # minutes, not that.
+    timeout-minutes: 25
+    env:
+      # Runners have two cores, and oversubscribed native thread pools are a
+      # known way for a numba/BLAS workload to deadlock in a container rather
+      # than merely run slowly.
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMBA_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.12.13"
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-docs-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-docs-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra docs
+
+      # Executed here rather than inside mkdocs-jupyter so that a cell which
+      # hangs fails with a per-cell timeout and a log line naming it, instead of
+      # sitting silently until the job's limit. mkdocs then renders the outputs
+      # this step produced -- the notebook is still executed on every build, so
+      # it still cannot rot.
+      - name: Execute the tutorial
+        run: |
+          uv run jupyter nbconvert --to notebook --inplace --execute \
+            --ExecutePreprocessor.timeout=300 \
+            --log-level=DEBUG docs/tutorial.ipynb
+
+      - name: Build
+        run: uv run mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

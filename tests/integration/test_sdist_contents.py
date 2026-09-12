@@ -21,7 +21,11 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.integration
+# `network`: the build resolves hatchling from an index, so this cannot run on a
+# machine without internet -- an HPC compute node, for instance. CI runs it in a
+# job of its own (see .github/workflows/ci.yml) rather than losing the guard to
+# the default `not network` selection.
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -103,9 +107,13 @@ class TestWheel:
         assert "manifold_genetics/py.typed" in wheel_members
 
     def test_it_ships_only_the_package(self, wheel_members):
+        # Version-agnostic on purpose: pinning the dist-info name here would turn
+        # every version bump into a test failure for no reason.
         top = {m.split("/")[0] for m in wheel_members}
+        dist_info = {m for m in top if m.endswith(".dist-info")}
 
-        assert top == {"manifold_genetics", "manifold_genetics-0.2.0.dist-info"}
+        assert len(dist_info) == 1, top
+        assert top - dist_info == {"manifold_genetics"}
 
     def test_it_bundles_the_license(self, wheel_members):
         assert any(m.endswith("licenses/LICENSE") for m in wheel_members)
