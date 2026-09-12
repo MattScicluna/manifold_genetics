@@ -11,9 +11,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 First public release.
 
-0.2.0 reached TestPyPI only, during the rehearsal that caught
-`--version` disagreeing with the package. Version numbers on an index
-cannot be reused, so this is the first one on PyPI.
+0.2.0 was published first, to reserve the name. This is the release to install:
+it adds the `whole_cohort` rename, per-user tool caching, and the leak
+guardrails. An index never accepts a version twice, so each of these is a step
+forward rather than a correction in place.
 
 The headline is that `pip install manifold-genetics` gives you a working
 pipeline. Until this release it did not: PCA required the `flashpca` binary,
@@ -166,3 +167,4 @@ not yet been verified end to end -- so expect further breaking changes before
 
 [Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.1
+[0.2.0]: https://pypi.org/project/manifold-genetics/0.2.0/
