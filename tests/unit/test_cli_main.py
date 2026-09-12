@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from manifold_genetics import __version__
 from manifold_genetics import cli as mg_cli
 from manifold_genetics.pipeline.result import PipelineResult
 from manifold_genetics.pipeline.steps.metrics import MetricsStepResult
@@ -74,10 +75,12 @@ def test_top_level_help_exits_zero():
 
 
 def test_version_exits_zero(capsys):
+    # Compared against the package rather than a literal: this test previously
+    # pinned "0.1.0", so it passed while --version was a release behind.
     with pytest.raises(SystemExit) as exc:
         mg_cli.main(["--version"])
     assert exc.value.code == 0
-    assert "0.1.0" in capsys.readouterr().out
+    assert __version__ in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("subcommand", SUBCOMMANDS)

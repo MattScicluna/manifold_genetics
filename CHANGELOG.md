@@ -10,7 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 
 - **Guardrails against committing controlled-access data**
-  ([docs/working-with-agents.md](working-with-agents.md)). A pre-commit hook and
+  ([docs/working-with-agents.md](docs/working-with-agents.md)). A pre-commit hook and
   a CI job run `scripts/check_sensitive_files.py`, written against this
   repository's own two incidents rather than as a generic secret scanner: it
   flags files whose header declares them private, genotype containers, long
@@ -18,6 +18,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cluster paths. Public cohort identifiers (`HG00096`) deliberately do not
   trigger it. Exemptions live in `.sensitive-allow`, scoped to a single rule, so
   that overriding the check leaves a reviewable trace.
+
+### Fixed
+
+- **`manifold-genetics --version` reported `0.1.0`.** The number was typed into
+  the argparse argument as a third copy and spent the whole of 0.2.0's
+  development a minor version behind, while `manifold_genetics.__version__` said
+  `0.2.0`. It now reads the package. Caught by the TestPyPI rehearsal of 0.2.0,
+  which is what a rehearsal is for.
+
+  A test pinned the stale literal, so it passed while the command was wrong; it
+  now compares against the package. Two further tests assert that the CLI
+  reports the declared version and that the version appears in exactly one
+  source file.
+- The wheel is now checked to contain no untracked module. It picks files by the
+  same "everything not gitignored" rule that put untracked working files in the
+  0.2.0 sdist; there are stale `.ipynb_checkpoints` copies of two real backends
+  under `src/` today, kept out only by a `.gitignore` entry.
 
 ## [0.2.0] - 2026-09-12
 

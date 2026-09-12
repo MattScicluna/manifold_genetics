@@ -117,3 +117,16 @@ class TestWheel:
 
     def test_it_bundles_the_license(self, wheel_members):
         assert any(m.endswith("licenses/LICENSE") for m in wheel_members)
+
+    def test_every_module_it_ships_is_tracked_in_git(self, wheel_members, tracked):
+        """The wheel picks files by the same "not gitignored" rule as the sdist.
+
+        There are two stale `.ipynb_checkpoints` copies of real backends sitting
+        under src/ right now. They are gitignored, so they stay out -- but the
+        rule protecting users from a shadow copy of a module is an entry in
+        .gitignore, which is thin. An untracked module reaching an installer is
+        worse than an untracked script reaching an sdist.
+        """
+        untracked = [m for m in wheel_members if m.endswith(".py") and f"src/{m}" not in tracked]
+
+        assert untracked == []
