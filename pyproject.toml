@@ -56,6 +56,8 @@ dev = [
     # tests/unit/test_package_metadata.py reads pyproject.toml; tomllib is
     # stdlib only from 3.11.
     "tomli>=2.0; python_version<'3.11'",
+    # Installs the guardrail hooks: uv run pre-commit install
+    "pre-commit>=3.5",
 ]
 aou = [
     "pandas-gbq>=0.19.0",
@@ -98,6 +100,9 @@ packages = ["src/manifold_genetics"]
 only-include = [
     "src/manifold_genetics",
     "tests",
+    # tests/unit/test_sensitive_file_check.py imports it, and the sdist ships
+    # tests, so it has to ship what they import.
+    "scripts",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",

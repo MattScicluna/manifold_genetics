@@ -96,6 +96,7 @@ nav:
       - Command line: cli.md
       - Running on a cluster: hpc.md
       - Controlled-access data: controlled-access.md
+      - Working safely with agents: working-with-agents.md
       - UK Biobank cross-projection: UKBB_README.md
   - Reference:
       - API: api.md
