@@ -7,9 +7,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-09-12
+## [0.2.1] - 2026-09-12
 
 First public release.
+
+0.2.0 reached TestPyPI only, during the rehearsal that caught
+`--version` disagreeing with the package. Version numbers on an index
+cannot be reused, so this is the first one on PyPI.
 
 The headline is that `pip install manifold-genetics` gives you a working
 pipeline. Until this release it did not: PCA required the `flashpca` binary,
@@ -160,5 +164,5 @@ not yet been verified end to end -- so expect further breaking changes before
 - `examples/_shared/run_pipeline.sh`, `examples/_shared/detect_cluster.sh` and
   the nine per-example `run_pipeline.sh` wrappers, superseded by config files.
 
-[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.0
+[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.1
