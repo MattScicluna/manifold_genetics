@@ -1,0 +1,91 @@
+# Guardrails that run before a commit exists, not after it is pushed.
+#
+# This repository is public and lives on a cluster holding UK Biobank and All of
+# Us data. Twice, files from the working directory reached somewhere they should
+# not have: once into a pull request via `git add -A`, once into a built source
+# distribution. Review caught neither. See docs/working-with-agents.md.
+#
+# Install once per clone:
+#
+#     uv sync --frozen --extra dev
+#     uv run pre-commit install
+#
+# Run over everything, which is worth doing after any bulk `git add`:
+#
+#     uv run pre-commit run --all-files
+#
+# On a many-core shared login node, set GOMAXPROCS first -- see the gitleaks
+# note below.
+
+# `examples/**/data/` is gitignored, but one template file inside it was
+# force-added long ago. The whitespace fixers keep rewriting it, and a change
+# there cannot be staged without `git add -f`, so leave it alone.
+exclude: '^examples/.*/data/'
+
+repos:
+  # The formatters are `language: system`, running whatever the synced
+  # environment provides, rather than versions pinned again here. Two reasons.
+  #
+  # A second set of pins drifts from uv.lock, and then a commit that passes
+  # locally fails the lint job for no reason a contributor can see. And pinning
+  # the latest black pulled in a Rust build (ast-serialize via maturin) that
+  # will not compile against this cluster's Cargo 1.84 -- a formatter hook that
+  # cannot be installed on the machine people commit from is worse than none.
+  - repo: local
+    hooks:
+      # The check written for this repository's own failure modes: private-by-
+      # header scripts, genotype containers, columns of biobank identifiers,
+      # local agent state, absolute cluster paths. Specified by
+      # tests/unit/test_sensitive_file_check.py.
+      - id: sensitive-files
+        name: check for files that should not be shared
+        entry: python -m scripts.check_sensitive_files
+        language: system
+        pass_filenames: true
+
+      - id: black
+        name: black
+        entry: black
+        language: system
+        types: [python]
+
+      - id: isort
+        name: isort
+        entry: isort
+        language: system
+        types: [python]
+
+      - id: flake8
+        name: flake8
+        # Flags live in .flake8, so this matches the lint job exactly.
+        entry: flake8
+        language: system
+        types: [python]
+
+  # Credentials, which the check above deliberately does not try to cover.
+  #
+  # gitleaks is a Go binary and asks the runtime for a thread per core. On a
+  # 64-core login node with a 4096-process ulimit that fails with
+  # `fatal error: newosproc`. Constrain it:
+  #
+  #     GOMAXPROCS=4 uv run pre-commit run --all-files
+  #
+  # Laptops and CI runners have few enough cores not to hit this.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      # Genotype files are large before they are anything else, so a size limit
+      # catches them even if a suffix is unfamiliar.
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

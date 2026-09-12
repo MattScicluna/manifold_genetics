@@ -7,6 +7,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Guardrails against committing controlled-access data**
+  ([docs/working-with-agents.md](working-with-agents.md)). A pre-commit hook and
+  a CI job run `scripts/check_sensitive_files.py`, written against this
+  repository's own two incidents rather than as a generic secret scanner: it
+  flags files whose header declares them private, genotype containers, long
+  columns of biobank identifiers, local agent and editor state, and absolute
+  cluster paths. Public cohort identifiers (`HG00096`) deliberately do not
+  trigger it. Exemptions live in `.sensitive-allow`, scoped to a single rule, so
+  that overriding the check leaves a reviewable trace.
+
 ## [0.2.0] - 2026-09-12
 
 First public release. 0.1.0 was never published, so everything here is new to

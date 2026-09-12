@@ -15,16 +15,16 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
       fail-fast: false
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -32,7 +32,7 @@ jobs:
           # CI installs whatever uv is latest that day, and a lock file written by
           # a different version fails the check for reasons unrelated to the PR.
           version: "0.12.13"
-      
+
       - name: Cache uv dependencies
         uses: actions/cache@v4
         with:
@@ -41,16 +41,16 @@ jobs:
           key: uv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             uv-${{ runner.os }}-py${{ matrix.python-version }}-
-      
+
       - name: Verify uv.lock is up to date
         run: |
           uv lock
           git diff --exit-code uv.lock
-      
+
       - name: Install dependencies
         run: |
           uv sync --frozen --extra dev
-      
+
       # `integration` is no longer deselected: since the PCA step gained an
       # in-process backend, the pipeline runs end to end on a runner with no
       # flashpca binary. Those are the tests that would catch a scientific
@@ -69,7 +69,7 @@ jobs:
           format: lcov
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-      
+
       - name: Debug info on failure
         if: failure()
         run: |
@@ -79,6 +79,25 @@ jobs:
           uv --version
           echo "=== Installed Packages ==="
           uv pip freeze
+
+  # Runs before anything expensive, because what it guards against is permanent:
+  # this repository is public and lives on a cluster holding controlled-access
+  # cohorts. See docs/working-with-agents.md for the two incidents that prompted
+  # it. Stdlib only, so it needs no environment.
+  leak-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check every tracked file
+        run: python -m scripts.check_sensitive_files --tracked
 
   # The packaging tests need an index to resolve the build backend, so they carry
   # the `network` marker and the job above deselects them. They check things that
@@ -113,16 +132,16 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -130,7 +149,7 @@ jobs:
           # CI installs whatever uv is latest that day, and a lock file written by
           # a different version fails the check for reasons unrelated to the PR.
           version: "0.12.13"
-      
+
       - name: Cache uv dependencies
         uses: actions/cache@v4
         with:
@@ -139,19 +158,19 @@ jobs:
           key: uv-${{ runner.os }}-py3.11-${{ hashFiles('uv.lock') }}
           restore-keys: |
             uv-${{ runner.os }}-py3.11-
-      
+
       - name: Install dependencies
         run: |
           uv sync --frozen --extra dev
-      
+
       - name: Run black
         run: |
           uv run black --check .
-      
+
       - name: Run isort
         run: |
           uv run isort --check-only .
-      
+
       - name: Run flake8
         run: |
           # Flags live in .flake8 so a local `flake8 src tests` matches CI exactly.

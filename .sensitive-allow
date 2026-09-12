@@ -1,0 +1,24 @@
+# Paths that scripts/check_sensitive_files.py would flag but which are safe to
+# share. One path per line, each with a comment saying who decided and why.
+#
+# This file exists so that overriding the check leaves a reviewable trace in the
+# repository. A command-line flag would be typed once, forgotten, and the check
+# would be dead. If this list grows without comments, the check is being
+# worked around rather than used.
+#
+# (Empty: nothing in the repository currently needs an exception.)
+
+# The page documenting this check quotes the header of the private script that
+# prompted it, and names the /lustre path pattern in its rules table. Both are
+# the subject matter, not a leak. Scoped to those two rules so that anything
+# else appearing in that file is still caught.
+# Reviewed 2026-09-12.
+docs/working-with-agents.md:private-marker
+docs/working-with-agents.md:cluster-path
+
+# The check's own specification. It has to contain the things it detects: a
+# fixture script with a private header, and a fake cluster path. Scoped to those
+# two rules.
+# Reviewed 2026-09-12.
+tests/unit/test_sensitive_file_check.py:private-marker
+tests/unit/test_sensitive_file_check.py:cluster-path
