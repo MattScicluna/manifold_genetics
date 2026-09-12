@@ -30,12 +30,12 @@ echo "Step 1: Check if data already exists"
 echo "--------------------------------------"
 
 # Check if processed data already exists (highest priority check)
-if [ -f "${DATA_DIR}/fit_subset.bed" ] && [ -f "${DATA_DIR}/transform_subset.bed" ]; then
+if [ -f "${DATA_DIR}/fit_subset.bed" ] && [ -f "${DATA_DIR}/project_subset.bed" ]; then
     echo "✓ Data already processed"
     echo ""
     echo "Found:"
     echo "  - ${DATA_DIR}/fit_subset.bed"
-    echo "  - ${DATA_DIR}/transform_subset.bed"
+    echo "  - ${DATA_DIR}/project_subset.bed"
     echo ""
     echo "Nothing to download. Ready to run tests!"
     exit 0
@@ -214,5 +214,5 @@ echo "  bash examples/hgdp_1kgp/prepare_data.sh"
 echo ""
 echo "This will create analysis-ready subsets:"
 echo "  - fit_subset (3,400 unrelated samples)"
-echo "  - transform_subset (4,094 QC-passing samples)"
+echo "  - project_subset (4,094 QC-passing samples)"
 echo "==========================================="
