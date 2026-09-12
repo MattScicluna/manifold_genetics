@@ -2,8 +2,14 @@
 
 <a href="https://github.com/MattScicluna/manifold_genetics/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/MattScicluna/manifold_genetics/ci.yml?branch=main&label=CI"></a>
 <a href="https://coveralls.io/github/MattScicluna/manifold_genetics?branch=main"><img alt="Coverage Status" src="https://img.shields.io/coverallsCoverage/github/MattScicluna/manifold_genetics?branch=main"></a>
+<a href="https://mattscicluna.github.io/manifold_genetics/"><img alt="Documentation" src="https://img.shields.io/badge/docs-mkdocs--material-teal"></a>
 
 A lightweight, batteries-included Python package for genetic analysis with dimensionality reduction and visualization.
+
+**[Documentation](https://mattscicluna.github.io/manifold_genetics/)** ·
+**[Tutorial](https://mattscicluna.github.io/manifold_genetics/tutorial/)** (a full
+run on a simulated cohort, under a minute, nothing to download) ·
+**[Concepts](https://mattscicluna.github.io/manifold_genetics/concepts/)**
 
 <p align="center">
   <img src="assets/ukbb_phate.png" width="30%" alt="UKBB PHATE embedding coloured by self-described ancestry"/>

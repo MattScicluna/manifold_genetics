@@ -63,13 +63,22 @@ aou = [
 geosketch = [
     "geosketch>=1.3",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+    # Renders docs/tutorial.ipynb, and executes it during the build so a tutorial
+    # cannot quietly stop working.
+    "mkdocs-jupyter>=0.24",
+    "ipykernel>=6.29",
+]
 
 [project.scripts]
 manifold-genetics = "manifold_genetics.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/MattScicluna/manifold_genetics"
-Documentation = "https://github.com/MattScicluna/manifold_genetics#readme"
+Documentation = "https://mattscicluna.github.io/manifold_genetics/"
 Repository = "https://github.com/MattScicluna/manifold_genetics"
 Issues = "https://github.com/MattScicluna/manifold_genetics/issues"
 

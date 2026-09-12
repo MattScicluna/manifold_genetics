@@ -7,7 +7,7 @@ precomputed results, and fake/mock backends for testing.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Union
+from typing import Any, Dict, Union
 
 
 class AdmixtureBackend(ABC):
@@ -20,7 +20,7 @@ class AdmixtureBackend(ABC):
     CSV format: sample_id,component_1,component_2,...,component_K
     """
 
-    def __init__(self, k_min: int = 2, k_max: int = 10, force: bool = False, **kwargs):
+    def __init__(self, k_min: int = 2, k_max: int = 10, force: bool = False, **kwargs: Any):
         """
         Initialize backend.
 
