@@ -158,6 +158,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
 
   publish-pypi:
     needs: [build, smoke-test]
@@ -172,3 +173,9 @@ jobs:
           name: dist
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Re-running a release must not fail on files already uploaded:
+          # 0.2.0 was published by a workflow_dispatch before its tag existed,
+          # and pushing that tag afterwards re-runs this job. An index cannot
+          # be overwritten, so this only ever skips work already done.
+          skip-existing: true
