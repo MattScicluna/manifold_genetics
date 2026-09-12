@@ -32,6 +32,12 @@ message rather than a bare `ImportError` if it is missing.
 `examples/_shared/select_samples_geosketch.py`. Nothing in the pipeline itself
 imports it.
 
+That selection runs on **PCA coordinates, not genotypes** — sketching 486,748
+samples across 120,849 raw dosages would take far too long, and the PCA space is
+what the sketch is meant to be representative of. So it needs an existing PCA
+CSV as input, which is a preparation step, not a change to how the pipeline
+works: the run that follows still starts from PLINK files like any other.
+
 ## External tools
 
 `plink2` and `plink` are needed to **prepare** data, not to run the pipeline:

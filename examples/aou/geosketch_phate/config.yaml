@@ -4,6 +4,13 @@
 #
 # Select the sketch first with prepare_data.sh. Paths are relative to this file.
 #
+# The sketch is selected in PCA space, not on genotypes: geometric sketching on
+# 486,748 x 120,849 raw dosages would take far too long, and PCA coordinates are
+# what the sketch is meant to be representative of anyway. prepare_data.sh reads
+# an existing PCA CSV to do it, so this example depends on an earlier run having
+# produced one -- see its header. That dependency is the only thing unusual here;
+# the pipeline itself still starts from PLINK files like every other example.
+#
 # Identical settings to 10k_WBH on purpose: how the fit subset was chosen should
 # not change how it is embedded.
 preset: subsample
