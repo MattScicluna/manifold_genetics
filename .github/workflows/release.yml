@@ -1,0 +1,174 @@
+name: Release
+
+# Publishing is deliberately hard to do by accident and impossible to do from a
+# laptop: a tag push builds and publishes, and nothing else does. The artefacts
+# are built from a fresh checkout, which is the structural reason an untracked
+# local file cannot reach an index -- see tests/integration/test_sdist_contents.py
+# for the belt to this braces.
+#
+# Trusted publishing (PEP 740 / OIDC) is used rather than an API token, so there
+# is no long-lived secret in this repository. It needs configuring once per
+# index, at https://pypi.org/manage/account/publishing/:
+#
+#   PyPI project:  manifold-genetics
+#   Owner/repo:    MattScicluna/manifold_genetics
+#   Workflow:      release.yml
+#   Environment:   pypi     (and `testpypi` on test.pypi.org)
+#
+# To rehearse without releasing: run this workflow manually from the Actions tab
+# with target=testpypi. TestPyPI accepts a version only once, same as PyPI, so
+# rehearse with the version you actually intend to ship.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Index to publish to"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+        default: testpypi
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.12.13"
+
+      - name: Check the tag matches the declared version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          declared=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          if [ "$tag" != "$declared" ]; then
+            echo "tag v$tag does not match pyproject version $declared" >&2
+            exit 1
+          fi
+          echo "releasing $declared"
+
+      - name: Check the changelog documents this version
+        run: |
+          declared=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          grep -q "## \[$declared\]" CHANGELOG.md
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+
+      # These are the tests that check the artefacts themselves: that the
+      # declared licence matches LICENSE, that no untracked file is packaged,
+      # that py.typed ships. A release is the one thing that cannot be undone.
+      - name: Verify package metadata and distribution contents
+        run: |
+          uv run pytest tests/unit/test_package_metadata.py \
+                        tests/integration/test_sdist_contents.py -v
+
+      - name: Build
+        run: |
+          rm -rf dist
+          uv build
+
+      - name: Check the metadata renders
+        run: |
+          uv run --with twine twine check --strict dist/*
+
+      # Printed into the log so the contents of a release are inspectable after
+      # the fact, without re-downloading the artefacts.
+      - name: Show what will be published
+        run: |
+          ls -l dist
+          for f in dist/*.tar.gz; do echo "== $f"; tar -tzf "$f" | sort; done
+          for f in dist/*.whl; do echo "== $f"; unzip -Z1 "$f" | sort; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # A clean-room install: no repository, no dev extras, nothing on the path but
+  # the wheel. This is the check that `pip install manifold-genetics` works,
+  # which it did not before 0.2.0.
+  smoke-test:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the wheel into a clean virtualenv
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/python -m pip install --quiet --upgrade pip
+          /tmp/clean/bin/python -m pip install dist/*.whl
+
+      - name: The console script runs and the API imports
+        run: |
+          cd /tmp
+          /tmp/clean/bin/manifold-genetics --help
+          /tmp/clean/bin/python -c "
+          import manifold_genetics as mg
+          from manifold_genetics import PCA, PHATE, Pipeline
+          from manifold_genetics.pipeline.runner import run_pipeline
+          print('manifold-genetics', mg.__version__)
+          "
+
+      - name: PCA runs without the flashpca binary
+        run: |
+          cd /tmp
+          /tmp/clean/bin/python -c "
+          import numpy as np
+          from manifold_genetics.pca.backends.sklearn_backend import SklearnPCABackend
+          print(SklearnPCABackend(n_components=2))
+          "
+
+  publish-testpypi:
+    needs: [build, smoke-test]
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    needs: [build, smoke-test]
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

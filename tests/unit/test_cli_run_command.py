@@ -91,6 +91,46 @@ class TestDryRun:
         assert "project" in out  # embedding_input from the transform preset
         assert "knn" in out
 
+    def test_dry_run_prints_settings_that_come_from_package_defaults(self, config, capsys):
+        """The admixture batch size is the case that matters.
+
+        It is a workaround for an upstream bug, supplied by the package rather
+        than by any config, so a reader of the file cannot see it at all -- and
+        it is the first thing to check before a long run on a large cohort.
+        """
+        main(["run", str(config), "--dry-run"])
+
+        out = capsys.readouterr().out
+        assert "admix_batch_size" in out
+        assert "400" in out
+
+    def test_it_marks_which_values_came_from_a_default(self, config, capsys):
+        main(["run", str(config), "--dry-run"])
+
+        line = next(
+            line for line in capsys.readouterr().out.splitlines() if "admix_batch_size" in line
+        )
+
+        assert "default" in line
+
+    def test_it_does_not_mark_the_config_s_own_values(self, config, capsys):
+        main(["run", str(config), "--dry-run"])
+
+        line = next(
+            line
+            for line in capsys.readouterr().out.splitlines()
+            if line.strip().startswith("fit_plink")
+        )
+
+        assert "default" not in line
+
+    def test_it_omits_the_test_only_backend_injection_point(self, config, capsys):
+        # admixture_backend exists so tests can substitute a fake; printing it
+        # would invite somebody to try setting it in a config file.
+        main(["run", str(config), "--dry-run"])
+
+        assert "admixture_backend" not in capsys.readouterr().out
+
 
 class TestErrors:
     def test_a_missing_config_reports_cleanly(self, tmp_path, capsys):

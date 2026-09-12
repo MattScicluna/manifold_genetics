@@ -1,0 +1,105 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-09-12
+
+First public release. 0.1.0 was never published, so everything here is new to
+anybody installing this package.
+
+The headline change is that `pip install manifold-genetics` now gives you a
+working pipeline. Before this release it did not: PCA required the `flashpca`
+binary, which ships only as a Linux x86-64 executable and had to be fetched and
+placed by hand.
+
+### Added
+
+- **A pure-Python PCA backend**, selected by default. Reads PLINK 1 `.bed`
+  directly (about forty lines of numpy, no new dependency) and computes a
+  randomized SVD. It reproduces `flashpca`'s conventions rather than inventing
+  its own — dosage as the count of A1, `binom2` standardisation, eigenvalues as
+  `S²/n_variants`, projection through the reference cohort's statistics — to
+  agreement of 5e-7 or better against checked-in reference outputs. The
+  standardisation was determined empirically from real `.meansd` files, not from
+  documentation.
+- **`flashpca` remains available** as an opt-in accelerator via
+  `--pca-backend flashpca`, and writes the same artefacts as the Python backend,
+  so downstream code cannot tell which produced a result.
+- **Streaming fit** for cohorts too large to hold densely. Selected
+  automatically from `max_fit_memory_gb`: a 60,000-sample cohort needs 82 GB
+  dense and about 110 MB streamed.
+- **`manifold-genetics run config.yaml`** — runs a whole pipeline from a config
+  file, with `--dry-run` to print the resolved settings first. Unknown keys are
+  rejected with a suggestion rather than ignored.
+- **A config file for every shipped example**, replacing 1,382 lines of shell.
+- **`py.typed`**, so the annotations in this package are visible to type
+  checkers in projects that depend on it.
+- **A real-cohort test suite** (`docs/testing-real-cohorts.md`): fast preflight
+  checks that a cohort's data agrees with the config describing it, and an
+  end-to-end suite with chance-corrected assertions about the science. Includes
+  a SLURM entry point.
+- **A tag-triggered release workflow** (`docs/releasing.md`) using trusted
+  publishing, so there is no API token in the repository and no way to publish
+  from a laptop. It builds from a fresh checkout, verifies the package metadata
+  and the distribution contents, and installs the wheel into a clean
+  virtualenv on Linux and macOS before anything is uploaded.
+
+### Changed
+
+- **PCA's default backend is now `python`.** `flashpca` produced the reference
+  outputs and still reproduces them bit-for-bit; the change is about being
+  installable, not about accuracy.
+- **Landmarking defaults are consistent across large cohorts**: 10,000 random
+  landmarks and `t=50` for every cohort above ~50,000 samples, whether the fit
+  subset was chosen by majority-capping or by geometric sketching. How a subset
+  was selected should not change how it is embedded. A matched comparison found
+  the two give the same branch topology.
+- **`--verbose` no longer sets the root logger.** It previously enabled DEBUG
+  for every library in the process, which produced 665 KB of numba SSA dumps in
+  two minutes of one run.
+- **`manifold-genetics run --dry-run` now prints the whole effective call**,
+  marking `(default)` on anything the package supplied rather than the config
+  file. The admixture batch size is why: it is a workaround for an upstream bug,
+  so it appears in no config and was previously invisible in the one place built
+  for checking settings before a long run.
+
+### Fixed
+
+- **The declared license was MIT; the LICENSE file is BSD 3-Clause.** The
+  LICENSE file is authoritative and the metadata now matches it. A release
+  cannot be re-uploaded under the same version, so this would have been
+  permanent.
+- **Every `project.urls` entry pointed at `manifold-genetics` with a hyphen**,
+  which is not the repository name — four 404s on the PyPI sidebar.
+- **Neural admixture is always given a batch size** (400). Left unset it batches
+  the entire dataset at once; that is a bug in the tool, and the workaround was
+  previously applied only in `subsample` mode, leaving the All of Us projection
+  example — the one running on the largest cohort — without it.
+- **`validate_sample_id_overlap` now enforces a minimum overlap** (50% by
+  default) instead of raising only at zero. Near-total mismatch between a label
+  file and a genotype set previously passed silently, which is how one example's
+  figures came to colour 40% of their points from a superseded sample selection.
+- Example label files are regenerated when they no longer match their `.fam`,
+  rather than being kept because they exist.
+- **The source distribution contained untracked working files.** hatchling's
+  default is to include everything not gitignored, which is not the same as
+  everything tracked; the sdist carried local tool state and an example script
+  whose header says "NOT for external users". Its contents are now declared
+  explicitly and checked by a test.
+
+### Removed
+
+- `examples/_shared/run_pipeline.sh`, `examples/_shared/detect_cluster.sh` and
+  the nine per-example `run_pipeline.sh` wrappers, superseded by config files.
+
+## [0.1.0]
+
+Internal only; never published to PyPI.
+
+[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.0

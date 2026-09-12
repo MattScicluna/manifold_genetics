@@ -5,6 +5,7 @@ Provides commands for PCA, admixture, embeddings, visualization, and full pipeli
 """
 
 import argparse
+import inspect
 import json
 import logging
 import sys
@@ -212,20 +213,39 @@ def cmd_run(args):
     return 0
 
 
-def _print_resolved_config(config_path, kwargs) -> None:
-    """Show what would run, with presets and relative paths already resolved.
+# Exists so tests can substitute a fake backend; not a setting, and printing it
+# would invite somebody to try naming it in a config file.
+_NOT_A_SETTING = {"admixture_backend"}
 
-    The settings worth checking are exactly the ones not visible in the file --
-    preset-derived embedding parameters, and relative paths resolved against the
-    config's own directory.
+
+def _print_resolved_config(config_path, kwargs) -> None:
+    """Show the call ``run_pipeline`` would receive, in full.
+
+    The settings worth checking are the ones not visible in the file: relative
+    paths resolved against the config's own directory, preset-derived embedding
+    parameters, and -- marked ``(default)`` -- anything the package supplies
+    that no config mentioned. The admixture batch size is the reason that last
+    category is here: it is a workaround for an upstream bug rather than a
+    tuning knob, so a reader of the config cannot see it at all.
     """
     params = kwargs.get("embedding_params") or {}
     plain = {k: v for k, v in kwargs.items() if k != "embedding_params"}
 
+    defaults = {
+        name: parameter.default
+        for name, parameter in inspect.signature(run_pipeline).parameters.items()
+        if parameter.default is not inspect.Parameter.empty
+        and name not in plain
+        and name not in _NOT_A_SETTING
+        and name != "embedding_params"
+    }
+
     print(f"Resolved configuration from {config_path}:\n")
-    width = max((len(k) for k in plain), default=0)
+    width = max((len(k) for k in (*plain, *defaults)), default=0)
     for key in sorted(plain):
         print(f"  {key:<{width}}  {plain[key]}")
+    for key in sorted(defaults):
+        print(f"  {key:<{width}}  {defaults[key]}  (default)")
     if params:
         print("\n  embedding_params:")
         pwidth = max(len(k) for k in params)

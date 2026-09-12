@@ -1,14 +1,15 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]  # >=1.27 for PEP 639 license-expression support
 build-backend = "hatchling.build"
 
 [project]
 name = "manifold-genetics"
-version = "0.1.0"
+version = "0.2.0"
 description = "A lightweight, batteries-included package for genetic analysis with PCA, Admixture, and manifold learning"
 readme = "README.md"
 requires-python =  ">=3.10,<3.13"
-license = {text = "MIT"}
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [
     {name = "Matthew Scicluna", email = "mattcscicluna@gmail.com"},
 ]
@@ -16,7 +17,6 @@ keywords = ["genetics", "genomics", "pca", "admixture", "dimensionality-reductio
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -53,6 +53,9 @@ dev = [
     "black>=22.0.0",
     "isort>=5.10.0",
     "flake8>=4.0.0",
+    # tests/unit/test_package_metadata.py reads pyproject.toml; tomllib is
+    # stdlib only from 3.11.
+    "tomli>=2.0; python_version<'3.11'",
 ]
 aou = [
     "pandas-gbq>=0.19.0",
@@ -65,13 +68,38 @@ geosketch = [
 manifold-genetics = "manifold_genetics.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/MattScicluna/manifold-genetics"
-Documentation = "https://github.com/MattScicluna/manifold-genetics#readme"
-Repository = "https://github.com/MattScicluna/manifold-genetics"
-Issues = "https://github.com/MattScicluna/manifold-genetics/issues"
+Homepage = "https://github.com/MattScicluna/manifold_genetics"
+Documentation = "https://github.com/MattScicluna/manifold_genetics#readme"
+Repository = "https://github.com/MattScicluna/manifold_genetics"
+Issues = "https://github.com/MattScicluna/manifold_genetics/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/manifold_genetics"]
+
+[tool.hatch.build.targets.sdist]
+# hatchling's default is "everything not gitignored", which includes untracked
+# working files. Left at the default, the 0.2.0 sdist carried
+# .claude/settings.local.json and a script whose header says "NOT for external
+# users" -- neither tracked in git, both about to be published.
+#
+# An sdist is a build artefact, not a mirror of the repository: it needs the
+# package, its tests, and the files that describe the release. Examples, docs
+# and screenshots live in the repository, where they can be read without
+# downloading a tarball. tests/integration/test_sdist_contents.py enforces this.
+only-include = [
+    "src/manifold_genetics",
+    "tests",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "pyproject.toml",
+    ".flake8",
+]
+exclude = [
+    "**/__pycache__",
+    "**/.ipynb_checkpoints",
+    "**/*.pyc",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

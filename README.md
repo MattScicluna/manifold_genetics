@@ -12,17 +12,48 @@ A lightweight, batteries-included Python package for genetic analysis with dimen
 
 ## Features
 
-- **PCA**: FlashPCA wrapper for fast principal component analysis
+- **PCA**: in-process, pure-Python by default — reads PLINK `.bed` directly and
+  reproduces FlashPCA's conventions to 5e-7; FlashPCA remains an opt-in accelerator
 - **Admixture**: Neural admixture analysis
 - **Embeddings**: PHATE, UMAP, t-SNE, and Diffusion Maps for manifold learning
 - **Visualization**: Publication-ready plots with customizable colormaps
 - **Metrics**: Geographic and admixture preservation metrics
 - **Pipeline**: End-to-end orchestration from PLINK files to visualizations
-- **Auto-downloads tools**: A single `manifold-genetics setup` call fetches plink2, flashPCA, and plink v1.9 (run it on a login node — compute nodes have no internet)
+- **No external binary required**: the default path is pure Python.
+  `manifold-genetics setup` fetches plink2 and plink v1.9 for data preparation,
+  and flashPCA if you want it (run it where there is internet — on an HPC
+  cluster, the login node)
 
 ## Quick Start
 
 ### Step 1: Installation
+
+```bash
+pip install manifold-genetics
+```
+
+That is the whole install for PCA, embeddings, visualization and metrics. No
+compiler, no external binary: PCA runs in-process. Tested on Linux and macOS,
+Python 3.10-3.12.
+
+Two optional extras:
+
+```bash
+pip install 'manifold-genetics[admixture]'   # torch + neural-admixture
+pip install 'manifold-genetics[geosketch]'   # geometric-sketch subsetting
+```
+
+The core install is deliberately torch-free so the common path stays
+lightweight. `manifold-genetics admixture` (and the admixture stage of
+`pipeline`) need the `admixture` extra.
+
+`plink2` and `plink` are only needed to *prepare* data — the example
+`prepare_data.sh` scripts use them. `manifold-genetics setup` downloads them,
+along with `flashpca` if you want the accelerated backend. Run it where there is
+internet; on an HPC cluster that means the login node.
+
+<details>
+<summary>Developing on the repository instead</summary>
 
 #### Installing uv
 
@@ -71,9 +102,12 @@ uv run manifold-genetics setup
 This command does NOT manage the Python environment. It only downloads external binaries to the `bin/` directory.
 
 This will download:
-- **plink2** to `bin/plink2` (~20MB)
-- **flashpca** to `bin/flashpca` (~2MB)
-- **plink v1.9** to `bin/plink` (~2MB)
+- **plink2** to `bin/plink2` (~20MB) — data preparation
+- **plink v1.9** to `bin/plink` (~2MB) — data preparation
+- **flashpca** to `bin/flashpca` (~2MB) — optional; the default PCA backend is
+  in-process and needs no binary
+
+</details>
 
 ### Step 2: Verify Installation (Optional but Recommended)
 
