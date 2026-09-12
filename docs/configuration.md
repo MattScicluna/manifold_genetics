@@ -64,7 +64,7 @@ in the file overrides them.
 
 `n_landmark` and `random_landmarking` are always set together: setting the first
 alone selects a far more expensive code path. See
-[Concepts](concepts.md#landmarking-and-why-it-is-a-preset).
+the preset you chose.
 
 A preset is optional. Without one you set `embedding.input_mode` and the
 embedding parameters yourself.
@@ -104,6 +104,12 @@ produced per column the colormap names.
 | `n_pcs` | 50 | components to compute |
 | `backend` | `python` | `python` (in process) or `flashpca` (external binary) |
 | `force` | false | recompute even if output exists |
+| `max_fit_memory_gb` | 8 | GB budget for the dense fit; above it the fit streams |
+| `max_project_memory_gb` | 8 | GB budget for one projection chunk |
+
+Set the two budgets to match the machine, not the cohort. They are the
+difference between a fit that is held in memory and one that streams at roughly
+nineteen times the wall clock — see [Memory on large cohorts](#memory-on-large-cohorts).
 
 ### `admixture`
 
@@ -172,4 +178,43 @@ the file:
 
 On a cohort where a run takes hours, this is the cheapest check there is. The
 other one, which reads the data rather than the config, is
-[preflight](testing-real-cohorts.md#preflight-run-this-first-always).
+`pytest tests/integration/test_cohort_preflight.py`, which cross-checks a
+cohort's data against its config in seconds.
+
+## Memory on large cohorts
+
+PCA is where the arithmetic matters, and both halves of it are bounded by a
+budget you can raise.
+
+**Fitting** a dense model needs `n_samples × n_variants × 8` bytes:
+
+| cohort | dense fit |
+|---|---|
+| 3,400 × 121k (HGDP+1KGP) | 3.3 GB |
+| 60,000 × 121k (UK Biobank sketch) | 58 GB |
+| 59,264 × 170k (UK Biobank capped) | 80 GB |
+
+Above `max_fit_memory_gb` (8 GB by default) the backend switches to a streaming
+fit, which bounds memory to roughly 110 MB regardless of cohort size — at about
+nineteen times the wall clock. It is chosen automatically. If a run is
+unexpectedly slow, this is the likely reason.
+
+More memory alone is not the fix: asking SLURM for `--mem=256GB` changes nothing
+unless you also raise `max_fit_memory_gb`, because the budget is what the backend
+compares against, not the free memory on the node. Raise both together.
+
+**Projecting** is bounded the same way by `max_project_memory_gb`, also 8 GB.
+It sizes one chunk at roughly `17 × n_samples × chunk` bytes, so projecting UK
+Biobank's 486,748 samples onto a 120,849-variant panel reads 1,038 variants at a
+time, in 117 passes over the `.bed`.
+
+This budget bounds the *chunk*, not the process: measured resident memory for
+that run was about 22 GB, because freed chunks are not all returned to the OS
+between iterations. Budget roughly three times the setting, and note that
+without it the same run needs 0.9 TB and is killed outright.
+
+Embedding a very large project set is bounded separately, by
+`embedding.embed_batch_size`.
+
+Admixture wants a GPU and, critically, a `batch_size` — left unset,
+neural-admixture batches the whole dataset at once. The package supplies 400.

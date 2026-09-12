@@ -204,7 +204,7 @@ def test_cmd_pca_fit_project(monkeypatch, tmp_path):
     calls = []
 
     class FakePCA:
-        def __init__(self, n_components, force=False, backend="flashpca"):
+        def __init__(self, n_components, force=False, backend="flashpca", **kwargs):
             calls.append(("init", n_components, force))
 
         def fit(self, prefix, output_dir=None):
@@ -243,7 +243,7 @@ def test_cmd_pca_single_input_uses_fit_transform(monkeypatch, tmp_path):
     calls = []
 
     class FakePCA:
-        def __init__(self, n_components, force=False, backend="flashpca"):
+        def __init__(self, n_components, force=False, backend="flashpca", **kwargs):
             calls.append(("init", n_components, force))
 
         def fit_transform(self, prefix, output_path=None):
@@ -266,7 +266,7 @@ def test_cmd_pca_flashpca_output_dir_overrides_model_dir(monkeypatch, tmp_path):
     seen = {}
 
     class FakePCA:
-        def __init__(self, n_components, force=False, backend="flashpca"):
+        def __init__(self, n_components, force=False, backend="flashpca", **kwargs):
             pass
 
         def fit(self, prefix, output_dir=None):

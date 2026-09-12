@@ -30,7 +30,7 @@ from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.pipeline.runner import run_pipeline
 from tests.integration.cohorts import COHORTS, rebase, resolve_data_root
 from tests.integration.test_cohort_preflight import COHORT_PARAMS, fam_ids
-from tests.science import neighbourhood_preservation, separation_over_chance
+from tests.science import neighbourhood_preservation_over_chance, separation_over_chance
 
 pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
@@ -54,7 +54,11 @@ PATH_KEYS = (
 # actually scored -- see submit_cohort_tests.sh, which runs with -s.
 MIN_PC_SEPARATION = 3.0  # HGDP: 54.3 on Population over the first 10 PCs
 MIN_EMBEDDING_SEPARATION = 3.0  # HGDP: 57.5
-MIN_NEIGHBOURHOOD_PRESERVATION = 0.05  # HGDP: 0.333 at k=30; chance here is 0.007
+# As a multiple of chance, not a raw fraction: chance overlap is k/(n-1), and
+# these cohorts span 3,400 to 486,748 samples. HGDP scores 45x and UK Biobank
+# 182x, so the larger cohort is the better embedding -- while the raw floor of
+# 0.05 this replaced passed HGDP's 0.333 and failed UK Biobank's 0.011.
+MIN_NEIGHBOURHOOD_PRESERVATION = 10.0  # HGDP: 45.4x, UKBB projection: 182x
 
 
 class CohortRun:
@@ -97,7 +101,15 @@ class CohortRun:
 
 
 def _coords(path):
-    df = pd.read_csv(path)
+    """Read a pipeline CSV, keeping ``sample_id`` a string.
+
+    Not cosmetic: UK Biobank and All of Us identify samples by all-digit biobank
+    IDs, which pandas infers as int64, while every label file here is read with
+    ``dtype=str``. Merging the two then raises rather than returning an empty
+    frame, so this was a hard failure on exactly the cohorts the suite exists
+    for -- and invisible on HGDP, whose IDs are not numeric.
+    """
+    df = pd.read_csv(path, dtype={"sample_id": str})
     dims = [c for c in df.columns if c.startswith("dim_")]
     return df, dims
 
@@ -236,12 +248,14 @@ def test_the_embedding_keeps_the_neighbourhoods_pca_found(run):
     emb = emb.set_index("sample_id").reindex(pcs.index)
     assert emb[emb_dims].notna().all().all(), "the embedding does not cover the PCA output"
 
-    preserved = neighbourhood_preservation(pcs[pc_dims].to_numpy(), emb[emb_dims].to_numpy(), k=30)
-    _report(run.cohort.name, "neighbourhood_preservation@30", preserved)
+    preserved = neighbourhood_preservation_over_chance(
+        pcs[pc_dims].to_numpy(), emb[emb_dims].to_numpy(), k=30
+    )
+    _report(run.cohort.name, "neighbourhood_preservation@30 (x chance)", preserved)
 
     assert preserved > MIN_NEIGHBOURHOOD_PRESERVATION, (
-        f"{run.cohort.name}: only {preserved:.1%} of each sample's 30 nearest "
-        f"neighbours in PC space survive into the embedding"
+        f"{run.cohort.name}: each sample's 30 nearest neighbours in PC space survive "
+        f"into the embedding only {preserved:.1f}x better than chance"
     )
 
 

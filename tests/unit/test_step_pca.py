@@ -33,10 +33,19 @@ class FakePCA:
 
     instances = []
 
-    def __init__(self, n_components, force=False, backend="flashpca"):
+    def __init__(
+        self,
+        n_components,
+        force=False,
+        backend="flashpca",
+        max_fit_memory_gb=8.0,
+        max_project_memory_gb=8.0,
+    ):
         self.n_components = n_components
         self.force = force
         self.backend = backend
+        self.max_fit_memory_gb = max_fit_memory_gb
+        self.max_project_memory_gb = max_project_memory_gb
         self.calls = []
         FakePCA.instances.append(self)
 
@@ -221,6 +230,19 @@ class TestRunPcaStep:
 
         run_pca_step(io, cfg)
         assert fake_pca.instances[0].force is True
+
+    def test_the_memory_budgets_reach_the_pca_object(self, tmp_path, fake_pca):
+        """The step is the only place that constructs PCA, so it is where they
+        were being dropped: both budgets sat at their defaults however large the
+        node was, and a 75 GB fit streamed at ~19x the wall clock regardless.
+        """
+        io = make_io(tmp_path)
+        cfg = PCAConfig(n_pcs=5, max_fit_memory_gb=96.0, max_project_memory_gb=24.0)
+
+        run_pca_step(io, cfg)
+
+        assert fake_pca.instances[0].max_fit_memory_gb == 96.0
+        assert fake_pca.instances[0].max_project_memory_gb == 24.0
 
     def test_second_call_is_idempotent(self, tmp_path, fake_pca):
         """Checkpointing: re-running the step on valid outputs re-uses them and

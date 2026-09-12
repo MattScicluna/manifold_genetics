@@ -51,6 +51,8 @@ def run_pca(
     n_pcs: int = 50,
     force: bool = False,
     backend: str = "python",
+    max_fit_memory_gb: float = 8.0,
+    max_project_memory_gb: float = 8.0,
 ) -> pd.DataFrame:
     """Run FlashPCA and write coordinate CSVs.
 
@@ -64,11 +66,19 @@ def run_pca(
         n_pcs: Number of principal components.
         force: Recompute even when cached flashpca outputs exist.
         backend: ``"flashpca"`` or ``"python"``; see PCAConfig.
+        max_fit_memory_gb: GB budget for the dense fit; above it the fit streams.
+        max_project_memory_gb: GB budget for one projection chunk.
 
     Returns:
         DataFrame written to ``project_output`` (sample_id, dim_1, ..., dim_N).
     """
-    pca = PCA(n_components=n_pcs, force=force, backend=backend)
+    pca = PCA(
+        n_components=n_pcs,
+        force=force,
+        backend=backend,
+        max_fit_memory_gb=max_fit_memory_gb,
+        max_project_memory_gb=max_project_memory_gb,
+    )
 
     if project_plink is None:
         return pca.fit_transform(fit_plink, output_path=project_output)
@@ -126,6 +136,8 @@ def run_pca_step(io: IOConfig, pca: PCAConfig) -> PCAStepResult:
         n_pcs=pca.n_pcs,
         force=force,
         backend=pca.backend,
+        max_fit_memory_gb=pca.max_fit_memory_gb,
+        max_project_memory_gb=pca.max_project_memory_gb,
     )
 
     return PCAStepResult(fit_pca=fit_pca, project_pca=project_pca, coords_df=coords)

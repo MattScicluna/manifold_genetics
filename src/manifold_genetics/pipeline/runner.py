@@ -32,6 +32,8 @@ def run_pipeline(
     # PCA parameters
     n_pcs: int = 50,
     pca_backend: str = "python",
+    max_fit_memory_gb: float = 8.0,
+    max_project_memory_gb: float = 8.0,
     # Admixture parameters
     k_min: int = 2,
     k_max: int = 10,
@@ -76,6 +78,14 @@ def run_pipeline(
         geographic_coords: Optional path to geographic coordinates CSV for metrics
         n_pcs: Number of principal components (default: 50)
         pca_backend: 'flashpca' (external binary) or 'python' (in process)
+        max_fit_memory_gb: GB budget for the dense standardised matrix when
+            fitting the in-process PCA backend. Above it the fit streams, which
+            bounds memory to about 110 MB at roughly nineteen times the wall
+            clock. Raise it to match the node: a 60,000 x 120,849 cohort is 54 GB
+            dense and streams under the default.
+        max_project_memory_gb: GB budget for one chunk when projecting. Peak
+            resident memory runs to about three times this. Both are ignored by
+            the flashpca backend.
         k_min: Minimum K for admixture (default: 2)
         k_max: Maximum K for admixture (default: 10)
         admix_threads: Number of threads for neural admixture (None = auto-detect)
@@ -183,6 +193,8 @@ def run_pipeline(
     results = pipeline.run(
         n_pcs=n_pcs,
         pca_backend=pca_backend,
+        max_fit_memory_gb=max_fit_memory_gb,
+        max_project_memory_gb=max_project_memory_gb,
         k_min=k_min,
         k_max=k_max,
         embedding=embedding,

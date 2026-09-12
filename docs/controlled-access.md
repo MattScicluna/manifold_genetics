@@ -87,10 +87,11 @@ Two things to look at specifically in the `--dry-run` output:
 
 If the data is not inside the example directory, point the cohort at it with its
 environment variable — `MG_AOU_PROJECTION_DATA` and the others are listed in
-[Testing against real cohorts](testing-real-cohorts.md#data-roots).
+`tests/integration/cohorts.py`, which names the environment variable holding
+each cohort's data root.
 
 ## UK Biobank
 
 The cross-projection example — variant intersection, allele consistency, strand
 flips — is documented in detail in
-[UK Biobank cross-projection](UKBB_README.md).
+`examples/ukbb/hgdp_1kgp_proj/config.yaml`.

@@ -73,9 +73,9 @@ number would be vacuous at one end and impossible at the other.
 - **The first ten PCs separate the cohort's label groups** several times better
   than shuffled labels do.
 - **The embedding keeps the neighbourhoods PCA found** — the fraction of each
-  sample's 30 nearest neighbours in PC space that survive into two dimensions.
-  Invariant to rotation and reflection, because an embedding is only defined up
-  to those.
+  sample's 30 nearest neighbours in PC space that survive into two dimensions,
+  as a multiple of chance. Invariant to rotation and reflection, because an
+  embedding is only defined up to those.
 - **The embedding separates the label groups**, again against shuffled labels.
 - **Geographic preservation** is positive and significant, where the cohort has
   coordinates.
@@ -85,14 +85,26 @@ Every measurement is printed, so a batch log records what the run scored rather
 than only that it passed. HGDP+1KGP, 2m35s on 8 cores:
 
 ```
-[hgdp] pc_separation(Population) = 54.29          floor 3.0
-[hgdp] embedding_separation(Population) = 57.53   floor 3.0
-[hgdp] neighbourhood_preservation@30 = 0.3328     floor 0.05, chance 0.007
-[hgdp] geographic_correlation = 0.5888            floor 0.4
+[hgdp] pc_separation(Population) = 54.29                       floor 3.0
+[hgdp] embedding_separation(Population) = 57.53                floor 3.0
+[hgdp] neighbourhood_preservation@30 (x chance) = 45.4         floor 10.0
+[hgdp] geographic_correlation = 0.5927                         floor 0.4
+
+[ukbb_projection] pc_separation(self_described_ancestry) = 21220
+[ukbb_projection] embedding_separation(...) = 19580
+[ukbb_projection] neighbourhood_preservation@30 (x chance) = 182.0
 ```
 
 The thresholds are floors a healthy run clears by more than an order of
 magnitude: they are there to catch a pipeline that broke, not one that drifted.
+
+Every threshold is stated against chance, which is what lets one number serve
+cohorts spanning 3,400 to 486,748 samples. Neighbourhood preservation was the
+exception until 2026-09-12, when it was a raw fraction with a floor of 0.05 —
+and UK Biobank's 0.011 failed it while HGDP's 0.333 passed, even though against
+chance UK Biobank scores 182x to HGDP's 45x. Chance overlap is `k / (n - 1)`,
+which falls by two orders of magnitude across that range, so a raw floor can
+only ever be right for one cohort.
 Add `-s` to see them locally; `submit_cohort_tests.sh` already does.
 
 ## On a SLURM cluster

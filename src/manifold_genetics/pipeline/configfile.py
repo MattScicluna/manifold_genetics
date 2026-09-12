@@ -101,7 +101,17 @@ _DATA_KEYS = {
 }
 _PATH_KEYS = set(_DATA_KEYS)
 
-_PCA_KEYS = {"n_pcs": "n_pcs", "backend": "pca_backend", "force": "force_pca"}
+_PCA_KEYS = {
+    "n_pcs": "n_pcs",
+    "backend": "pca_backend",
+    "force": "force_pca",
+    # Memory budgets, in GB. Worth setting from the config because the right
+    # value is a property of the machine the run is submitted to, not of the
+    # cohort -- and because the fit silently streams at ~19x the wall clock
+    # above the budget, which is the kind of slowness nobody diagnoses.
+    "max_fit_memory_gb": "max_fit_memory_gb",
+    "max_project_memory_gb": "max_project_memory_gb",
+}
 _ADMIXTURE_KEYS = {
     "k_min": "k_min",
     "k_max": "k_max",

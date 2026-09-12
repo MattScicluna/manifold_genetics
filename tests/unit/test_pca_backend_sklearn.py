@@ -19,7 +19,11 @@ space at all.
 import numpy as np
 import pytest
 
-from manifold_genetics.pca.backends.sklearn_backend import SklearnPCABackend
+from manifold_genetics.pca.backends.sklearn_backend import (
+    PROJECT_BYTES_PER_DOSAGE,
+    SklearnPCABackend,
+)
+from manifold_genetics.pca.flashpca import PCA
 
 # 2 -> 00, 1 -> 10, 0 -> 11, NaN -> 01  (inverse of the reader's decoding)
 _DOSAGE_TO_CODE = {2: 0b00, 1: 0b10, 0: 0b11}
@@ -184,3 +188,65 @@ class TestChunking:
         )
 
         np.testing.assert_allclose(chunked, whole, atol=1e-10)
+
+    def test_a_cohort_too_large_to_hold_is_chunked_without_being_asked(self):
+        """Projection must bound its own memory, as ``max_fit_memory_gb`` does for fit.
+
+        Until this was added, ``variant_chunk_size`` defaulted to None and was
+        set nowhere outside these tests, so every real projection read the whole
+        cohort in one pass. On UK Biobank (486,748 samples x 120,849 variants)
+        that is 14.7 GB of raw bytes plus a 58.8 GB uint8 unpack buffer; because
+        ``np.empty`` commits lazily, the allocation succeeds and the process is
+        OOM-killed while faulting pages in -- no MemoryError, no traceback.
+        Observed on Narval in a 32 GB allocation, 2026-09-12.
+        """
+        backend = SklearnPCABackend(n_components=20)
+
+        chunk = backend._resolve_project_chunk_size(n_samples=486_748, n_variants=120_849)
+
+        assert chunk < 120_849, "a cohort far past the budget was not chunked"
+        peak = 486_748 * chunk * PROJECT_BYTES_PER_DOSAGE
+        assert peak <= backend.max_project_memory_gb * 1024**3
+
+    def test_a_cohort_that_fits_is_read_in_one_pass(self, structured_cohort):
+        """Chunking costs one read per chunk, so it must not switch on early."""
+        backend = SklearnPCABackend(n_components=3)
+
+        assert backend._resolve_project_chunk_size(n_samples=3_340, n_variants=120_849) == 120_849
+
+    def test_an_explicit_chunk_size_overrides_the_budget(self):
+        backend = SklearnPCABackend(n_components=3, variant_chunk_size=7)
+
+        assert backend._resolve_project_chunk_size(n_samples=3_340, n_variants=120_849) == 7
+
+
+class TestMemoryBudgetsAreReachable:
+    """The budgets must be settable by whoever knows how much memory the job has.
+
+    Both defaulted to 8 GB and were reachable only by constructing the backend
+    directly, which the pipeline does not do. So a 59,264 x 169,829 fit -- 75 GB
+    dense -- streamed at roughly nineteen times the wall clock on a node with
+    128 GB free, and no config key or flag could say otherwise. Asking SLURM for
+    more memory changed nothing, which is the opposite of what a user expects.
+    """
+
+    def test_pca_passes_the_fit_budget_to_the_backend(self):
+        pca = PCA(n_components=3, backend="python", max_fit_memory_gb=64.0)
+
+        assert pca._py_backend.max_fit_memory_gb == 64.0
+
+    def test_pca_passes_the_project_budget_to_the_backend(self):
+        pca = PCA(n_components=3, backend="python", max_project_memory_gb=24.0)
+
+        assert pca._py_backend.max_project_memory_gb == 24.0
+
+    def test_a_raised_fit_budget_holds_a_matrix_that_would_otherwise_stream(self):
+        """The point of the knob: 54 GB dense fits in 64 GB and must not stream."""
+        backend = SklearnPCABackend(n_components=20, max_fit_memory_gb=64.0)
+
+        assert backend._resolve_fit_chunk_size(n_samples=60_000, n_variants=120_849) is None
+
+    def test_the_default_still_streams_that_matrix(self):
+        backend = SklearnPCABackend(n_components=20)
+
+        assert backend._resolve_fit_chunk_size(n_samples=60_000, n_variants=120_849) is not None
