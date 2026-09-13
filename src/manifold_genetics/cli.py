@@ -467,6 +467,10 @@ def cmd_init(args):
 
     relative = config if out != Path(".") else config.name
     print(f"\nWrote {config}")
+    if args.target == "synthetic":
+        from .scaffold import GROUND_TRUTH_FIGURE
+
+        print(f"Drew the tree the cohort lies along in {out / GROUND_TRUTH_FIGURE}")
     print("\nNext:")
     print(f"  manifold-genetics run {relative} --dry-run   # print the settings")
     print(f"  manifold-genetics run {relative}             # do the work")

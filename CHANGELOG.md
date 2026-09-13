@@ -7,6 +7,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **`init synthetic` draws the tree the cohort lies along**, as
+  `dla_tree_ground_truth.png` beside the config: solid coloured branches in the
+  embedding's colours, faint dashed grey gaps. It is the same figure manylatents
+  draws for this tree, so the two can be compared side by side, and it is the
+  shape the embedding under `outputs/figures/` is supposed to recover.
+- **`gamma` is accepted in a config file's `embedding` section** and passed to
+  PHATE. The synthetic config sets it to 0, the log-potential distance, under
+  which the tree's branches read more clearly than under the default of 1.
+
 ### Changed
 
 - **`init synthetic` now simulates a branching tree with gaps, not three blobs.**
@@ -18,12 +29,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   comparable with one made there, and the embedding now has a known shape to
   check rather than merely groups to separate. The label column is `branch`
   (values `Branch 1` to `Branch 8`), 2,000 samples and 1,000 variants.
-
-### Added
-
-- **`gamma` is accepted in a config file's `embedding` section** and passed to
-  PHATE. The synthetic config sets it to 0, the log-potential distance, under
-  which the tree's branches read more clearly than under the default of 1.
 
 ### Fixed
 

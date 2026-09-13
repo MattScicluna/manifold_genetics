@@ -16,10 +16,12 @@ import pytest
 from manifold_genetics.scaffold import (
     DLA_TREE_EDGES,
     DLA_TREE_GAPS,
+    _tree_layout,
     dla_tree,
     genotypes_from_coordinates,
     hgdp_subsets,
     init_synthetic,
+    plot_dla_tree,
 )
 
 
@@ -57,6 +59,22 @@ class TestDlaTree:
         assert np.allclose(coordinates[branch == 2][0], end_of_1)
         assert np.linalg.norm(coordinates[branch == 3][0] - end_of_1) > 10 * step
 
+    def test_layout_puts_siblings_side_by_side_under_their_parent(self):
+        """Node 2 has three children (edges 2, 6 and 12) and node 6 has two
+        (edges 5 and 8): they must sit one row below, spread around the
+        parent, so the drawing reads as the tree rather than as a line."""
+        position = _tree_layout(DLA_TREE_EDGES)
+
+        assert position[1] == (0.0, 0.0)
+        assert [position[n] for n in (3, 10, 8)] == [(-3.0, -4.0), (0.0, -4.0), (3.0, -4.0)]
+        assert position[7][1] == position[9][1] < position[6][1]
+        assert position[7][0] < position[6][0] < position[9][0]
+
+    def test_draws_a_png(self, tmp_path):
+        written = plot_dla_tree(tmp_path / "tree.png")
+
+        assert written.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
     def test_genotypes_are_plink_dosages(self):
         coordinates, _ = dla_tree()
 
@@ -80,6 +98,7 @@ class TestSyntheticScaffold:
             "data/project_subset.fam",
             "data/labels.csv",
             "colormap.json",
+            "dla_tree_ground_truth.png",
         ):
             assert (tmp_path / name).exists(), f"init did not write {name}"
         assert written == tmp_path / "config.yaml"
