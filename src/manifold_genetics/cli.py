@@ -428,6 +428,33 @@ def cmd_plot_knn_composition(args):
     return 0
 
 
+def cmd_init(args):
+    """Write a runnable config, and the data to run it on."""
+    setup_logging(args.verbose)
+
+    from .scaffold import init_hgdp, init_synthetic
+
+    out = Path(args.out)
+    try:
+        if args.target == "synthetic":
+            config = init_synthetic(out, force=args.force)
+        else:
+            config = init_hgdp(out, force=args.force, download=not args.no_download)
+    except FileExistsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    relative = config if out != Path(".") else config.name
+    print(f"\nWrote {config}")
+    print("\nNext:")
+    print(f"  manifold-genetics run {relative} --dry-run   # print the settings")
+    print(f"  manifold-genetics run {relative}             # do the work")
+    return 0
+
+
 def cmd_setup(args):
     """Download external tools (plink2, flashpca, optional plink v1.9)."""
     setup_logging(args.verbose)
@@ -1218,15 +1245,52 @@ def main(argv: Optional[List[str]] = None):
     plot_proj_parser.set_defaults(func=cmd_plot_projection)
 
     # Setup command (download external tools)
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Write a runnable config, and the data to run it on",
+        description=(
+            "Scaffold a working pipeline in one command.\n\n"
+            "  synthetic   Simulate a small cohort and write everything beside it.\n"
+            "              No network, a few seconds, and it runs end to end -- the\n"
+            "              quickest way to confirm an installation works.\n\n"
+            "  hgdp        Fetch the real HGDP+1KGP cohort (about 183 MB) and prepare\n"
+            "              it: 4,094 QC-passing samples across seven genetic regions,\n"
+            "              fitted on the 3,400 that are also unrelated. Needs internet\n"
+            "              and plink2, which is fetched if missing -- so on a cluster,\n"
+            "              run this on a login node.\n\n"
+            "Neither overwrites an existing config.yaml unless you pass --force."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    init_parser.add_argument(
+        "target",
+        choices=["synthetic", "hgdp"],
+        help="Which cohort to scaffold",
+    )
+    init_parser.add_argument(
+        "--out", default=".", help="Directory to write into (default: the current one)"
+    )
+    init_parser.add_argument(
+        "--force", action="store_true", help="Overwrite an existing config.yaml"
+    )
+    init_parser.add_argument(
+        "--no-download",
+        action="store_true",
+        help="hgdp only: expect the archive to be extracted already",
+    )
+    init_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    init_parser.set_defaults(func=cmd_init)
+
     setup_parser = subparsers.add_parser(
         "setup",
         help="Download external tools (plink2, flashpca, optional plink v1.9)",
         description=(
             "Download the external command-line tools required by the pipeline.\n\n"
-            "Tools are placed in the bin/ directory under the project root:\n"
-            "  bin/plink2   (~20 MB)\n"
-            "  bin/flashpca (~2 MB)\n"
-            "  bin/plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
+            "Tools are cached per user (~/.cache/manifold-genetics/bin), or in the\n"
+            "checkout's bin/ when you are running from one:\n"
+            "  plink2   (~20 MB)\n"
+            "  flashpca (~2 MB, Linux x86-64 only)\n"
+            "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
             "Requires internet access (run on a login node, not a compute node).\n"
             "This command does NOT manage the Python environment."
         ),
