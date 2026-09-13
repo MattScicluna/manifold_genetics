@@ -24,8 +24,19 @@ works.
 
 `hgdp` downloads about 183 MB and prepares it with plink2 — 4,094 QC-passing
 samples across seven genetic regions, fitted on the 3,400 that are also
-unrelated. It needs internet, so on a cluster run it on a login node. Pass
-`--no-download` if the archive is already extracted under `data/raw`.
+unrelated. It needs internet, so on a cluster run it on a login node.
+
+If the download fails — a TLS-intercepting proxy, or a machine with no route out
+— fetch the archive by other means and point `init` at it:
+
+```bash
+curl -L -o hgdp_1kgp_full.tar.gz '<the URL init prints>'
+manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
+```
+
+`curl` and `wget` use the system certificate store, which on a managed network
+usually already trusts the proxy. `--no-download` means never fetch: it still
+unpacks an archive that is already there.
 
 Both take `--out DIR`, and neither overwrites an existing `config.yaml` without
 `--force`.
@@ -42,6 +53,11 @@ a few command-line overrides, runs the pipeline.
 - `--dry-run` prints the resolved call and exits. Use it before anything long.
 - `--output DIR` overrides `output_dir`, so one config can drive a verification
   run without being edited.
+- `--memory-gb GB` overrides the PCA memory budget, because how much memory
+  you have is a property of the machine rather than of the analysis. Above
+  the budget the fit streams: bounded memory, about nineteen times the wall
+  clock. Lower it if a run is killed; raise it on a large node to keep a big
+  cohort in memory.
 - `--skip-pca`, `--skip-admixture`, `--skip-metrics` add to the config's own
   skip settings.
 - `-v` enables debug logging for this package only. It does not turn on debug

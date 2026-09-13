@@ -46,13 +46,19 @@ def binom2_stats(dosages: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return mean, np.sqrt(var)
 
 
-def standardize_dosages(dosages: np.ndarray, mean: np.ndarray, sd: np.ndarray) -> np.ndarray:
+def standardize_dosages(
+    dosages: np.ndarray, mean: np.ndarray, sd: np.ndarray, copy: bool = True
+) -> np.ndarray:
     """Centre and scale dosages, imputing missing genotypes to the variant mean.
 
     Args:
         dosages: ``(n_samples, n_variants)`` A1 dosages, NaN where missing.
         mean: ``(n_variants,)`` reference means.
         sd: ``(n_variants,)`` reference SDs.
+        copy: False standardises into ``dosages`` and returns it, which is the
+            difference between holding one array of the cohort and holding
+            several. Only safe when the caller owns the array; the PCA backend
+            does, having just read it.
 
     Returns:
         ``(n_samples, n_variants)`` standardised float64 array, always finite.
@@ -73,6 +79,21 @@ def standardize_dosages(dosages: np.ndarray, mean: np.ndarray, sd: np.ndarray) -
             f"got mean{mean.shape} and sd{sd.shape}"
         )
 
-    centred = dosages - mean
-    out = np.divide(centred, sd, out=np.zeros_like(centred), where=sd > 0)
-    return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+    if copy:
+        out = dosages - mean
+    else:
+        # Four float64 arrays of the input's size were allocated here -- the
+        # input, the centred copy, a zeros_like for the divide, and
+        # nan_to_num's copy. At ~32 bytes per element a 3,400 x 172,152 fit
+        # wants 17 GB, while the budget deciding whether to hold it counts 8
+        # bytes per element. A fit was OOM-killed on that gap, 2026-09-13.
+        out = np.subtract(dosages, mean, out=dosages)
+
+    np.divide(out, sd, out=out, where=sd > 0)
+    # `where` leaves those entries untouched rather than zeroed, so the
+    # zero-variance columns still carry their centred values and must be set.
+    zero_variance = sd <= 0
+    if zero_variance.any():
+        out[:, zero_variance] = 0.0
+
+    return np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)

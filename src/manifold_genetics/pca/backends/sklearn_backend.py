@@ -34,11 +34,15 @@ __all__ = ["SklearnPCABackend"]
 PathLike = Union[str, Path]
 
 
-# Peak bytes per (sample, variant) while projecting one chunk. read_bed_dosages
-# holds a uint8 code buffer (1) and builds a float64 dosage array (8) from it;
-# standardize_dosages then allocates a second float64 (8) while the first is
-# still referenced. The raw .bed bytes add a further 0.25, inside the rounding.
-PROJECT_BYTES_PER_DOSAGE = 17
+# Peak bytes per (sample, variant) held by either the fit or a projection chunk.
+# read_bed_dosages holds a uint8 code buffer (1) while it builds the float64
+# dosage array (8); standardisation then happens in place, so there is no second
+# float64. The raw .bed bytes add a further 0.25, inside the rounding.
+#
+# This was 17 while standardisation allocated a copy, and the fit path counted
+# only 8 -- which is how a 3,400 x 172,152 fit was judged to need 4.4 GB, was
+# held dense, and was killed.
+BYTES_PER_DOSAGE = 9
 
 
 class SklearnPCABackend(PCABackend):
@@ -131,8 +135,9 @@ class SklearnPCABackend(PCABackend):
         else:
             dosages = read_bed_dosages(plink_prefix, n_samples=n_samples, n_variants=n_variants)
             mean, sd = binom2_stats(dosages)
-            X = standardize_dosages(dosages, mean, sd)
-            del dosages
+            # In place: this array is ours, and a second copy of it is the
+            # difference between a fit that runs and one that is OOM-killed.
+            X = standardize_dosages(dosages, mean, sd, copy=False)
             sum_sq = float(np.sum(X**2))
             U, S, Vt = randomized_svd(
                 X,
@@ -170,10 +175,11 @@ class SklearnPCABackend(PCABackend):
             return self.fit_chunk_size
 
         budget = self.max_fit_memory_gb * 1024**3
-        if n_samples * n_variants * 8 <= budget:
+        per_variant = n_samples * BYTES_PER_DOSAGE
+        if n_variants * per_variant <= budget:
             return None
 
-        return max(1, int(budget // (n_samples * 8)))
+        return max(1, int(budget // per_variant))
 
     def _resolve_project_chunk_size(self, n_samples: int, n_variants: int) -> int:
         """Variants per chunk when projecting, bounded by the memory budget.
@@ -185,7 +191,7 @@ class SklearnPCABackend(PCABackend):
             return self.variant_chunk_size
 
         budget = self.max_project_memory_gb * 1024**3
-        per_variant = n_samples * PROJECT_BYTES_PER_DOSAGE
+        per_variant = n_samples * BYTES_PER_DOSAGE
         if n_variants * per_variant <= budget:
             return n_variants
 
@@ -222,7 +228,9 @@ class SklearnPCABackend(PCABackend):
                 n_variants=n_variants,
                 variants=slice(start, stop),
             )
-            yield start, stop, standardize_dosages(dosages, mean[start:stop], sd[start:stop])
+            yield start, stop, standardize_dosages(
+                dosages, mean[start:stop], sd[start:stop], copy=False
+            )
 
     def _streaming_svd(self, prefix, n_samples, n_variants, mean, sd, chunk=None):
         """Randomized SVD that never materialises the standardised matrix.
@@ -286,7 +294,9 @@ class SklearnPCABackend(PCABackend):
                 n_variants=n_variants,
                 variants=slice(start, stop),
             )
-            Xc = standardize_dosages(dosages, model.mean[start:stop], model.sd[start:stop])
+            Xc = standardize_dosages(
+                dosages, model.mean[start:stop], model.sd[start:stop], copy=False
+            )
             coords += Xc @ model.loadings[start:stop]
 
         return coords / scale
