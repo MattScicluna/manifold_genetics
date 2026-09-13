@@ -35,16 +35,6 @@ Two commands to a figure. Assumes you have [installed it](install.md).
 Both write into the current directory; `--out DIR` puts them elsewhere, and
 neither overwrites an existing `config.yaml` without `--force`.
 
-!!! tip "Behind a proxy, or offline"
-
-    `init` falls back to `curl` and `wget`, which use the system certificate
-    store. If there is no route out at all, fetch the archive separately and
-    point at it:
-
-    ```bash
-    manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
-    ```
-
 ## 2. Look before you run
 
 ```bash
@@ -61,8 +51,7 @@ long run.
 manifold-genetics run config.yaml
 ```
 
-If the run is killed, set a memory budget. Above it the PCA fit streams, which
-bounds memory at roughly nineteen times the wall clock.
+If the run is killed, set a memory budget:
 
 ```bash
 manifold-genetics run config.yaml --memory-gb 4

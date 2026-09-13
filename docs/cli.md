@@ -28,17 +28,17 @@ works.
 samples across seven genetic regions, fitted on the 3,400 that are also
 unrelated. It needs internet, so on a cluster run it on a login node.
 
-If the download fails — a TLS-intercepting proxy, or a machine with no route out
-— fetch the archive by other means and point `init` at it:
+A TLS-intercepting proxy needs nothing from you: `init` falls back to `curl` and
+`wget`, which use the system certificate store rather than Python's.
+
+On a machine with no route out at all — a compute node, say — fetch the archive
+elsewhere and point `init` at it:
 
 ```bash
-curl -L -o hgdp_1kgp_full.tar.gz '<the URL init prints>'
 manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
 ```
 
-`curl` and `wget` use the system certificate store, which on a managed network
-usually already trusts the proxy. `--no-download` means never fetch: it still
-unpacks an archive that is already there.
+`--no-download` means never fetch: it still unpacks an archive already present.
 
 `custom` takes `--fit-plink`, `--labels`, and optionally `--project-plink`,
 `--preset` and `--n-pcs`. It writes a colour for every label value -- 22 of them
