@@ -53,6 +53,11 @@ a few command-line overrides, runs the pipeline.
 - `--dry-run` prints the resolved call and exits. Use it before anything long.
 - `--output DIR` overrides `output_dir`, so one config can drive a verification
   run without being edited.
+- `--memory-gb GB` overrides the PCA memory budget, because how much memory
+  you have is a property of the machine rather than of the analysis. Above
+  the budget the fit streams: bounded memory, about nineteen times the wall
+  clock. Lower it if a run is killed; raise it on a large node to keep a big
+  cohort in memory.
 - `--skip-pca`, `--skip-admixture`, `--skip-metrics` add to the config's own
   skip settings.
 - `-v` enables debug logging for this package only. It does not turn on debug

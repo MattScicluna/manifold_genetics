@@ -200,6 +200,14 @@ def cmd_run(args):
 
     if args.output:
         kwargs["output_dir"] = Path(args.output)
+
+    if args.memory_gb is not None:
+        # How much memory is available is a property of the machine, not of the
+        # analysis, so it should not require editing a config that may be shared
+        # or checked in. Sets both budgets: a caller saying "this box is small"
+        # means it for the whole run.
+        kwargs["max_fit_memory_gb"] = args.memory_gb
+        kwargs["max_project_memory_gb"] = args.memory_gb
     # Command-line skips add to the config's own rather than replacing them: a
     # flag says "also skip this", never "skip only this".
     for stage in ("pca", "admixture", "embedding", "metrics"):
@@ -1577,6 +1585,17 @@ def main(argv: Optional[List[str]] = None):
     )
     run_parser.add_argument("config", help="Path to the YAML config file")
     run_parser.add_argument("--output", help="Override the config's output_dir")
+    run_parser.add_argument(
+        "--memory-gb",
+        type=float,
+        default=None,
+        metavar="GB",
+        help=(
+            "Memory budget for PCA, overriding the config. Above it the fit streams: "
+            "bounded memory, roughly nineteen times the wall clock. Lower this if a "
+            "run is killed; raise it on a large node to keep a big cohort in memory"
+        ),
+    )
     run_parser.add_argument(
         "--dry-run",
         action="store_true",

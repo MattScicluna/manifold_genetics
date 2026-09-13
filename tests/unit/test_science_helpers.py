@@ -118,3 +118,60 @@ def test_the_same_quality_scores_the_same_at_two_cohort_sizes():
 
     small, large = scores
     assert large > 0.3 * small, f"correction did not transfer across n: {small:.0f} vs {large:.0f}"
+
+
+# ---------------------------------------------------------------------------
+# Standardisation memory
+# ---------------------------------------------------------------------------
+
+
+def test_standardising_in_place_gives_identical_results():
+    """The in-place path must be an allocation change, not a numerical one.
+
+    `standardize_dosages` allocated four float64 arrays of the input's size --
+    the input, the centred copy, a `zeros_like` for the divide, and
+    `nan_to_num`'s copy. At about 32 bytes per element a 3,400 x 172,152 fit
+    needs 17 GB, while the memory budget that decides whether to hold it counts
+    only 8 bytes per element, or 4.4 GB. That gap is what got a fit OOM-killed
+    on a user's machine on 2026-09-13.
+    """
+    import numpy as np
+
+    from manifold_genetics.pca.standardize import binom2_stats, standardize_dosages
+
+    rng = np.random.default_rng(0)
+    dosages = rng.binomial(2, 0.3, size=(50, 40)).astype(float)
+    dosages[rng.random(dosages.shape) < 0.05] = np.nan
+    mean, sd = binom2_stats(dosages)
+
+    expected = standardize_dosages(dosages, mean, sd)
+    in_place = standardize_dosages(dosages.copy(), mean, sd, copy=False)
+
+    np.testing.assert_array_equal(in_place, expected)
+
+
+def test_standardising_in_place_writes_into_the_input():
+    import numpy as np
+
+    from manifold_genetics.pca.standardize import standardize_dosages
+
+    dosages = np.array([[0.0, 2.0], [2.0, 0.0]])
+    mean, sd = np.array([1.0, 1.0]), np.array([1.0, 1.0])
+
+    result = standardize_dosages(dosages, mean, sd, copy=False)
+
+    assert result is dosages, "copy=False must not allocate a second array"
+
+
+def test_zero_variance_variants_are_still_zeroed_in_place():
+    """The divide is skipped where sd is 0, so those columns must be set, not left."""
+    import numpy as np
+
+    from manifold_genetics.pca.standardize import standardize_dosages
+
+    dosages = np.array([[2.0, 0.0], [2.0, 2.0]])
+    mean, sd = np.array([2.0, 1.0]), np.array([0.0, 1.0])
+
+    result = standardize_dosages(dosages, mean, sd, copy=False)
+
+    assert (result[:, 0] == 0).all(), "a zero-variance variant must standardise to 0"

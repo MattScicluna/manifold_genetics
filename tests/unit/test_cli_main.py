@@ -828,3 +828,42 @@ def test_cmd_pipeline_prints_metrics(monkeypatch, tmp_path, stub_validation, cap
     out = capsys.readouterr().out
     assert "Geographic preservation" in out
     assert "K=2" in out
+
+
+def test_run_memory_gb_overrides_both_budgets(tmp_path, monkeypatch, capsys):
+    """A machine's memory is a property of the machine, not of the config file.
+
+    The budgets are `pca:` keys, so adjusting them meant editing a config that
+    may be shared, checked in, or someone else's. `--memory-gb` is the override
+    for "this box is smaller than the one this config was written for".
+    """
+    import yaml
+
+    from manifold_genetics.cli import main
+
+    (tmp_path / "data").mkdir()
+    for name in ("fit", "project"):
+        (tmp_path / "data" / f"{name}.bed").touch()
+    (tmp_path / "labels.csv").touch()
+    (tmp_path / "colors.json").touch()
+    (tmp_path / "config.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "data": {
+                    "fit_plink": "data/fit",
+                    "project_plink": "data/project",
+                    "labels": "labels.csv",
+                    "colormap": "colors.json",
+                    "output_dir": "out",
+                },
+                "pca": {"n_pcs": 5, "max_fit_memory_gb": 64},
+            }
+        )
+    )
+
+    rc = main(["run", str(tmp_path / "config.yaml"), "--memory-gb", "3", "--dry-run"])
+
+    assert rc == 0
+    printed = capsys.readouterr().out
+    assert "max_fit_memory_gb               3.0" in printed, printed
+    assert "max_project_memory_gb           3.0" in printed, printed

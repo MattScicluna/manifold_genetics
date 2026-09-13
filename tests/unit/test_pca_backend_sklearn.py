@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from manifold_genetics.pca.backends.sklearn_backend import (
-    PROJECT_BYTES_PER_DOSAGE,
+    BYTES_PER_DOSAGE,
     SklearnPCABackend,
 )
 from manifold_genetics.pca.flashpca import PCA
@@ -205,7 +205,7 @@ class TestChunking:
         chunk = backend._resolve_project_chunk_size(n_samples=486_748, n_variants=120_849)
 
         assert chunk < 120_849, "a cohort far past the budget was not chunked"
-        peak = 486_748 * chunk * PROJECT_BYTES_PER_DOSAGE
+        peak = 486_748 * chunk * BYTES_PER_DOSAGE
         assert peak <= backend.max_project_memory_gb * 1024**3
 
     def test_a_cohort_that_fits_is_read_in_one_pass(self, structured_cohort):
