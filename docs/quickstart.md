@@ -1,7 +1,6 @@
 # Quickstart
 
-Two commands to a figure, on a cohort the package fetches or simulates for you.
-Assumes you have [installed it](install.md).
+Two commands to a figure. Assumes you have [installed it](install.md).
 
 ## 1. Pick a cohort
 
@@ -12,15 +11,14 @@ Assumes you have [installed it](install.md).
     manifold-genetics run config.yaml
     ```
 
-    Simulates 2,000 samples along a branching tree and writes the genotypes,
-    labels, colormap and config beside each other. Nothing is downloaded and the
-    whole run takes under a minute, which makes it the quickest way to confirm an
-    installation works.
+    2,000 samples simulated along a branching tree, with the genotypes, labels,
+    colormap and config written beside each other. Under a minute, nothing
+    downloaded.
 
     It also writes `dla_tree_ground_truth.png`, the tree the cohort was drawn
-    along. Compare it with `outputs/figures/embeddings/project_phate_by_branch.png`:
-    the eight branches should be recognisable in both, and the branches past an
-    unsampled gap edge appear detached in the embedding.
+    along. Compare it with
+    `outputs/figures/embeddings/project_phate_by_branch.png`: the eight branches
+    should be recognisable in both.
 
 === "Real — HGDP+1KGP, about 183 MB"
 
@@ -29,22 +27,19 @@ Assumes you have [installed it](install.md).
     manifold-genetics run config.yaml
     ```
 
-    Downloads the public HGDP+1KGP cohort and prepares it: 4,094 QC-passing
-    samples across seven genetic regions, with the model fitted on the 3,400 that
-    are also unrelated. Needs internet and `plink2`, which is fetched
-    automatically — so on a cluster, run `init` on a login node.
+    The public HGDP+1KGP cohort: 4,094 QC-passing samples across seven genetic
+    regions, fitted on the 3,400 that are also unrelated. Needs internet and
+    `plink2`, which is fetched automatically — on a cluster, run `init` on a
+    login node. A few minutes.
 
-    Expect a few minutes rather than seconds.
-
-Both write into the current directory; pass `--out DIR` to put them somewhere
-else. Neither overwrites an existing `config.yaml` without `--force`.
+Both write into the current directory; `--out DIR` puts them elsewhere, and
+neither overwrites an existing `config.yaml` without `--force`.
 
 !!! tip "Behind a proxy, or offline"
 
-    If the download fails with a certificate error, `init` falls back to `curl`
-    and `wget`, which use the system certificate store. If it still cannot reach
-    the network — an HPC compute node, say — fetch the archive by other means and
-    point it at the file:
+    `init` falls back to `curl` and `wget`, which use the system certificate
+    store. If there is no route out at all, fetch the archive separately and
+    point at it:
 
     ```bash
     manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
@@ -56,9 +51,9 @@ else. Neither overwrites an existing `config.yaml` without `--force`.
 manifold-genetics run config.yaml --dry-run
 ```
 
-This prints every setting the run will use, marking `(default)` on anything the
-package supplied rather than the config file, then exits without doing work. On
-a cohort where PCA takes hours, this is the cheapest thing you will ever do.
+Prints every setting the run will use, marking `(default)` on anything the
+package supplied rather than the config file, then exits. Worth doing before any
+long run.
 
 ## 3. Run it
 
@@ -66,9 +61,8 @@ a cohort where PCA takes hours, this is the cheapest thing you will ever do.
 manifold-genetics run config.yaml
 ```
 
-If the run is killed, it is almost certainly memory. `--memory-gb N` sets the
-budget: above it the PCA fit streams, which bounds memory at the cost of about
-nineteen times the wall clock.
+If the run is killed, set a memory budget. Above it the PCA fit streams, which
+bounds memory at roughly nineteen times the wall clock.
 
 ```bash
 manifold-genetics run config.yaml --memory-gb 4
@@ -76,8 +70,7 @@ manifold-genetics run config.yaml --memory-gb 4
 
 ## Your own data
 
-Once you have PLINK files and a label CSV, `init custom` writes the config and
-the colormap for them:
+`init custom` writes the config and colormap for PLINK files you already have:
 
 ```bash
 manifold-genetics init custom \
@@ -86,22 +79,14 @@ manifold-genetics init custom \
     --preset whole_cohort
 ```
 
-`--project-plink` defaults to the fit set, which is the common case of one
-cohort embedded whole. Pass it when the two differ — fitting a reference panel
-and projecting onto it, for instance.
+`--project-plink` defaults to the fit set. Pass it when the two differ, as in a
+projection onto a reference panel.
 
-It does two things worth not doing by hand:
+It generates a colour for every label value, and refuses if fewer than half the
+genotyped samples appear in the label file — a mismatch otherwise shows up as a
+figure that colours some of its points and looks finished.
 
-- **Writes a colour for every value of every label column.** UK Biobank's
-  `self_described_ancestry` has 22 of them; a value missing from the colormap is
-  drawn grey and left out of the legend. The generated file is a starting point
-  you recolour for a figure, not a final answer.
-- **Checks the labels describe the cohort.** Below 50% of genotyped samples
-  appearing in the label file it refuses and tells you the fraction it found.
-  This is the failure that does not announce itself: a stale label file produces
-  a figure that colours some of the points and looks finished.
-
-You can of course write both files yourself — the formats are below.
+The formats are below if you would rather write both files yourself.
 
 ## What goes in
 
@@ -114,8 +99,8 @@ Four kinds of file, named in the config:
 | **colormap** | JSON mapping a label column to `{value: colour}` |
 | **coordinates** *(optional)* | CSV with `sample_id`, `latitude`, `longitude` |
 
-Two genotype sets go in, and which one the model is **fitted** on is the choice
-that defines the analysis; the preset names that choice. Labels look like this:
+Which of the two genotype sets the model is **fitted** on is the choice the
+preset names. Labels look like this:
 
 ```csv
 sample_id,Population,Genetic_region_merged
@@ -123,9 +108,8 @@ HG00096,GBR,Europe
 HG00097,GBR,Europe
 ```
 
-A `sample_id` column is required; every other column is a grouping you might
-want to colour by. The colormap names which of those columns are worth plotting,
-and what colour each value gets:
+The colormap says which of those columns to plot, and what colour each value
+gets:
 
 ```json
 {
@@ -137,8 +121,7 @@ and what colour each value gets:
 Every column the colormap names gets its own figure. A column it does not name
 is carried through but never plotted.
 
-Geographic coordinates are optional, and only needed for the geographic
-preservation metric:
+Coordinates are needed only for the geographic preservation metric:
 
 ```csv
 sample_id,latitude,longitude
@@ -157,18 +140,16 @@ data:
   project_plink: data/project_subset   # and applied to this
 ```
 
-The `.bed` must be SNP-major, which is what PLINK writes by default. If it is
-not, the error says so and gives you the `plink --make-bed` command to convert
-it. Both cohorts must carry the same variants in the same order — the pipeline
-checks this and refuses to project a mismatched set rather than producing
-confident nonsense.
+The `.bed` must be SNP-major, which is what PLINK writes by default; if not,
+the error gives you the `plink --make-bed` command to convert it. Both cohorts
+must carry the same variants in the same order, and a mismatch is refused rather
+than projected.
 
 !!! warning "The labels must actually match the genotypes"
 
-    A label file left over from a superseded sample selection is the failure
-    mode that costs the most, because nothing crashes — you get figures that are
-    simply wrong. The pipeline refuses to run unless the overlap covers at least 50% of
-    the smaller file, and tells you the fraction it found. Check that number.
+    A stale label file does not crash — it produces figures that are simply
+    wrong. The pipeline refuses below 50% overlap and reports the fraction it
+    found. Check that number.
 
 ## What comes out
 
@@ -227,6 +208,20 @@ Two details worth knowing:
 Every CSV has the same shape — a `sample_id` column then `dim_1 … dim_n` — which
 is what lets the stages compose, and lets you start from the middle if you
 already have principal components.
+
+## All of Us
+
+For readers with access to the controlled data tier, working inside the
+Researcher Workbench. The data cannot be reached from outside.
+
+```bash
+manifold-genetics init aou
+```
+
+This one does not fetch anything — preparing All of Us is workbench-specific
+work the package does not reproduce. It checks you are somewhere it could run,
+names anything missing, and writes the config matching
+`examples/aou/hgdp_1kgp_proj/`. Run that example's `prepare_data.sh` first.
 
 ## Then what
 
