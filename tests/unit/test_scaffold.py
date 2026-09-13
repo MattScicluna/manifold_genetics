@@ -432,8 +432,18 @@ class TestHgdpConfigMatchesTheShippedExample:
         (tmp_path / "config.yaml").write_text(_HGDP_CONFIG)
         return yaml.safe_load((tmp_path / "config.yaml").read_text())
 
-    def test_the_component_count_matches(self, shipped, written):
-        assert written["pca"]["n_pcs"] == shipped["pca"]["n_pcs"]
+    def test_the_component_count_is_a_deliberate_choice(self, shipped, written):
+        """20 here against the example's 50, decided 2026-09-13 after comparing.
+
+        PHATE runs on the principal components, so the two give visibly
+        different embeddings and this one does not reproduce the published
+        figure exactly. That is accepted: `init hgdp` demonstrates the pipeline
+        rather than the paper. Pinned so the difference stays a decision someone
+        made rather than something that drifted, and so that changing either
+        file is a change someone has to mean.
+        """
+        assert written["pca"]["n_pcs"] == 20
+        assert shipped["pca"]["n_pcs"] == 50
 
     def test_the_preset_matches(self, shipped, written):
         """The preset carries knn, t and the landmarking settings."""
