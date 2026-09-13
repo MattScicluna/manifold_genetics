@@ -7,6 +7,7 @@ unreachable for everyone who installed the package the documented way.
 """
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -190,10 +191,15 @@ class TestHgdpWithoutWorkingNetwork:
     def test_a_failed_download_explains_the_way_round_it(self, tmp_path, monkeypatch):
         import urllib.request
 
+        from manifold_genetics import scaffold
+
         def _tls_failure(url, dest):
             raise OSError("[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate")
 
         monkeypatch.setattr(urllib.request, "urlretrieve", _tls_failure)
+        # curl and wget must be blocked too, or this reaches the real network:
+        # an earlier version of this test downloaded 74 MB before it was killed.
+        monkeypatch.setattr(scaffold.shutil, "which", lambda _: None)
         from manifold_genetics.scaffold import init_hgdp
 
         with pytest.raises(RuntimeError) as excinfo:
@@ -202,3 +208,51 @@ class TestHgdpWithoutWorkingNetwork:
         message = str(excinfo.value)
         assert "--archive" in message, "the error must name the way to supply the file"
         assert "hgdp_1kgp_full.tar.gz" in message, "the error must name what to download"
+
+
+class TestDownloadFallsBackToSystemTools:
+    """urllib and curl do not trust the same certificates.
+
+    `examples/hgdp_1kgp/download_data.sh` fetched this archive with wget or
+    curl, which use the system certificate store. Porting it to urllib moved the
+    trust decision to Python's bundled CA list, which on a network with a
+    TLS-intercepting proxy does not include the proxy's root -- so a download
+    that had always worked started failing with CERTIFICATE_VERIFY_FAILED.
+
+    Falling back to curl restores the original behaviour. Certificate
+    verification stays on in every path: the point is to use the trust store the
+    machine's administrators configured, not to skip the check.
+    """
+
+    def test_curl_is_used_when_urllib_cannot_verify(self, tmp_path, monkeypatch):
+        import urllib.request
+
+        from manifold_genetics import scaffold
+
+        def _tls_failure(url, dest):
+            raise OSError("[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate")
+
+        calls = []
+
+        def _fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            Path(cmd[cmd.index("-o") + 1]).write_bytes(b"archive")
+            return None
+
+        monkeypatch.setattr(urllib.request, "urlretrieve", _tls_failure)
+        monkeypatch.setattr(scaffold.shutil, "which", lambda n: f"/usr/bin/{n}")
+        monkeypatch.setattr(scaffold.subprocess, "run", _fake_run)
+
+        archive = scaffold._download_hgdp_archive(tmp_path)
+
+        assert archive.exists()
+        assert calls and calls[0][0].endswith("curl"), f"expected curl, got {calls}"
+
+    def test_certificate_verification_is_never_disabled(self):
+        """A download that skips verification is worse than one that fails."""
+        from manifold_genetics import scaffold
+
+        source = Path(scaffold.__file__).read_text()
+
+        for forbidden in ("--insecure", "-k ", "verify=False", "_create_unverified_context"):
+            assert forbidden not in source, f"{forbidden!r} disables certificate checking"
