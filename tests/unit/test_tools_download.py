@@ -26,6 +26,31 @@ def _clear_tool_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture
+def platform_is(monkeypatch):
+    """Pin the platform the download helpers see.
+
+    They read ``platform.system()`` and ``platform.machine()`` at call time, so
+    without this every test here asserts against whatever host it happens to run
+    on. That went unnoticed while CI was Linux-only: the first macOS run failed
+    four of them, and in every case the product was right and the test was not
+    -- flashpca correctly refused (there is no macOS build) and plink2 correctly
+    had a single mac URL where the test assumed two.
+    """
+
+    def _pin(system: str, machine: str):
+        monkeypatch.setattr("manifold_genetics.utils.tools.platform.system", lambda: system)
+        monkeypatch.setattr("manifold_genetics.utils.tools.platform.machine", lambda: machine)
+
+    return _pin
+
+
+@pytest.fixture(autouse=True)
+def _default_platform(platform_is):
+    """Linux x86-64 unless a test says otherwise, so results do not vary by host."""
+    platform_is("Linux", "x86_64")
+
+
 def _gz_writer(payload=b"#!/bin/sh\necho tool\n"):
     def _fake(url, dest):
         with gzip.open(dest, "wb") as fh:
@@ -244,3 +269,72 @@ def test_resolve_all_aggregates(resolver, monkeypatch):
         "flashpca": "fp",
         "neural_admixture": "na",
     }
+
+
+# ---------------------------------------------------------------------------
+# Platforms other than Linux x86-64
+#
+# Added after the first macOS CI run, which failed four tests above. The product
+# was correct in every case; these pin that correctness down so it is asserted
+# rather than assumed.
+# ---------------------------------------------------------------------------
+
+
+def test_flashpca_refuses_on_macos_and_names_the_alternative(resolver, platform_is):
+    """There is no macOS flashpca build, and that must not read as a failed download.
+
+    A user on a Mac has no way to satisfy this dependency, so the error has to
+    say so and point at the in-process backend -- which is the default and needs
+    no binary -- rather than leaving them retrying a download that cannot work.
+    """
+    platform_is("Darwin", "arm64")
+
+    with pytest.raises(ToolNotFoundError) as excinfo:
+        resolver._download_flashpca()
+
+    message = str(excinfo.value)
+    assert "Darwin/arm64" in message, "the error must name the platform it refused"
+    assert "--pca-backend python" in message, "the error must name the way forward"
+
+
+def test_flashpca_refuses_on_linux_arm(resolver, platform_is):
+    """Linux is not sufficient; the published build is x86-64 only.
+
+    The message quotes the machine string as the platform reports it
+    (``aarch64``), not the normalised alias used for the URL lookup, so that it
+    matches what a user sees from ``uname -m``.
+    """
+    platform_is("Linux", "aarch64")
+
+    with pytest.raises(ToolNotFoundError, match="Linux/aarch64"):
+        resolver._download_flashpca()
+
+
+@pytest.mark.parametrize(
+    "system, machine, expected",
+    [
+        ("Darwin", "arm64", "plink2_mac_arm64"),
+        ("Darwin", "x86_64", "plink2_mac_avx2"),
+        ("Linux", "x86_64", "plink2_linux_x86_64"),
+        ("Windows", "amd64", "plink2_win64"),
+    ],
+)
+def test_plink2_downloads_the_build_for_the_platform(
+    resolver, tmp_path, monkeypatch, platform_is, system, machine, expected
+):
+    """Every URL was once linux_x86_64, so a Mac fetched a Linux binary and then
+    failed to execute it -- which reads as a corrupt download, not as a wrong
+    build. ``amd64`` is here because Windows reports that rather than x86_64.
+    """
+    platform_is(system, machine)
+    seen = []
+
+    def _record(url, dest):
+        seen.append(url)
+        with zipfile.ZipFile(dest, "w") as zf:
+            zf.writestr("plink2", "#!/bin/sh\n")
+
+    monkeypatch.setattr(urllib.request, "urlretrieve", _record)
+    resolver._download_plink2()
+
+    assert expected in seen[0], f"fetched {seen[0]} on {system}/{machine}"
