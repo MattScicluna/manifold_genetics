@@ -191,15 +191,15 @@ class TestHgdpWithoutWorkingNetwork:
     def test_a_failed_download_explains_the_way_round_it(self, tmp_path, monkeypatch):
         import urllib.request
 
-        from manifold_genetics import scaffold
-
         def _tls_failure(url, dest):
             raise OSError("[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate")
 
         monkeypatch.setattr(urllib.request, "urlretrieve", _tls_failure)
         # curl and wget must be blocked too, or this reaches the real network:
         # an earlier version of this test downloaded 74 MB before it was killed.
-        monkeypatch.setattr(scaffold.shutil, "which", lambda _: None)
+        from manifold_genetics.utils import tools
+
+        monkeypatch.setattr(tools.shutil, "which", lambda _: None)
         from manifold_genetics.scaffold import init_hgdp
 
         with pytest.raises(RuntimeError) as excinfo:
@@ -239,9 +239,11 @@ class TestDownloadFallsBackToSystemTools:
             Path(cmd[cmd.index("-o") + 1]).write_bytes(b"archive")
             return None
 
+        from manifold_genetics.utils import tools
+
         monkeypatch.setattr(urllib.request, "urlretrieve", _tls_failure)
-        monkeypatch.setattr(scaffold.shutil, "which", lambda n: f"/usr/bin/{n}")
-        monkeypatch.setattr(scaffold.subprocess, "run", _fake_run)
+        monkeypatch.setattr(tools.shutil, "which", lambda n: f"/usr/bin/{n}")
+        monkeypatch.setattr(tools.subprocess, "run", _fake_run)
 
         archive = scaffold._download_hgdp_archive(tmp_path)
 
@@ -251,8 +253,9 @@ class TestDownloadFallsBackToSystemTools:
     def test_certificate_verification_is_never_disabled(self):
         """A download that skips verification is worse than one that fails."""
         from manifold_genetics import scaffold
+        from manifold_genetics.utils import tools
 
-        source = Path(scaffold.__file__).read_text()
+        source = Path(scaffold.__file__).read_text() + Path(tools.__file__).read_text()
 
         for forbidden in ("--insecure", "-k ", "verify=False", "_create_unverified_context"):
             assert forbidden not in source, f"{forbidden!r} disables certificate checking"

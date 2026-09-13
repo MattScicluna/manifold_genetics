@@ -78,6 +78,49 @@ _MACHINE_ALIASES = {
 }
 
 
+def fetch_url(url: str, destination: Path) -> None:
+    """Download ``url`` to ``destination``, falling back to curl and then wget.
+
+    urllib verifies against Python's bundled certificate list; curl and wget
+    verify against the operating system's. On a network with a TLS-intercepting
+    proxy only the latter contains the proxy's root certificate, because an
+    administrator put it there -- so urllib raises CERTIFICATE_VERIFY_FAILED on
+    machines where downloading works perfectly well otherwise. Reported
+    2026-09-13 from a managed network, first for the HGDP archive and then here,
+    for plink2.
+
+    Verification is never disabled. The trust decision is delegated to the
+    machine's own configuration; it is not skipped. Do not "fix" a certificate
+    error by turning the check off.
+
+    Raises:
+        OSError: every method failed. The urllib error is preserved, since it is
+            usually the most descriptive.
+    """
+    try:
+        urllib.request.urlretrieve(url, destination)
+        return
+    except OSError as urllib_error:
+        logger.info("urllib could not fetch %s (%s); trying curl or wget", url, urllib_error)
+        for tool, args in (
+            ("curl", ["-fsSL", url, "-o", str(destination)]),
+            ("wget", ["-q", url, "-O", str(destination)]),
+        ):
+            executable = shutil.which(tool)
+            if not executable:
+                continue
+            try:
+                subprocess.run([executable] + args, check=True)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                logger.info("%s failed: %s", tool, exc)
+                Path(destination).unlink(missing_ok=True)
+                continue
+            if Path(destination).exists() and Path(destination).stat().st_size > 0:
+                logger.info("Downloaded with %s", tool)
+                return
+        raise urllib_error
+
+
 class ToolNotFoundError(Exception):
     """Raised when a required tool cannot be found."""
 
@@ -399,7 +442,7 @@ class ToolResolver:
         try:
             # Download gzipped binary
             logger.info(f"Downloading FlashPCA from {url}...")
-            urllib.request.urlretrieve(url, output_gz)
+            fetch_url(url, output_gz)
 
             # Decompress
             logger.info(f"Decompressing to {output_bin}...")
@@ -451,7 +494,7 @@ class ToolResolver:
             for url in urls:
                 try:
                     logger.info(f"Downloading PLINK2 from {url}...")
-                    urllib.request.urlretrieve(url, output_zip)
+                    fetch_url(url, output_zip)
                     last_error = None
                     break
                 except Exception as e:
@@ -507,7 +550,7 @@ class ToolResolver:
         try:
             # Download zip file
             logger.info(f"Downloading PLINK v1.9 from {url}...")
-            urllib.request.urlretrieve(url, output_zip)
+            fetch_url(url, output_zip)
 
             # Extract binary
             logger.info(f"Extracting to {self.download_dir}...")

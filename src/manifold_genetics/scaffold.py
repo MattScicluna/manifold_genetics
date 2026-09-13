@@ -18,14 +18,14 @@ Two targets, because they answer different questions:
 
 import logging
 import shutil
-import subprocess
 import tarfile
-import urllib.request
 from pathlib import Path
 from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
+
+from .utils.tools import fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -224,38 +224,6 @@ def hgdp_subsets(metadata: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
     return ids[passes_qc & unrelated], ids[passes_qc]
 
 
-def _fetch_with_system_tool(url: str, archive: Path) -> bool:
-    """Download with curl or wget, returning whether it worked.
-
-    These use the operating system's certificate store rather than Python's
-    bundled one. On a network with a TLS-intercepting proxy the system store
-    usually already trusts the proxy's root, because an administrator put it
-    there, while Python's does not -- so this succeeds where urllib raises
-    CERTIFICATE_VERIFY_FAILED. It is also what the shell script this was ported
-    from always did.
-
-    Verification is not disabled in either path. The trust decision is delegated
-    to the machine's configuration, not skipped.
-    """
-    for tool, command in (
-        ("curl", ["curl", "-fsSL", url, "-o", str(archive)]),
-        ("wget", ["wget", "-q", url, "-O", str(archive)]),
-    ):
-        executable = shutil.which(tool)
-        if not executable:
-            continue
-        logger.info("Downloading with %s", tool)
-        try:
-            subprocess.run([executable] + command[1:], check=True)
-        except (OSError, subprocess.CalledProcessError) as exc:
-            logger.info("%s failed: %s", tool, exc)
-            archive.unlink(missing_ok=True)
-            continue
-        if archive.exists() and archive.stat().st_size > 0:
-            return True
-    return False
-
-
 def _download_hgdp_archive(destination: Path) -> Path:
     archive = destination / "hgdp_1kgp_full.tar.gz"
     if archive.exists():
@@ -274,12 +242,9 @@ def _download_hgdp_archive(destination: Path) -> Path:
         # machines where the download had always worked. Reported 2026-09-13,
         # within hours of the port shipping. The fallback below is what restores
         # the original behaviour; removing it reintroduces that regression.
-        urllib.request.urlretrieve(HGDP_ARCHIVE_URL, archive)
+        fetch_url(HGDP_ARCHIVE_URL, archive)
         return archive
     except OSError as exc:
-        logger.info("urllib could not fetch it (%s); trying curl or wget", exc)
-        if _fetch_with_system_tool(HGDP_ARCHIVE_URL, archive):
-            return archive
         # Most often a TLS-intercepting proxy, whose root certificate Python
         # does not trust, or a host with no route out at all -- an HPC compute
         # node, say. Neither is fixable from here, but both are worked around

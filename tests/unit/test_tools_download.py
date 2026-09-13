@@ -46,6 +46,18 @@ def platform_is(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_system_downloaders(monkeypatch):
+    """Block curl and wget for every test in this module.
+
+    ``fetch_url`` falls back to them when urllib fails, so the tests that
+    simulate a failed download would otherwise reach the real network. That is
+    not hypothetical: when the fallback was added, the equivalent test in
+    test_scaffold.py pulled 74 MB before it was noticed.
+    """
+    monkeypatch.setattr("manifold_genetics.utils.tools.shutil.which", lambda _: None)
+
+
+@pytest.fixture(autouse=True)
 def _default_platform(platform_is):
     """Linux x86-64 unless a test says otherwise, so results do not vary by host."""
     platform_is("Linux", "x86_64")
