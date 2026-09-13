@@ -130,17 +130,55 @@ jobs:
           /tmp/clean/bin/python -c "
           import manifold_genetics as mg
           from manifold_genetics import PCA, PHATE, Pipeline
-          from manifold_genetics.pipeline.runner import run_pipeline
+          from manifold_genetics import run_pipeline, load_config
           print('manifold-genetics', mg.__version__)
           "
 
-      - name: PCA runs without the flashpca binary
+      # Actually computes, rather than constructing a backend and printing it,
+      # which is what this step used to do under the same name. It matters most
+      # on macOS: flashpca ships only for Linux x86-64, so this backend is the
+      # only way PCA runs there, and it does its own byte-level .bed unpacking.
+      - name: PCA runs on a real .bed, without the flashpca binary
         run: |
           cd /tmp
           /tmp/clean/bin/python -c "
-          import numpy as np
+          import numpy as np, tempfile
+          from pathlib import Path
           from manifold_genetics.pca.backends.sklearn_backend import SklearnPCABackend
-          print(SklearnPCABackend(n_components=2))
+
+          rng = np.random.default_rng(0)
+          n_samples, n_variants = 40, 200
+          freq = np.where(np.arange(n_variants) < 100, 0.2, 0.8)
+          group = np.arange(n_samples) < 20
+          dosage = np.where(group[:, None],
+                            rng.binomial(2, freq[None, :]),
+                            rng.binomial(2, (1 - freq)[None, :])).astype(np.uint8)
+
+          # SNP-major, 2 bits per sample: 00=hom A1 (dosage 2), 10=het, 11=hom A2.
+          code = {2: 0b00, 1: 0b10, 0: 0b11}
+          d = Path(tempfile.mkdtemp())
+          with open(d / 'cohort.bed', 'wb') as fh:
+              fh.write(bytes([0x6C, 0x1B, 0x01]))
+              for v in range(n_variants):
+                  row = bytearray()
+                  for start in range(0, n_samples, 4):
+                      byte = 0
+                      for k, smp in enumerate(range(start, min(start + 4, n_samples))):
+                          byte |= code[int(dosage[smp, v])] << (2 * k)
+                      row.append(byte)
+                  fh.write(bytes(row))
+          (d / 'cohort.fam').write_text(''.join(f'F{i} S{i} 0 0 0 -9\n' for i in range(n_samples)))
+          (d / 'cohort.bim').write_text(''.join(f'1 rs{j} 0 {j+1} A G\n' for j in range(n_variants)))
+
+          backend = SklearnPCABackend(n_components=2, random_state=0)
+          model = backend.fit(str(d / 'cohort'))
+          coords = backend.project(str(d / 'cohort'), model)
+
+          assert coords.shape == (n_samples, 2), coords.shape
+          assert np.isfinite(coords).all(), 'PCA produced non-finite coordinates'
+          sep = abs(coords[group, 0].mean() - coords[~group, 0].mean()) / coords[:, 0].std()
+          assert sep > 1.0, f'PC1 did not separate the groups (sep={sep:.2f})'
+          print(f'PCA ran on a real .bed: {coords.shape}, PC1 separation {sep:.2f} SD')
           "
 
   publish-testpypi:

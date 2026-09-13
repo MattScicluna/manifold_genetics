@@ -10,10 +10,33 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The name is pinned rather than left to the matrix. Adding `os` renamed
+    # these jobs to "test (ubuntu-latest, 3.10)", which silently orphaned the
+    # three checks the protect-main ruleset requires by their old names --
+    # every job passed and the merge blocked forever waiting for checks that no
+    # longer existed. Keeping the names stable decouples the branch rules from
+    # the shape of the matrix, so adding a platform never breaks a merge again.
+    name: test (${{ matrix.python-version }})${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12"]
+        # macOS matters more here than the job count suggests: flashpca ships
+        # only for Linux x86-64, so the pure-Python PCA backend is the only way
+        # PCA runs on a Mac -- and until this was added, that backend never
+        # executed on one. The .bed reader does its own byte-level unpacking,
+        # which is exactly the kind of code that is platform-sensitive.
+        #
+        # One version rather than three: the platform is what is being covered,
+        # not the Python matrix, which Linux already spans.
+        include:
+          - os: macos-latest
+            python-version: "3.12"
+            # Distinguishes this from the ubuntu 3.12 job, which would otherwise
+            # share its name. Undefined for the ubuntu entries, which renders as
+            # an empty string.
+            label: " macOS"
       fail-fast: false
 
     steps:
@@ -64,7 +87,7 @@ jobs:
       # download coveralls binary or checksum", a third-party download outage
       # that has nothing to do with the pull request it blocked.
       - name: Upload coverage to Coveralls
-        if: matrix.python-version == '3.12'
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
         continue-on-error: true
         uses: coverallsapp/github-action@v2
         with:
