@@ -231,7 +231,23 @@ def _download_hgdp_archive(destination: Path) -> Path:
 
     destination.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading HGDP+1KGP (about 183 MB) to %s", archive)
-    urllib.request.urlretrieve(HGDP_ARCHIVE_URL, archive)
+    try:
+        urllib.request.urlretrieve(HGDP_ARCHIVE_URL, archive)
+    except OSError as exc:
+        # Most often a TLS-intercepting proxy, whose root certificate Python
+        # does not trust, or a host with no route out at all -- an HPC compute
+        # node, say. Neither is fixable from here, but both are worked around
+        # the same way, so the error has to say how rather than suggest a retry.
+        archive.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Could not download the HGDP+1KGP archive: {exc}\n\n"
+            "If this is a proxy or an offline machine, fetch it by other means and "
+            "point init at the file:\n\n"
+            f"    curl -L -o hgdp_1kgp_full.tar.gz '{HGDP_ARCHIVE_URL}'\n"
+            "    manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz\n\n"
+            "curl and wget use the system certificate store, which on a managed "
+            "network usually already trusts the proxy."
+        ) from exc
     return archive
 
 
@@ -292,6 +308,7 @@ def init_hgdp(
     force: bool = False,
     download: bool = True,
     plink2: Optional[str] = None,
+    archive: Optional[PathLike] = None,
 ) -> Path:
     """Fetch and prepare HGDP+1KGP, and write a config that runs on it.
 
@@ -303,9 +320,11 @@ def init_hgdp(
     Args:
         out_dir: Directory to write into.
         force: Overwrite an existing ``config.yaml``.
-        download: Fetch the archive. False expects it already extracted under
-            ``<out_dir>/data/raw``, which is what a second run does.
+        download: Fetch the archive if no local copy is found. False still
+            extracts one that is already present.
         plink2: Path to plink2; resolved automatically when None.
+        archive: An already-downloaded ``hgdp_1kgp_full.tar.gz`` to use instead
+            of fetching. For proxied networks and offline machines.
 
     Returns:
         The path of the config file written.
@@ -317,11 +336,22 @@ def init_hgdp(
     data_dir = out_dir / "data"
     raw_dir = data_dir / "raw"
 
-    if download:
-        _extract_hgdp_archive(_download_hgdp_archive(data_dir), raw_dir)
+    if not (raw_dir / "full_dataset.bed").exists():
+        # Prefer a file we already have over the network, in this order: one the
+        # caller named, one left in place by an earlier run, then downloading.
+        # `download=False` means "do not fetch", not "do not unpack" -- someone
+        # who obtained the archive another way still needs it extracted.
+        local = Path(archive) if archive else data_dir / "hgdp_1kgp_full.tar.gz"
+        if local.exists():
+            _extract_hgdp_archive(local, raw_dir)
+        elif download:
+            _extract_hgdp_archive(_download_hgdp_archive(data_dir), raw_dir)
+
     if not (raw_dir / "full_dataset.bed").exists():
         raise FileNotFoundError(
-            f"{raw_dir}/full_dataset.bed is missing. Run without --no-download to fetch it."
+            f"{raw_dir}/full_dataset.bed is missing, and no archive was found at "
+            f"{data_dir}/hgdp_1kgp_full.tar.gz. Download it and pass --archive, or "
+            "drop --no-download to fetch it."
         )
 
     metadata = pd.read_csv(raw_dir / "metadata.csv")

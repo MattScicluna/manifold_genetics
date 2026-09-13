@@ -121,3 +121,84 @@ class TestHgdpSubsets:
         for excluded in ("outlier", "hard", "dirty"):
             assert excluded not in list(fit)
             assert excluded not in list(project)
+
+
+class TestHgdpWithoutWorkingNetwork:
+    """Fetching must be separable from preparing.
+
+    Reported 2026-09-13 from a network with a TLS-intercepting proxy:
+
+        Error: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate
+        verify failed: self-signed certificate in certificate chain>
+
+    The same shape of problem is routine on HPC compute nodes, which have no
+    internet at all. In both cases the user can obtain the archive by some other
+    means, so `init` has to be able to pick up from there -- and the message it
+    prints has to say so, rather than telling them to retry the download that
+    just failed.
+    """
+
+    @pytest.fixture
+    def archive(self, tmp_path):
+        """A stand-in for the real 183 MB tarball."""
+        import tarfile
+
+        raw = tmp_path / "src"
+        raw.mkdir()
+        (raw / "full_dataset.bed").write_bytes(bytes([0x6C, 0x1B, 0x01]))
+        (raw / "full_dataset.bim").write_text("1 rs0 0 1 A G\n")
+        (raw / "full_dataset.fam").write_text("s1 s1 0 0 0 -9\n")
+        (raw / "metadata.csv").write_text(
+            "project_meta.sample_id,filter_pca_outlier,hard_filtered,"
+            "filter_king_related,filter_contaminated\ns1,False,False,False,False\n"
+        )
+        path = tmp_path / "hgdp_1kgp_full.tar.gz"
+        with tarfile.open(path, "w:gz") as tar:
+            for f in sorted(raw.iterdir()):
+                tar.add(f, arcname=f.name)
+        return path
+
+    def test_an_archive_already_downloaded_is_extracted(self, tmp_path, archive, monkeypatch):
+        """--no-download must mean "do not fetch", not "do not unpack"."""
+        import shutil
+
+        out = tmp_path / "out"
+        (out / "data").mkdir(parents=True)
+        shutil.copy(archive, out / "data" / archive.name)
+
+        monkeypatch.setattr(
+            "manifold_genetics.scaffold._run_plink2_keep",
+            lambda *a, **k: None,
+        )
+        from manifold_genetics.scaffold import init_hgdp
+
+        init_hgdp(out, download=False)
+
+        assert (out / "data" / "raw" / "full_dataset.bed").exists()
+
+    def test_an_archive_elsewhere_can_be_named(self, tmp_path, archive, monkeypatch):
+        monkeypatch.setattr(
+            "manifold_genetics.scaffold._run_plink2_keep",
+            lambda *a, **k: None,
+        )
+        from manifold_genetics.scaffold import init_hgdp
+
+        init_hgdp(tmp_path / "out", archive=archive)
+
+        assert (tmp_path / "out" / "data" / "raw" / "metadata.csv").exists()
+
+    def test_a_failed_download_explains_the_way_round_it(self, tmp_path, monkeypatch):
+        import urllib.request
+
+        def _tls_failure(url, dest):
+            raise OSError("[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate")
+
+        monkeypatch.setattr(urllib.request, "urlretrieve", _tls_failure)
+        from manifold_genetics.scaffold import init_hgdp
+
+        with pytest.raises(RuntimeError) as excinfo:
+            init_hgdp(tmp_path / "out")
+
+        message = str(excinfo.value)
+        assert "--archive" in message, "the error must name the way to supply the file"
+        assert "hgdp_1kgp_full.tar.gz" in message, "the error must name what to download"

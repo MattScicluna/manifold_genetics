@@ -24,8 +24,19 @@ works.
 
 `hgdp` downloads about 183 MB and prepares it with plink2 — 4,094 QC-passing
 samples across seven genetic regions, fitted on the 3,400 that are also
-unrelated. It needs internet, so on a cluster run it on a login node. Pass
-`--no-download` if the archive is already extracted under `data/raw`.
+unrelated. It needs internet, so on a cluster run it on a login node.
+
+If the download fails — a TLS-intercepting proxy, or a machine with no route out
+— fetch the archive by other means and point `init` at it:
+
+```bash
+curl -L -o hgdp_1kgp_full.tar.gz '<the URL init prints>'
+manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
+```
+
+`curl` and `wget` use the system certificate store, which on a managed network
+usually already trusts the proxy. `--no-download` means never fetch: it still
+unpacks an archive that is already there.
 
 Both take `--out DIR`, and neither overwrites an existing `config.yaml` without
 `--force`.

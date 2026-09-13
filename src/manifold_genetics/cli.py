@@ -439,11 +439,21 @@ def cmd_init(args):
         if args.target == "synthetic":
             config = init_synthetic(out, force=args.force)
         else:
-            config = init_hgdp(out, force=args.force, download=not args.no_download)
+            config = init_hgdp(
+                out,
+                force=args.force,
+                download=not args.no_download,
+                archive=args.archive,
+            )
     except FileExistsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except RuntimeError as exc:
+        # Already carries its own guidance; printed as-is so the suggested
+        # commands stay copy-pasteable.
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -1276,7 +1286,11 @@ def main(argv: Optional[List[str]] = None):
     init_parser.add_argument(
         "--no-download",
         action="store_true",
-        help="hgdp only: expect the archive to be extracted already",
+        help="hgdp only: never fetch; use a local archive or already-extracted data",
+    )
+    init_parser.add_argument(
+        "--archive",
+        help="hgdp only: path to an already-downloaded hgdp_1kgp_full.tar.gz",
     )
     init_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     init_parser.set_defaults(func=cmd_init)
