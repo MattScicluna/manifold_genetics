@@ -88,6 +88,10 @@ DLA_TREE_EDGES = (
 )
 DLA_TREE_GAPS = (9, 10, 11, 12)
 
+# Drawn beside the config by `init synthetic`, so the shape the embedding is
+# supposed to recover is on disk next to the embedding.
+GROUND_TRUTH_FIGURE = "dla_tree_ground_truth.png"
+
 
 def _refuse_to_clobber(path: Path, force: bool) -> None:
     if path.exists() and not force:
@@ -202,6 +206,94 @@ def dla_tree(
     return coordinates[keep], branch + 1
 
 
+def _tree_layout(edges: Sequence[Tuple]) -> Dict[int, Tuple[float, float]]:
+    """Node positions for drawing the tree: root on top, one row per depth.
+
+    The same rule as manylatents' ``DLATreeGraphVisualizer``, so the two
+    packages draw the same picture of the same tree: children go one row
+    below their parent, an only child directly beneath it and siblings spread
+    three units apart around it, in the order their edges are listed.
+    """
+    children: Dict[int, List[int]] = {}
+    for from_node, to_node, _, _ in edges:
+        children.setdefault(from_node, []).append(to_node)
+    to_nodes = {to_node for _, to_node, _, _ in edges}
+    root = min(node for node in children if node not in to_nodes)
+
+    rows = [[root]]
+    parent_of: Dict[int, int] = {}
+    seen = {root}
+    while rows[-1]:
+        row = []
+        for node in rows[-1]:
+            for child in children.get(node, []):
+                if child not in seen:
+                    seen.add(child)
+                    parent_of[child] = node
+                    row.append(child)
+        rows.append(row)
+
+    position = {root: (0.0, 0.0)}
+    for depth, row in enumerate(rows[1:], 1):
+        for node in row:
+            parent = parent_of[node]
+            siblings = [n for n in row if parent_of[n] == parent]
+            offset = (siblings.index(node) - (len(siblings) - 1) / 2) * 3.0
+            position[node] = (position[parent][0] + offset, -2.0 * depth)
+    return position
+
+
+def plot_dla_tree(path: PathLike) -> Path:
+    """Draw :data:`DLA_TREE_EDGES` as the ground truth the embedding should recover.
+
+    Solid coloured edges are the branches, in the colours the embedding uses;
+    faint dashed grey ones are the gaps, along which no sample exists. Matches
+    the topology figure manylatents produces for the same tree, so the two can
+    be compared side by side.
+
+    Args:
+        path: Where to write the PNG.
+
+    Returns:
+        ``path``, as a :class:`Path`.
+    """
+    from matplotlib.figure import Figure
+
+    position = _tree_layout(DLA_TREE_EDGES)
+    fig = Figure(figsize=(10, 8))
+    ax = fig.add_subplot(111)
+
+    for from_node, to_node, edge_id, _ in DLA_TREE_EDGES:
+        (x0, y0), (x1, y1) = position[from_node], position[to_node]
+        if edge_id in DLA_TREE_GAPS:
+            ax.plot([x0, x1], [y0, y1], color="lightgray", lw=3, alpha=0.4, ls="--")
+            continue
+        ax.plot([x0, x1], [y0, y1], color=_BRANCH_COLOURS[edge_id], lw=8, alpha=0.9)
+        angle = np.degrees(np.arctan2(y1 - y0, x1 - x0))
+        angle = angle - 180 if angle > 90 else angle + 180 if angle < -90 else angle
+        ax.text(
+            (x0 + x1) / 2,
+            (y0 + y1) / 2,
+            str(edge_id),
+            rotation=angle,
+            rotation_mode="anchor",
+            ha="center",
+            va="center",
+            fontsize=12,
+            fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.9, edgecolor="none"),
+        )
+
+    ax.set_title("DLA tree ground truth", fontsize=16, fontweight="bold", pad=20)
+    ax.axis("off")
+    ax.margins(0.1)
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none")
+    return path
+
+
 def genotypes_from_coordinates(
     coordinates: np.ndarray,
     n_variants: int = 1000,
@@ -268,7 +360,8 @@ _SYNTHETIC_CONFIG = """\
 # branches, in pieces separated by {n_gaps} unsampled gaps, with genotypes drawn
 # from allele frequencies that drift along it. Nothing here needs downloading,
 # and the whole run takes under a minute -- it is the quickest way to confirm an
-# installation works, and the embedding it makes has a known shape to check.
+# installation works, and the embedding it makes has a known shape to check:
+# the tree is drawn in {ground_truth}, beside this file.
 #
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
@@ -340,8 +433,10 @@ def init_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Pat
             n_samples=len(labels),
             n_branches=len(_BRANCH_COLOURS),
             n_gaps=len(DLA_TREE_GAPS),
+            ground_truth=GROUND_TRUTH_FIGURE,
         )
     )
+    plot_dla_tree(out_dir / GROUND_TRUTH_FIGURE)
 
     logger.info("Wrote a simulated cohort and config to %s", out_dir)
     return config_path
