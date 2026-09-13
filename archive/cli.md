@@ -13,6 +13,7 @@ which one to reach for.
 manifold-genetics init synthetic     # simulate a cohort and a config beside it
 manifold-genetics init hgdp          # fetch and prepare the real HGDP+1KGP cohort
 manifold-genetics init custom        # a config for genotypes you already have
+manifold-genetics init aou           # a config for All of Us (workbench only)
 ```
 
 A `pip install` ships no data and no example config, so `init` is what gives you
@@ -45,7 +46,13 @@ for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
 
-All three take `--out DIR`, and none overwrites an existing `config.yaml`
+`aou` is the exception to the pattern: it does **not** fetch anything. All of Us
+is controlled-access, lives in `gs://fc-aou-datasets-controlled`, and its
+preparation is about 1,300 lines of workbench-specific shell. So it checks the
+environment — `GOOGLE_PROJECT`, `WORKSPACE_CDR`, `gsutil`, `bq`, `plink2` — names
+everything missing at once, and writes the config for the prepared cohort.
+
+All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.
 
 ## Running a whole pipeline

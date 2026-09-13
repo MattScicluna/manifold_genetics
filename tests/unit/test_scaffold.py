@@ -479,3 +479,80 @@ class TestInitCustom:
         with pytest.raises(FileNotFoundError, match="bim"):
             init_custom(cohort / "out", fit_plink=cohort / "absent", labels=cohort / "labels.csv")
         assert not (cohort / "out" / "config.yaml").exists()
+
+
+class TestInitAou:
+    """All of Us is controlled-access and lives in a workbench.
+
+    Unlike HGDP -- one archive over HTTPS and two plink2 calls -- its data comes
+    from `gs://fc-aou-datasets-controlled` and needs GOOGLE_PROJECT, gsutil, bq
+    and about 1,300 lines of preparation that only run inside the Researcher
+    Workbench. So this command does not pretend to fetch anything: it checks the
+    environment, says plainly what is missing, and writes the config.
+
+    The failure path is what almost everyone who types this will see, so it is
+    the part that is tested.
+    """
+
+    @pytest.fixture
+    def in_workbench(self, monkeypatch):
+        from manifold_genetics import scaffold
+
+        monkeypatch.setenv("GOOGLE_PROJECT", "aou-rw-1234")
+        monkeypatch.setenv("WORKSPACE_CDR", "fc-aou-cdr-prod.C2024Q3R5")
+        monkeypatch.setattr(scaffold.shutil, "which", lambda n: f"/usr/bin/{n}")
+
+    def test_outside_the_workbench_it_says_so_and_writes_nothing(self, tmp_path, monkeypatch):
+        from manifold_genetics import scaffold
+
+        monkeypatch.delenv("GOOGLE_PROJECT", raising=False)
+        monkeypatch.setattr(scaffold.shutil, "which", lambda n: None)
+
+        with pytest.raises(EnvironmentError) as excinfo:
+            scaffold.init_aou(tmp_path)
+
+        message = str(excinfo.value)
+        assert "GOOGLE_PROJECT" in message
+        assert "Researcher Workbench" in message
+        assert not (tmp_path / "config.yaml").exists(), "nothing should be written on refusal"
+
+    def test_it_names_every_missing_prerequisite_at_once(self, tmp_path, monkeypatch):
+        """Reporting them one per run would be three round trips."""
+        from manifold_genetics import scaffold
+
+        monkeypatch.delenv("GOOGLE_PROJECT", raising=False)
+        monkeypatch.setattr(scaffold.shutil, "which", lambda n: None)
+
+        with pytest.raises(EnvironmentError) as excinfo:
+            scaffold.init_aou(tmp_path)
+
+        for expected in ("GOOGLE_PROJECT", "gsutil", "plink2"):
+            assert expected in str(excinfo.value)
+
+    def test_inside_the_workbench_it_writes_a_config(self, tmp_path, in_workbench):
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import init_aou
+
+        config = init_aou(tmp_path)
+
+        kwargs = load_config(config)
+        assert kwargs["embedding_input"] == "both", "AoU is a projection onto HGDP"
+
+    def test_the_config_matches_the_shipped_aou_example(self, tmp_path, in_workbench):
+        """It should reproduce that analysis, not a variation on it."""
+        import yaml
+
+        from manifold_genetics.scaffold import init_aou
+
+        shipped = yaml.safe_load(
+            (
+                Path(__file__).resolve().parents[2] / "examples/aou/hgdp_1kgp_proj/config.yaml"
+            ).read_text()
+        )
+        written = yaml.safe_load(init_aou(tmp_path).read_text())
+
+        assert written["preset"] == shipped["preset"]
+        assert written["pca"]["n_pcs"] == shipped["pca"]["n_pcs"]
+        assert (
+            written["embedding"]["embed_batch_size"] == shipped["embedding"]["embed_batch_size"]
+        ), "the batch size bounds memory on 400k+ samples"
