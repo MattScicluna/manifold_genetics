@@ -49,24 +49,21 @@ preset:
 | preset | fit | project | for |
 |---|---|---|---|
 | **`projection`** | a reference panel | your cohort | placing your cohort in a frame of reference someone else defined |
-| **`subsample`** | a subset of your cohort | that same subset | cohorts too large, or too dominated by one group, to embed whole |
-| **`whole_cohort`** | a subset of your cohort | the whole cohort | the default, and what `init` writes |
+| **`subsample`** | a subset of your cohort | that same subset | cohorts too large, or too dominated by one group, to embed whole — UK Biobank and All of Us |
+| **`whole_cohort`** | a subset of your cohort | the whole cohort | a cohort small enough to embed entirely, as in the HGDP+1KGP example |
 
 They are presets rather than loose settings because what follows from the choice
 — particularly landmarking — is easy to get wrong individually.
 
 ## Where to start
 
-- [Install](install.md) — pip or from source, the optional extras, and how to
-  check it works
-- [Quickstart](quickstart.md) — the two experiments as commands, and the file
-  formats going in and out
-- [Tutorial](tutorial.ipynb) — the same run narrated: what each stage produces
-  and how to read it
-
-Reference material — every config key, every subcommand, the Python API — is
-being rewritten and is not on the site yet. Until it is, it lives in the
-repository under [`archive/`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive).
+- [Install](install.md) — pip or from source, the extras, and how to check it
+  works
+- [Quickstart](quickstart.md) — the experiments as commands
+- [Tutorial](tutorial.ipynb) — the same run narrated
+- [Formats](formats.md) — every file the pipeline reads and writes
+- [Command line](cli.md) — every subcommand
+- [Python API](api.md) — driving it from a notebook
 
 ## Citing
 
