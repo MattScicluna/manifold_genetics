@@ -10,7 +10,7 @@ Or from source, for an unreleased change:
 pip install git+https://github.com/MattScicluna/manifold_genetics
 ```
 
-The code has been tested on Python 3.10–3.12, on Linux or macOS. 
+The code has been tested on Python 3.10–3.12, on Linux and macOS.
 
 ## Checking it works
 
@@ -69,11 +69,14 @@ fetches binaries.
 
 The clone above is all you need. To work on the documentation as well:
 
-`uv sync --extra docs` adds the documentation toolchain, and `mkdocs serve`
-then builds this site locally. The tutorial renders without its outputs, because
-the build does not execute it — CI does that in a separate step. To see the
-outputs locally, execute it first:
+```bash
+pip install -e '.[docs]'
+mkdocs serve
+```
+
+The tutorial renders without its outputs, because the build does not execute it
+— CI does that in a separate step. To see them locally, run it first:
 
 ```bash
-uv run jupyter nbconvert --to notebook --inplace --execute docs/tutorial.ipynb
+jupyter nbconvert --to notebook --inplace --execute docs/tutorial.ipynb
 ```
