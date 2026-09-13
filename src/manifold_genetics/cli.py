@@ -440,12 +440,14 @@ def cmd_init(args):
     """Write a runnable config, and the data to run it on."""
     setup_logging(args.verbose)
 
-    from .scaffold import init_custom, init_hgdp, init_synthetic
+    from .scaffold import init_aou, init_custom, init_hgdp, init_synthetic
 
     out = Path(args.out)
     try:
         if args.target == "synthetic":
             config = init_synthetic(out, force=args.force)
+        elif args.target == "aou":
+            config = init_aou(out, force=args.force)
         elif args.target == "custom":
             if not args.fit_plink or not args.labels:
                 print(
@@ -473,6 +475,9 @@ def cmd_init(args):
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except EnvironmentError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except ValueError as exc:
@@ -1303,13 +1308,17 @@ def main(argv: Optional[List[str]] = None):
             "              have. Generates a colour for every label value, and\n"
             "              refuses if the labels do not describe the cohort --\n"
             "              the two things worth not doing by hand.\n\n"
+            "  aou         Write a config for All of Us. Checks this is a Researcher\n"
+            "              Workbench and says what is missing if not. It does NOT\n"
+            "              fetch the data: that is controlled-access and about 1,300\n"
+            "              lines of workbench-specific preparation.\n\n"
             "None of them overwrites an existing config.yaml unless you pass --force."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     init_parser.add_argument(
         "target",
-        choices=["synthetic", "hgdp", "custom"],
+        choices=["synthetic", "hgdp", "custom", "aou"],
         help="Which cohort to scaffold",
     )
     init_parser.add_argument("--fit-plink", help="custom only: PLINK prefix the model is fitted on")
