@@ -68,6 +68,7 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
             n_landmark=p.get("n_landmark"),
             random_landmarking=p.get("random_landmarking", False),
             embed_batch_size=p.get("embed_batch_size"),
+            gamma=p.get("gamma", 1.0),
         )
     if method == "umap":
         return UMAP(

@@ -21,7 +21,7 @@ import shutil
 import tarfile
 import urllib.request
 from pathlib import Path
-from typing import Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -40,12 +40,52 @@ HGDP_ARCHIVE_URL = (
 # PLINK 1 .bed codes, by A1 dosage. 01 is missing and is never written here.
 _DOSAGE_TO_CODE = {2: 0b00, 1: 0b10, 0: 0b11}
 
-# Deliberately not real population or region names. These figures are of
-# fabricated genotypes, and a plot labelled with real ancestries can be
-# mistaken for a real result once it is separated from the command that
-# made it.
-_SYNTHETIC_GROUPS = ("Group A", "Group B", "Group C")
-_SYNTHETIC_COLOURS = ("#4292C6", "#C7E9C0", "#E3242B")
+# Deliberately not real population names. These figures are of fabricated
+# genotypes, and a plot labelled with real ancestries can be mistaken for a
+# real result once it is separated from the command that made it.
+_BRANCH_LABEL = "Branch {}"
+
+# The colours manylatents draws this tree with, so a figure made here reads the
+# same as one made there.
+_BRANCH_COLOURS = {
+    1: "#e41a1c",  # red
+    2: "#377eb8",  # blue
+    3: "#4daf4a",  # green
+    4: "#984ea3",  # purple
+    5: "#ff7f00",  # orange
+    6: "#ffff33",  # yellow
+    7: "#a65628",  # brown
+    8: "#f781bf",  # pink
+}
+
+# The tree the synthetic cohort lies along: ``(from_node, to_node, edge_id,
+# n_samples)``, in generation order. This is ``dla_tree_from_graph.yaml`` from
+# manylatents, copied rather than imported because that package brings torch
+# and lightning with it. Every edge is a branch of samples; the four in
+# ``DLA_TREE_GAPS`` are walked, so that what lies beyond them starts in the
+# right place, and then dropped, which leaves the cohort in disconnected pieces
+# the way a real one with unsampled populations would be.
+#
+#   N1 -1- N2 -2- N3          gaps (dashed):   N2 ~12~ N8
+#           |\_6_ N10 ~11~ N11 -7- N12          N13 ~9~ N4
+#            \~12~ N8 -3- N13 ~9~ N4 -4- N5     N5 ~10~ N6
+#                              ~10~ N6 -5- N7   N10 ~11~ N11
+#                                    \_8_ N9
+DLA_TREE_EDGES = (
+    (1, 2, 1, 300),  # main trunk
+    (2, 3, 2, 300),
+    (8, 13, 3, 300),
+    (4, 5, 4, 300),
+    (6, 7, 5, 100),
+    (2, 10, 6, 300),  # branch A, from N2
+    (11, 12, 7, 100),
+    (6, 9, 8, 300),  # branch B, from N6
+    (13, 4, 9, 50),  # gaps
+    (5, 6, 10, 50),
+    (10, 11, 11, 50),
+    (2, 8, 12, 50),
+)
+DLA_TREE_GAPS = (9, 10, 11, 12)
 
 
 def _refuse_to_clobber(path: Path, force: bool) -> None:
@@ -86,36 +126,135 @@ def write_bed(prefix: Path, dosages: np.ndarray, sample_ids: Sequence[str]) -> N
     Path(f"{prefix}.bim").write_text("".join(f"1 rs{v} 0 {v + 1} A G\n" for v in range(n_variants)))
 
 
-def simulate_cohort(
-    n_samples: int = 240,
-    n_variants: int = 800,
-    seed: int = 0,
-) -> Tuple[np.ndarray, pd.DataFrame]:
-    """A small cohort with real population structure.
+def dla_tree(
+    n_dim: int = 100,
+    rand_multiplier: float = 2.0,
+    sigma: float = 0.5,
+    seed: int = 42,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Points along :data:`DLA_TREE_EDGES`, by diffusion-limited aggregation.
 
-    Three groups with differing allele frequencies, so PCA and the embedding
-    have something to find -- a cohort of noise would run but would show
-    nothing, and the point of the synthetic target is to demonstrate the
-    pipeline working.
+    Each edge is a random walk that starts where its parent edge ended. Where
+    several edges leave one node, each walks in its own block of dimensions and
+    holds the rest fixed, so sibling branches are orthogonal by construction
+    rather than by luck. Gap edges are walked and then dropped.
+
+    A port of manylatents' ``DLATreeFromGraph``, random draw for random draw:
+    the same seed gives the same array there and here, which is what makes a
+    figure from this package comparable with one from that. That is also why
+    it uses the legacy ``RandomState`` -- it is what the original seeds.
+
+    Args:
+        n_dim: Dimensionality of the walk.
+        rand_multiplier: Width of each step's uniform increment.
+        sigma: Standard deviation of the Gaussian noise added at the end.
+        seed: Seed for the walk and the noise.
+
+    Returns:
+        ``(coordinates, branch)`` -- a float ``(n_samples, n_dim)`` array and an
+        int vector of which data edge each row lies on, numbered 1 to 8.
+    """
+    rng = np.random.RandomState(seed)
+
+    to_nodes = {to_node for _, to_node, _, _ in DLA_TREE_EDGES}
+    nodes = {node for edge in DLA_TREE_EDGES for node in edge[:2]}
+    root = next(node for node in sorted(nodes) if node not in to_nodes)
+
+    # Sibling edges split the dimensions between them, in edge order, the
+    # first siblings taking the remainder.
+    outgoing: Dict[int, List[int]] = {}
+    for from_node, _, edge_id, _ in DLA_TREE_EDGES:
+        outgoing.setdefault(from_node, []).append(edge_id)
+    allowed = {}
+    for edge_ids in outgoing.values():
+        if len(edge_ids) > 1:
+            for edge_id, dims in zip(edge_ids, np.array_split(np.arange(n_dim), len(edge_ids))):
+                allowed[edge_id] = dims
+
+    # Walk each edge once its start is known. Edges are listed trunk-first
+    # but not in dependency order, so this takes a few passes; the order in
+    # which they get walked is what fixes the random sequence.
+    position = {root: np.zeros(n_dim)}
+    walks: Dict[int, np.ndarray] = {}
+    while len(walks) < len(DLA_TREE_EDGES):
+        walked_before = len(walks)
+        for from_node, to_node, edge_id, length in DLA_TREE_EDGES:
+            if edge_id in walks or from_node not in position:
+                continue
+            dims = allowed.get(edge_id, np.arange(n_dim))
+            steps = -0.5 + rand_multiplier * rng.rand(length, len(dims))
+            steps[0] = 0  # the first sample sits exactly on the node
+            walk = np.tile(position[from_node], (length, 1))
+            walk[:, dims] += 0.3 * np.cumsum(steps, axis=0)
+            walks[edge_id] = walk
+            position[to_node] = walk[-1].copy()
+        if len(walks) == walked_before:
+            raise ValueError("DLA_TREE_EDGES has an edge that no path from the root reaches")
+
+    coordinates = np.vstack([walks[edge_id] for _, _, edge_id, _ in DLA_TREE_EDGES])
+    edge_of_row = np.concatenate([np.full(n, edge_id) for _, _, edge_id, n in DLA_TREE_EDGES])
+    if sigma > 0:
+        coordinates += rng.normal(0, sigma, coordinates.shape)
+
+    keep = ~np.isin(edge_of_row, DLA_TREE_GAPS)
+    _, branch = np.unique(edge_of_row[keep], return_inverse=True)
+    return coordinates[keep], branch + 1
+
+
+def genotypes_from_coordinates(
+    coordinates: np.ndarray,
+    n_variants: int = 1000,
+    seed: int = 0,
+    scale: float = 2.0,
+) -> np.ndarray:
+    """Genotypes whose allele frequencies drift along the coordinates.
+
+    Each variant's log-odds of the A1 allele is a random linear function of the
+    standardised coordinates, and each genotype is two draws at that frequency.
+    No single variant carries the tree, but PCA over all of them recovers it,
+    which is the situation the pipeline exists for.
+
+    Args:
+        coordinates: ``(n_samples, n_dim)`` float positions.
+        n_variants: How many variants to sample.
+        seed: Seed for the loadings and the genotype draws.
+        scale: Standard deviation of the log-odds across samples. Larger means
+            more of each variant's variance is structure rather than sampling.
+
+    Returns:
+        A ``(n_samples, n_variants)`` uint8 array of A1 dosages in {0, 1, 2}.
+    """
+    rng = np.random.default_rng(seed)
+    z = (coordinates - coordinates.mean(axis=0)) / coordinates.std(axis=0)
+    loadings = rng.normal(size=(z.shape[1], n_variants)) / np.sqrt(z.shape[1])
+    frequency = 1.0 / (1.0 + np.exp(-scale * (z @ loadings)))
+    return rng.binomial(2, frequency).astype(np.uint8)
+
+
+def simulate_cohort(n_variants: int = 1000, seed: int = 0) -> Tuple[np.ndarray, pd.DataFrame]:
+    """A small cohort with the population structure of a branching tree.
+
+    Samples lie along :func:`dla_tree` -- eight connected branches, in pieces
+    separated by four unsampled gaps -- and their genotypes are drawn from
+    allele frequencies that drift along it. So PCA and the embedding have a
+    known shape to find, with a labelled ground truth to compare against, and
+    that shape is the same one manylatents uses for its own tree experiments.
+
+    Args:
+        n_variants: How many variants to genotype.
+        seed: Seed for the genotypes. The tree itself is always the same one.
 
     Returns:
         ``(dosages, labels)`` -- an integer ``(n_samples, n_variants)`` array and
-        a frame with ``sample_id`` and ``population``.
+        a frame with ``sample_id`` and ``branch``.
     """
-    rng = np.random.default_rng(seed)
-    n_groups = len(_SYNTHETIC_GROUPS)
-    assignment = np.arange(n_samples) % n_groups
-
-    # Each group gets its own frequency profile over a shared variant set.
-    frequencies = rng.uniform(0.1, 0.9, size=(n_groups, n_variants))
-    dosages = np.empty((n_samples, n_variants), dtype=np.uint8)
-    for sample in range(n_samples):
-        dosages[sample] = rng.binomial(2, frequencies[assignment[sample]])
+    coordinates, branch = dla_tree()
+    dosages = genotypes_from_coordinates(coordinates, n_variants=n_variants, seed=seed)
 
     labels = pd.DataFrame(
         {
-            "sample_id": [f"SIM{i:04d}" for i in range(n_samples)],
-            "population": [_SYNTHETIC_GROUPS[g] for g in assignment],
+            "sample_id": [f"SIM{i:04d}" for i in range(len(branch))],
+            "branch": [_BRANCH_LABEL.format(b) for b in branch],
         }
     )
     return dosages, labels
@@ -124,9 +263,11 @@ def simulate_cohort(
 _SYNTHETIC_CONFIG = """\
 # Written by `manifold-genetics init synthetic`.
 #
-# A simulated cohort of {n_samples} samples across {n_groups} populations, with
-# real structure to find. Nothing here needs downloading, and the whole run takes
-# under a minute -- it is the quickest way to confirm an installation works.
+# A simulated cohort of {n_samples} samples lying along a branching tree: {n_branches}
+# branches, in pieces separated by {n_gaps} unsampled gaps, with genotypes drawn
+# from allele frequencies that drift along it. Nothing here needs downloading,
+# and the whole run takes under a minute -- it is the quickest way to confirm an
+# installation works, and the embedding it makes has a known shape to check.
 #
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
@@ -151,6 +292,7 @@ pca:
 
 embedding:
   method: phate
+  gamma: 0            # log-potential distance; branches read better on a tree than with 1
 
 # Admixture needs the `admixture` extra (torch), so it is off by default here.
 skip:
@@ -164,7 +306,7 @@ def init_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Pat
     Args:
         out_dir: Directory to write into; created if absent.
         force: Overwrite an existing ``config.yaml`` rather than refusing.
-        seed: Seed for the simulation, so the cohort is reproducible.
+        seed: Seed for the genotypes, so the cohort is reproducible.
 
     Returns:
         The path of the config file written.
@@ -186,14 +328,18 @@ def init_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Pat
     write_bed(out_dir / "data" / "project_subset", dosages, labels["sample_id"])
 
     labels.to_csv(out_dir / "data" / "labels.csv", index=False)
-    colours = dict(zip(_SYNTHETIC_GROUPS, _SYNTHETIC_COLOURS))
+    colours = {_BRANCH_LABEL.format(b): c for b, c in _BRANCH_COLOURS.items()}
     (out_dir / "colormap.json").write_text(
-        '{\n  "population": {\n'
+        '{\n  "branch": {\n'
         + ",\n".join(f'    "{g}": "{c}"' for g, c in colours.items())
         + "\n  }\n}\n"
     )
     config_path.write_text(
-        _SYNTHETIC_CONFIG.format(n_samples=len(labels), n_groups=len(_SYNTHETIC_GROUPS))
+        _SYNTHETIC_CONFIG.format(
+            n_samples=len(labels),
+            n_branches=len(_BRANCH_COLOURS),
+            n_gaps=len(DLA_TREE_GAPS),
+        )
     )
 
     logger.info("Wrote a simulated cohort and config to %s", out_dir)

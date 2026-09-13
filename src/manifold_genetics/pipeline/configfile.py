@@ -143,6 +143,7 @@ _EMBEDDING_PARAMS = {
     "n_landmark",
     "random_landmarking",
     "embed_batch_size",
+    "gamma",
     "n_neighbors",
     "min_dist",
     "perplexity",

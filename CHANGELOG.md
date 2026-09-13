@@ -7,6 +7,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **`init synthetic` now simulates a branching tree with gaps, not three blobs.**
+  The cohort lies along the DLA tree from manylatents' `dla_tree_from_graph`
+  config -- eight branches of samples, in pieces separated by four unsampled
+  gap edges -- and its genotypes are drawn from allele frequencies that drift
+  along it. The generator is a port of manylatents' `DLATreeFromGraph` that
+  reproduces its array exactly for the same seed, so a figure made here is
+  comparable with one made there, and the embedding now has a known shape to
+  check rather than merely groups to separate. The label column is `branch`
+  (values `Branch 1` to `Branch 8`), 2,000 samples and 1,000 variants.
+
+### Added
+
+- **`gamma` is accepted in a config file's `embedding` section** and passed to
+  PHATE. The synthetic config sets it to 0, the log-potential distance, under
+  which the tree's branches read more clearly than under the default of 1.
+
 ### Fixed
 
 - **PCA projection had no memory budget and was OOM-killed on any large cohort.**
