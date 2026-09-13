@@ -21,6 +21,7 @@ import pytest
 
 from manifold_genetics.pca.backends.sklearn_backend import (
     BYTES_PER_DOSAGE,
+    FIXED_OVERHEAD_BYTES,
     SklearnPCABackend,
 )
 from manifold_genetics.pca.flashpca import PCA
@@ -250,3 +251,45 @@ class TestMemoryBudgetsAreReachable:
         backend = SklearnPCABackend(n_components=20)
 
         assert backend._resolve_fit_chunk_size(n_samples=60_000, n_variants=120_849) is not None
+
+
+class TestTheBudgetIsAProcessTarget:
+    """A budget the process exceeds is not a budget.
+
+    Reported 2026-09-13: `--memory-gb 4`, `5` and `6` were all killed on a
+    machine whose cap was around 4 GB. The chunk was sized to consume 100% of
+    the budget, leaving nothing for the ~286 MB of interpreter and imports or
+    the ~158 MB of thin blocks the streaming SVD allocates. So asking for 4 GB
+    produced a process wanting about 4.45 GB.
+    """
+
+    def test_the_chunk_leaves_room_for_the_interpreter_and_the_svd(self):
+        backend = SklearnPCABackend(n_components=20, max_fit_memory_gb=4.0)
+
+        chunk = backend._resolve_fit_chunk_size(n_samples=3400, n_variants=172152)
+
+        held = chunk * 3400 * BYTES_PER_DOSAGE
+        assert held < 4.0 * 1024**3, "the chunk alone consumed the whole budget"
+        assert held + FIXED_OVERHEAD_BYTES <= 4.0 * 1024**3, "peak exceeds what was asked for"
+
+    def test_streaming_is_not_chosen_when_it_would_barely_help(self):
+        """A 4 GB budget once streamed a 4.36 GB matrix in a 4.00 GB chunk.
+
+        That is every extra pass over the .bed for a 8% saving. If chunking
+        cannot reduce the peak materially it should not be paid for.
+        """
+        backend = SklearnPCABackend(n_components=20, max_fit_memory_gb=4.0)
+
+        chunk = backend._resolve_fit_chunk_size(n_samples=3400, n_variants=172152)
+
+        assert (
+            chunk is None or chunk <= 172152 * 0.75
+        ), f"chunk of {chunk} of 172152 variants is not worth the extra passes"
+
+    def test_a_budget_smaller_than_the_overhead_still_produces_a_usable_chunk(self):
+        """Someone will pass --memory-gb 0.1. It must not divide by zero."""
+        backend = SklearnPCABackend(n_components=20, max_fit_memory_gb=0.1)
+
+        chunk = backend._resolve_fit_chunk_size(n_samples=3400, n_variants=172152)
+
+        assert chunk is not None and chunk >= 1

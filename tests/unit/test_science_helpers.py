@@ -175,3 +175,44 @@ def test_zero_variance_variants_are_still_zeroed_in_place():
     result = standardize_dosages(dosages, mean, sd, copy=False)
 
     assert (result[:, 0] == 0).all(), "a zero-variance variant must standardise to 0"
+
+
+def test_binom2_stats_does_not_copy_the_cohort():
+    """`np.where(observed, dosages, 0.0)` allocated a second full float64 array.
+
+    On 3,400 x 172,152 that is 4.7 GB on top of the 4.7 GB already held, which
+    OOM-killed a fit on an 8 GB node under an 8 GB budget. np.nansum already
+    treats NaN as zero, so the copy bought nothing.
+    """
+    import numpy as np
+
+    from manifold_genetics.pca.standardize import binom2_stats
+
+    rng = np.random.default_rng(0)
+    dosages = rng.binomial(2, 0.4, size=(400, 300)).astype(float)
+    dosages[rng.random(dosages.shape) < 0.1] = np.nan
+
+    observed = ~np.isnan(dosages)
+    expected_mean = np.divide(
+        np.nansum(np.where(observed, dosages, 0.0), axis=0),
+        observed.sum(axis=0),
+        out=np.zeros(dosages.shape[1]),
+        where=observed.sum(axis=0) > 0,
+    )
+
+    mean, sd = binom2_stats(dosages)
+
+    np.testing.assert_allclose(mean, expected_mean, rtol=0, atol=0)
+    np.testing.assert_allclose(sd, np.sqrt(np.clip(mean * (1 - mean / 2), 0, None)))
+
+
+def test_binom2_stats_handles_a_variant_with_no_observed_genotypes():
+    import numpy as np
+
+    from manifold_genetics.pca.standardize import binom2_stats
+
+    dosages = np.array([[np.nan, 1.0], [np.nan, 1.0]])
+
+    mean, sd = binom2_stats(dosages)
+
+    assert mean[0] == 0.0 and sd[0] == 0.0, "an all-missing variant must not be NaN"

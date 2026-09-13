@@ -44,6 +44,22 @@ PathLike = Union[str, Path]
 # held dense, and was killed.
 BYTES_PER_DOSAGE = 9
 
+# What the process holds before a single genotype is read: the interpreter plus
+# numpy, sklearn and this package (286 MB measured), and the thin blocks the
+# streaming SVD allocates, which scale with n_variants rather than with the
+# chunk (158 MB on a 172,152-variant cohort).
+#
+# The budget is a target for the *process*, not for one array. Sizing the chunk
+# to the whole budget is why `--memory-gb 4` was killed on a machine capped at
+# 4 GB: the chunk took all of it and the process then wanted about 4.45 GB.
+FIXED_OVERHEAD_BYTES = 512 * 1024**2
+
+# A chunk below this is not worth reading: at one variant per pass the run is
+# slower than any cohort is large. Reaching it means the budget is smaller than
+# the process needs before it reads anything, which is said out loud rather than
+# silently honoured.
+MIN_CHUNK_VARIANTS = 256
+
 
 class SklearnPCABackend(PCABackend):
     """PCA via randomized SVD over genotypes read with the built-in .bed reader."""
@@ -138,7 +154,10 @@ class SklearnPCABackend(PCABackend):
             # In place: this array is ours, and a second copy of it is the
             # difference between a fit that runs and one that is OOM-killed.
             X = standardize_dosages(dosages, mean, sd, copy=False)
-            sum_sq = float(np.sum(X**2))
+            # NOT np.sum(X**2): squaring allocates a second array the size of
+            # the cohort -- 4.7 GB here -- purely to add it up. einsum consumes
+            # the products as it goes.
+            sum_sq = float(np.einsum("ij,ij->", X, X))
             U, S, Vt = randomized_svd(
                 X,
                 n_components=self.n_components,
@@ -176,10 +195,29 @@ class SklearnPCABackend(PCABackend):
 
         budget = self.max_fit_memory_gb * 1024**3
         per_variant = n_samples * BYTES_PER_DOSAGE
-        if n_variants * per_variant <= budget:
+        if n_variants * per_variant + FIXED_OVERHEAD_BYTES <= budget:
             return None
 
-        return max(1, int(budget // per_variant))
+        return self._chunk_within(budget, per_variant, n_variants)
+
+    def _chunk_within(self, budget: float, per_variant: int, n_variants: int) -> int:
+        """Variants per chunk that keep the whole process inside ``budget``."""
+        usable = budget - FIXED_OVERHEAD_BYTES
+        chunk = int(usable // per_variant) if usable > 0 else 0
+
+        if chunk < MIN_CHUNK_VARIANTS:
+            logger.warning(
+                "A memory budget of %.2f GB leaves %.2f GB for genotypes after the "
+                "%.2f GB this process needs before reading any, so it cannot be met. "
+                "Reading %d variants at a time; raise the budget if the run is killed.",
+                budget / 1024**3,
+                max(usable, 0) / 1024**3,
+                FIXED_OVERHEAD_BYTES / 1024**3,
+                MIN_CHUNK_VARIANTS,
+            )
+            chunk = MIN_CHUNK_VARIANTS
+
+        return min(chunk, n_variants)
 
     def _resolve_project_chunk_size(self, n_samples: int, n_variants: int) -> int:
         """Variants per chunk when projecting, bounded by the memory budget.
@@ -192,10 +230,10 @@ class SklearnPCABackend(PCABackend):
 
         budget = self.max_project_memory_gb * 1024**3
         per_variant = n_samples * BYTES_PER_DOSAGE
-        if n_variants * per_variant <= budget:
+        if n_variants * per_variant + FIXED_OVERHEAD_BYTES <= budget:
             return n_variants
 
-        return max(1, int(budget // per_variant))
+        return self._chunk_within(budget, per_variant, n_variants)
 
     def _chunks(self, n_variants: int, chunk: Optional[int] = None):
         size = chunk or n_variants
