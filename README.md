@@ -65,10 +65,9 @@ Which set the model is **fitted** on is the choice that defines the analysis.
 `projection` fits a reference panel and places your cohort in it; `subsample`
 fits and embeds a subset of your own cohort; `whole_cohort` fits a subset and
 embeds everything. See
-**[Configuration](https://mattscicluna.github.io/manifold_genetics/configuration/)**
-for every key, and
-**[Command line](https://mattscicluna.github.io/manifold_genetics/cli/)** for the
-individual stages.
+[`archive/configuration.md`](archive/configuration.md) for every key, and
+[`archive/cli.md`](archive/cli.md) for the individual stages. Those reference
+pages are being rewritten and are not on the site yet.
 
 Input and output formats — what goes in, what comes out — are documented in the
 **[Quickstart](https://mattscicluna.github.io/manifold_genetics/quickstart/)**.
@@ -90,8 +89,9 @@ uv run black src tests && uv run isort src tests && uv run flake8 src tests
 ```
 
 Testing against real cohorts, the release procedure, and the safeguards this
-repository uses for controlled-access data are documented under `docs/` —
-`testing-real-cohorts.md`, `releasing.md` and `working-with-agents.md`.
+repository uses for controlled-access data are documented under
+[`archive/`](archive/) — `testing-real-cohorts.md`, `releasing.md` and
+`working-with-agents.md`.
 
 ## License
 

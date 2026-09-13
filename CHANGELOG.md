@@ -24,7 +24,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   are not all returned to the OS between iterations; budget roughly three times
   the number you set.
 
-  `docs/hpc.md` had asserted the opposite — "Projection chunks over samples and
+  `archive/hpc.md` had asserted the opposite — "Projection chunks over samples and
   is never the constraint" — which is corrected.
 
 ### Changed
@@ -86,7 +86,7 @@ not yet been verified end to end -- so expect further breaking changes before
 ### Added
 
 - **Guardrails against committing controlled-access data**
-  ([docs/working-with-agents.md](docs/working-with-agents.md)). A pre-commit hook and
+  ([archive/working-with-agents.md](archive/working-with-agents.md)). A pre-commit hook and
   a CI job run `scripts/check_sensitive_files.py`, written against this
   repository's own two incidents rather than as a generic secret scanner: it
   flags files whose header declares them private, genotype containers, long
@@ -114,7 +114,7 @@ not yet been verified end to end -- so expect further breaking changes before
 - **A config file for every shipped example**, replacing 1,382 lines of shell.
 - **`py.typed`**, so the annotations in this package are visible to type
   checkers in projects that depend on it.
-- **A real-cohort test suite** (`docs/testing-real-cohorts.md`): fast preflight
+- **A real-cohort test suite** (`archive/testing-real-cohorts.md`): fast preflight
   checks that a cohort's data agrees with the config describing it, and an
   end-to-end suite with chance-corrected assertions about the science. Includes
   a SLURM entry point.
@@ -123,7 +123,7 @@ not yet been verified end to end -- so expect further breaking changes before
   it simulates as it goes. The notebook is *executed* during the build and the
   build runs in strict mode, so a tutorial that stopped working or a broken
   internal link fails CI rather than shipping.
-- **A tag-triggered release workflow** (`docs/releasing.md`) using trusted
+- **A tag-triggered release workflow** (`archive/releasing.md`) using trusted
   publishing, so there is no API token in the repository and no way to publish
   from a laptop. It builds from a fresh checkout, verifies the package metadata
   and the distribution contents, and installs the wheel into a clean

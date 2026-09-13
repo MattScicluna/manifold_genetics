@@ -18,7 +18,10 @@ import pytest
 
 from manifold_genetics.cli import main
 
-DOCS = Path(__file__).resolve().parents[2] / "docs" / "cli.md"
+# Archived, not published: the site is currently home/install/quickstart/tutorial
+# while the reference pages are reintroduced one at a time. The check still runs,
+# so the page cannot drift out of date while it waits to come back.
+DOCS = Path(__file__).resolve().parents[2] / "archive" / "cli.md"
 
 
 def documented_commands() -> set:
@@ -49,7 +52,7 @@ def test_every_subcommand_is_documented(capsys):
     undocumented = actual_commands(capsys) - documented_commands()
 
     assert undocumented == set(), (
-        f"subcommands missing from docs/cli.md: {sorted(undocumented)}. "
+        f"subcommands missing from archive/cli.md: {sorted(undocumented)}. "
         "A command nobody can find is a command nobody uses."
     )
 
@@ -58,4 +61,6 @@ def test_no_subcommand_is_documented_that_does_not_exist(capsys):
     """A documented command that was renamed or removed sends people to an error."""
     phantom = documented_commands() - actual_commands(capsys)
 
-    assert phantom == set(), f"docs/cli.md documents commands that do not exist: {sorted(phantom)}"
+    assert (
+        phantom == set()
+    ), f"archive/cli.md documents commands that do not exist: {sorted(phantom)}"

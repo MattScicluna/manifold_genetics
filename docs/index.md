@@ -58,7 +58,7 @@ defines the analysis:
 - **`whole_cohort`** — fit on a subset, embed the whole cohort. The default shape
   when the project set contains the fit set.
 
-Those three are [presets](configuration.md#presets), because the settings that
+Those three are presets, because the settings that
 follow from the choice — particularly landmarking — are easy to get wrong
 individually.
 
@@ -68,9 +68,10 @@ individually.
 - [Quickstart](quickstart.md) — a full run on public data, and the file formats
 - [Tutorial](tutorial.ipynb) — a full run on a cohort it simulates as it goes,
   under a minute, nothing to download
-- [Command line](cli.md) — every subcommand, and what each reads and writes
-- [Configuration](configuration.md) — every key a config file accepts
-- [Python API](api.md) — the supported surface, for notebooks
+
+Reference material — every config key, every subcommand, the Python API — is
+being rewritten and is not on the site yet. Until it is, it lives in the
+repository under [`archive/`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive).
 
 ## Citing
 

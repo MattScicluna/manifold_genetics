@@ -9,20 +9,6 @@ edit_uri: edit/main/docs/
 # error rather than a line in a build log nobody reads.
 strict: true
 
-# Internal notes live under docs/ so they sit beside the code they describe,
-# but they are not the manual and are not published: how this project is tested,
-# released and developed is not something a user of it needs to read.
-exclude_docs: |
-  superpowers/
-  working-with-agents.md
-  releasing.md
-  testing-real-cohorts.md
-  UKBB_README.md
-  migrations/
-  hpc.md
-  controlled-access.md
-  concepts.md
-
 theme:
   name: material
   palette:
@@ -79,8 +65,6 @@ plugins:
       execute: false
       allow_errors: false
       include_source: true
-      execute_ignore:
-        - "superpowers/*"
   - mkdocstrings:
       handlers:
         python:
@@ -96,12 +80,6 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting started:
-      - Install: install.md
-      - Quickstart: quickstart.md
-      - Tutorial: tutorial.ipynb
-  - Guides:
-      - Configuration: configuration.md
-      - Command line: cli.md
-  - Reference:
-      - Python API: api.md
+  - Install: install.md
+  - Quickstart: quickstart.md
+  - Tutorial: tutorial.ipynb
