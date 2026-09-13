@@ -449,16 +449,15 @@ def cmd_init(args):
         elif args.target == "aou":
             config = init_aou(out, force=args.force)
         elif args.target == "custom":
-            if not args.fit_plink or not args.labels:
-                print(
-                    "Error: init custom needs --fit-plink and --labels.",
-                    file=sys.stderr,
-                )
+            if not args.fit_plink:
+                print("Error: init custom needs --fit-plink.", file=sys.stderr)
                 return 1
             config = init_custom(
                 out,
                 fit_plink=args.fit_plink,
                 labels=args.labels,
+                fit_labels=args.fit_labels,
+                project_labels=args.project_labels,
                 project_plink=args.project_plink,
                 preset=args.preset,
                 n_pcs=args.n_pcs,
@@ -1328,6 +1327,12 @@ def main(argv: Optional[List[str]] = None):
     )
     init_parser.add_argument(
         "--labels", help="custom only: CSV with sample_id and columns to colour by"
+    )
+    init_parser.add_argument(
+        "--fit-labels", help="custom only: labels for the fit set, if they differ"
+    )
+    init_parser.add_argument(
+        "--project-labels", help="custom only: labels for the project set, if they differ"
     )
     init_parser.add_argument(
         "--preset",

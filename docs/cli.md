@@ -19,38 +19,42 @@ manifold-genetics init aou           # a config for All of Us (workbench only)
 A `pip install` ships no data and no example config, so `init` is what gives you
 something to run.
 
-`synthetic` needs no network and takes seconds: it simulates 240 samples across
-three groups, writes the PLINK triples, labels, colormap and `config.yaml`, and
-the result runs end to end. It is the quickest way to confirm an installation
-works.
+`synthetic` needs no network and takes under a minute: it simulates 2,000
+samples along a branching tree — eight branches, some separated by unsampled
+gaps — over 1,000 variants, and writes the PLINK triples, labels, colormap and
+`config.yaml`. It also writes `dla_tree_ground_truth.png`, the tree the cohort
+was drawn along, so the embedding can be checked against the shape it should
+recover.
 
 `hgdp` downloads about 183 MB and prepares it with plink2 — 4,094 QC-passing
 samples across seven genetic regions, fitted on the 3,400 that are also
 unrelated. It needs internet, so on a cluster run it on a login node.
 
-If the download fails — a TLS-intercepting proxy, or a machine with no route out
-— fetch the archive by other means and point `init` at it:
+A TLS-intercepting proxy needs nothing from you: `init` falls back to `curl` and
+`wget`, which use the system certificate store rather than Python's.
+
+On a machine with no route out at all — a compute node, say — fetch the archive
+elsewhere and point `init` at it:
 
 ```bash
-curl -L -o hgdp_1kgp_full.tar.gz '<the URL init prints>'
 manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
 ```
 
-`curl` and `wget` use the system certificate store, which on a managed network
-usually already trusts the proxy. `--no-download` means never fetch: it still
-unpacks an archive that is already there.
+`--no-download` means never fetch: it still unpacks an archive already present.
 
-`custom` takes `--fit-plink`, `--labels`, and optionally `--project-plink`,
-`--preset` and `--n-pcs`. It writes a colour for every label value -- 22 of them
+`custom` takes `--fit-plink` and labels, plus optionally `--project-plink`,
+`--preset` and `--n-pcs`. Labels are either one `--labels` describing both sets,
+or `--fit-labels` and `--project-labels` when they differ, as in every UK
+Biobank config. It writes a colour for every label value -- 22 of them
 for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
 
-`aou` is the exception to the pattern: it does **not** fetch anything. All of Us
-is controlled-access, lives in `gs://fc-aou-datasets-controlled`, and its
-preparation is about 1,300 lines of workbench-specific shell. So it checks the
-environment — `GOOGLE_PROJECT`, `WORKSPACE_CDR`, `gsutil`, `bq`, `plink2` — names
-everything missing at once, and writes the config for the prepared cohort.
+`aou` does **not** fetch anything: All of Us is controlled-access and prepared
+by workbench-specific tooling. It checks the environment — `GOOGLE_PROJECT`,
+`WORKSPACE_CDR`, `gsutil`, `bq`, `plink2` — names everything missing at once, and
+writes the config. Run in the workbench, it reproduces the All of Us experiments
+from the manuscript.
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.

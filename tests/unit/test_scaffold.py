@@ -556,3 +556,60 @@ class TestInitAou:
         assert (
             written["embedding"]["embed_batch_size"] == shipped["embedding"]["embed_batch_size"]
         ), "the batch size bounds memory on 400k+ samples"
+
+
+class TestInitCustomSeparateLabels:
+    """Real cohorts often label the two sets separately.
+
+    Every UK Biobank config uses `fit_labels` and `project_labels`, because the
+    fit subset and the full cohort are described by different files. With only
+    `--labels` the command could not express the configs this package ships,
+    so the documented example had to pretend otherwise.
+    """
+
+    @pytest.fixture
+    def cohort(self, tmp_path):
+        from manifold_genetics.scaffold import write_bed
+
+        rng = __import__("numpy").random.default_rng(0)
+        ids = [f"S{i:03d}" for i in range(40)]
+        write_bed(tmp_path / "fit", rng.binomial(2, 0.3, size=(40, 60)).astype("uint8"), ids)
+        write_bed(tmp_path / "proj", rng.binomial(2, 0.3, size=(40, 60)).astype("uint8"), ids)
+        for name in ("fit_labels", "project_labels"):
+            pd.DataFrame({"sample_id": ids, "group": ["A", "B"] * 20}).to_csv(
+                tmp_path / f"{name}.csv", index=False
+            )
+        return tmp_path
+
+    def test_separate_label_files_reach_the_config(self, cohort):
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import init_custom
+
+        config = init_custom(
+            cohort / "out",
+            fit_plink=cohort / "fit",
+            project_plink=cohort / "proj",
+            fit_labels=cohort / "fit_labels.csv",
+            project_labels=cohort / "project_labels.csv",
+            preset="subsample",
+        )
+
+        kwargs = load_config(config)
+        assert kwargs["fit_labels"] == cohort / "fit_labels.csv"
+        assert kwargs["project_labels"] == cohort / "project_labels.csv"
+
+    def test_one_label_file_still_works(self, cohort):
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import init_custom
+
+        config = init_custom(
+            cohort / "out", fit_plink=cohort / "fit", labels=cohort / "fit_labels.csv"
+        )
+
+        assert load_config(config)["labels"] == cohort / "fit_labels.csv"
+
+    def test_it_asks_for_labels_of_some_kind(self, cohort):
+        from manifold_genetics.scaffold import init_custom
+
+        with pytest.raises(ValueError, match="labels"):
+            init_custom(cohort / "out", fit_plink=cohort / "fit")

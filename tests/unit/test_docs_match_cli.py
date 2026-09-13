@@ -58,6 +58,4 @@ def test_no_subcommand_is_documented_that_does_not_exist(capsys):
     """A documented command that was renamed or removed sends people to an error."""
     phantom = documented_commands() - actual_commands(capsys)
 
-    assert (
-        phantom == set()
-    ), f"docs/cli.md documents commands that do not exist: {sorted(phantom)}"
+    assert phantom == set(), f"docs/cli.md documents commands that do not exist: {sorted(phantom)}"
