@@ -15,7 +15,7 @@ admixture → manifold embedding → visualisation → metrics.
 
 ## Installation
 
-Requires Python 3.10–3.12. Tested on Linux and macOS.
+Requires Python 3.10–3.12, on Linux or macOS.
 
 ```bash
 pip install manifold-genetics
