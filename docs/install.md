@@ -10,9 +10,25 @@ Or from source, for an unreleased change:
 pip install git+https://github.com/MattScicluna/manifold_genetics
 ```
 
-Python 3.10–3.12, tested on Linux and macOS. No compiler, no external binary:
-the default PCA backend reads PLINK `.bed` files and computes a randomized SVD
-in process.
+Python 3.10–3.12, on Linux or macOS. No compiler, no external binary: the
+default PCA backend reads PLINK `.bed` files and computes a randomized SVD in
+process.
+
+## Checking it works
+
+A clone gets you the test suite, which is the quickest way to confirm the
+install on a given machine — no data of your own, no network, about two minutes:
+
+```bash
+git clone https://github.com/MattScicluna/manifold_genetics
+cd manifold_genetics
+uv sync --frozen --extra dev
+
+uv run pytest -m "not slow and not network"
+```
+
+Worth doing on any machine you have not run this on before. The suite covers the
+in-process PCA backend, which on macOS is the only way PCA runs at all.
 
 ## Extras
 
@@ -74,15 +90,7 @@ fetches binaries.
 
 ## Developing on the repository
 
-```bash
-git clone https://github.com/MattScicluna/manifold_genetics
-cd manifold_genetics
-
-uv venv --python python3.11
-uv sync --frozen --extra dev
-
-uv run pytest -m "not slow and not network"      # ~2 minutes
-```
+The clone above is all you need. To work on the documentation as well:
 
 `uv sync --extra docs` adds the documentation toolchain, and `mkdocs serve`
 then builds this site locally. The tutorial renders without its outputs, because
@@ -94,4 +102,4 @@ uv run jupyter nbconvert --to notebook --inplace --execute docs/tutorial.ipynb
 ```
 
 Testing against real genotypes is a separate suite with its own entry points —
-see `docs/testing-real-cohorts.md` in the repository.
+see `archive/testing-real-cohorts.md` in the repository.

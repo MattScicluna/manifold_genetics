@@ -1,48 +1,85 @@
 # Quickstart
 
-A complete run on real data, from nothing to figures. About fifteen minutes,
-most of it downloading.
+Two commands to a figure, on a cohort the package fetches or simulates for you.
+Assumes you have [installed it](install.md).
 
-If you would rather not download anything, the [tutorial](tutorial.ipynb) does
-the same thing on a cohort it simulates as it goes, in under a minute.
+## 1. Pick a cohort
 
-## 1. Install
+=== "Simulated — seconds, no download"
+
+    ```bash
+    manifold-genetics init synthetic
+    manifold-genetics run config.yaml
+    ```
+
+    Simulates 2,000 samples along a branching tree and writes the genotypes,
+    labels, colormap and config beside each other. Nothing is downloaded and the
+    whole run takes under a minute, which makes it the quickest way to confirm an
+    installation works.
+
+    It also writes `dla_tree_ground_truth.png`, the tree the cohort was drawn
+    along. Compare it with `outputs/figures/embeddings/project_phate_by_branch.png`:
+    the eight branches should be recognisable in both, and the branches past an
+    unsampled gap edge appear detached in the embedding.
+
+=== "Real — HGDP+1KGP, about 183 MB"
+
+    ```bash
+    manifold-genetics init hgdp
+    manifold-genetics run config.yaml
+    ```
+
+    Downloads the public HGDP+1KGP cohort and prepares it: 4,094 QC-passing
+    samples across seven genetic regions, with the model fitted on the 3,400 that
+    are also unrelated. Needs internet and `plink2`, which is fetched
+    automatically — so on a cluster, run `init` on a login node.
+
+    Expect a few minutes rather than seconds.
+
+Both write into the current directory; pass `--out DIR` to put them somewhere
+else. Neither overwrites an existing `config.yaml` without `--force`.
+
+!!! tip "Behind a proxy, or offline"
+
+    If the download fails with a certificate error, `init` falls back to `curl`
+    and `wget`, which use the system certificate store. If it still cannot reach
+    the network — an HPC compute node, say — fetch the archive by other means and
+    point it at the file:
+
+    ```bash
+    manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
+    ```
+
+## 2. Look before you run
 
 ```bash
-pip install manifold-genetics
-```
-
-## 2. Get the example cohort
-
-HGDP+1KGP is public — 4,094 samples across seven genetic regions.
-
-```bash
-git clone https://github.com/MattScicluna/manifold_genetics
-cd manifold_genetics
-
-bash examples/hgdp_1kgp/download_data.sh   # ~183 MB, needs internet
-bash examples/hgdp_1kgp/prepare_data.sh    # needs plink2: manifold-genetics setup
-```
-
-`prepare_data.sh` is the only part that needs the external binaries, and it is
-the only part specific to this example — it turns a public VCF into the PLINK
-triples the pipeline reads. With your own data you start at step 3.
-
-## 3. Look before you run
-
-```bash
-manifold-genetics run examples/hgdp_1kgp/config.yaml --dry-run
+manifold-genetics run config.yaml --dry-run
 ```
 
 This prints every setting the run will use, marking `(default)` on anything the
 package supplied rather than the config file, then exits without doing work. On
 a cohort where PCA takes hours, this is the cheapest thing you will ever do.
 
-## 4. Run it
+## 3. Run it
 
 ```bash
-manifold-genetics run examples/hgdp_1kgp/config.yaml
+manifold-genetics run config.yaml
 ```
+
+If the run is killed, it is almost certainly memory. `--memory-gb N` sets the
+budget: above it the PCA fit streams, which bounds memory at the cost of about
+nineteen times the wall clock.
+
+```bash
+manifold-genetics run config.yaml --memory-gb 4
+```
+
+## Your own data
+
+`init` exists to give you something to run. With your own cohort you skip it and
+write a config yourself — the formats are below, and
+[`init synthetic`](#1-pick-a-cohort) writes a working example of every one of
+them, which is often the fastest way to see what is expected.
 
 ## What goes in
 
@@ -113,37 +150,39 @@ confident nonsense.
 
 ## What comes out
 
-One tree, the same shape every run, under `output_dir`:
+One tree, the same shape every run, under `output_dir`. `<n>` is your `n_pcs`:
 
 ```
 outputs/
 ├── pca/
-│   ├── fit_pca_50.csv           sample_id, dim_1 … dim_50
-│   ├── project_pca_50.csv
+│   ├── fit_pca_<n>.csv          sample_id, dim_1 … dim_<n>
+│   ├── project_pca_<n>.csv
 │   └── flashpca_outputs/        the projectable model: loadings, means, SDs
-├── admixture/
-│   ├── fit.2.csv … fit.10.csv   ancestry proportions, one file per K
-│   ├── project.2.csv … project.10.csv
-│   └── checkpoints/
 ├── embeddings/
 │   └── phate_2d.csv             sample_id, dim_1, dim_2
 ├── figures/
 │   ├── pca/                     PC-pair grids
-│   ├── embeddings/              one scatter per colormap column
-│   └── admixture/               stacked bars, embedding coloured by component
-└── metrics/
+│   └── embeddings/              one scatter per colormap column
+├── admixture/                   only when the admixture stage runs
+│   ├── fit.2.csv … fit.10.csv   ancestry proportions, one file per K
+│   └── project.2.csv … project.10.csv
+└── metrics/                     only when the metrics stage runs
     ├── geographic.json
     └── admixture.json
 ```
 
-The file names follow the settings: `fit_pca_50.csv` because `n_pcs: 50`,
+The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,
 `phate_2d.csv` because `method: phate`, one `fit.<K>.csv` per K in range.
+
+Both `init` configs skip admixture, because it needs the `admixture` extra
+(torch), so a first run produces the first three directories only. Geographic
+metrics need a coordinates file, which neither supplies.
 
 The three CSV families look like this:
 
 ```csv
-# pca/project_pca_50.csv          one row per sample, one column per PC
-sample_id,dim_1,dim_2,...,dim_50
+# pca/project_pca_20.csv          one row per sample, one column per PC
+sample_id,dim_1,dim_2,...,dim_20
 HG00096,0.073308,0.212584,...
 
 # embeddings/phate_2d.csv         always two dimensions
