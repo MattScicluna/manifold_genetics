@@ -7,6 +7,29 @@ manifold-genetics <command> --help
 Every command prints its own options and a worked example. This page is about
 which one to reach for.
 
+## Starting from nothing
+
+```bash
+manifold-genetics init synthetic     # simulate a cohort and a config beside it
+manifold-genetics init hgdp          # fetch and prepare the real HGDP+1KGP cohort
+```
+
+A `pip install` ships no data and no example config, so `init` is what gives you
+something to run.
+
+`synthetic` needs no network and takes seconds: it simulates 240 samples across
+three groups, writes the PLINK triples, labels, colormap and `config.yaml`, and
+the result runs end to end. It is the quickest way to confirm an installation
+works.
+
+`hgdp` downloads about 183 MB and prepares it with plink2 — 4,094 QC-passing
+samples across seven genetic regions, fitted on the 3,400 that are also
+unrelated. It needs internet, so on a cluster run it on a login node. Pass
+`--no-download` if the archive is already extracted under `data/raw`.
+
+Both take `--out DIR`, and neither overwrites an existing `config.yaml` without
+`--force`.
+
 ## Running a whole pipeline
 
 ```bash

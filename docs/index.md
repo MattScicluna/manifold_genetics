@@ -5,13 +5,19 @@ admixture → manifold embedding → visualisation → metrics.
 
 ```bash
 pip install manifold-genetics
+manifold-genetics init synthetic     # a simulated cohort, and a config for it
 manifold-genetics run config.yaml
 ```
 
-That is the whole install. PCA runs in process — it reads PLINK `.bed` directly
-and computes a randomized SVD — so there is no binary to fetch and no platform
-it only works on. FlashPCA remains available as an opt-in accelerator and writes
-the same artefacts, so a model fitted by either is readable by the other.
+Those three commands produce figures from nothing, in about a minute, with no
+data of your own and nothing to download. `init hgdp` does the same with the
+real HGDP+1KGP cohort instead, fetching it for you.
+
+That is also the whole install. PCA runs in process — it reads PLINK `.bed`
+directly and computes a randomized SVD — so there is no binary to fetch and no
+platform it only works on. FlashPCA remains available as an opt-in accelerator
+and writes the same artefacts, so a model fitted by either is readable by the
+other.
 
 [Install](install.md){ .md-button .md-button--primary }
 [Tutorial](tutorial.ipynb){ .md-button }
@@ -56,7 +62,7 @@ defines the analysis:
 - **`subsample`** — fit on a subset of your own cohort, embed that subset. For
   cohorts too large, or too dominated by one group, to embed whole.
 - **`whole_cohort`** — fit on a subset, embed the whole cohort. The default shape
-  when the project set contains the fit set.
+  when the project set contains the fit set, and what `init` writes.
 
 Those three are presets, because the settings that
 follow from the choice — particularly landmarking — are easy to get wrong
