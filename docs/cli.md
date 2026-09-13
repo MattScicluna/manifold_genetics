@@ -61,7 +61,7 @@ without `--force`.
 manifold-genetics run config.yaml [--dry-run] [--output DIR] [--skip-...] [-v]
 ```
 
-The entry point for real work. Reads a [config file](configuration.md), applies
+The entry point for real work. Reads a [config file](formats.md#the-config-file), applies
 a few command-line overrides, runs the pipeline.
 
 - `--dry-run` prints the resolved call and exits. Use it before anything long.
@@ -133,7 +133,7 @@ Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
 from one). They are also fetched on first use, so this is optional — what it is
 for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
-see [Installation](install.md#external-tools).
+see [Install](install.md#external-tools).
 
 ## Exit codes and logging
 

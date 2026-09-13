@@ -85,3 +85,6 @@ nav:
   - Install: install.md
   - Quickstart: quickstart.md
   - Tutorial: tutorial.ipynb
+  - Formats: formats.md
+  - Command line: cli.md
+  - Python API: api.md
