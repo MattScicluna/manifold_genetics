@@ -13,8 +13,8 @@
 # the subject matter, not a leak. Scoped to those two rules so that anything
 # else appearing in that file is still caught.
 # Reviewed 2026-09-12.
-docs/working-with-agents.md:private-marker
-docs/working-with-agents.md:cluster-path
+archive/working-with-agents.md:private-marker
+archive/working-with-agents.md:cluster-path
 
 # The check's own specification. It has to contain the things it detects: a
 # fixture script with a private header, and a fake cluster path. Scoped to those

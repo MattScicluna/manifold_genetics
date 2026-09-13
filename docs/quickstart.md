@@ -46,7 +46,7 @@ manifold-genetics run examples/hgdp_1kgp/config.yaml
 
 ## What goes in
 
-Four kinds of file, named in the [config](configuration.md):
+Four kinds of file, named in the config:
 
 | input | format |
 |---|---|
@@ -56,8 +56,7 @@ Four kinds of file, named in the [config](configuration.md):
 | **coordinates** *(optional)* | CSV with `sample_id`, `latitude`, `longitude` |
 
 Two genotype sets go in, and which one the model is **fitted** on is the choice
-that defines the analysis; the [preset](configuration.md#presets) names that
-choice. Labels look like this:
+that defines the analysis; the preset names that choice. Labels look like this:
 
 ```csv
 sample_id,Population,Genetic_region_merged
@@ -174,6 +173,9 @@ Stages are checkpointed: re-running reuses whatever is already on disk, so an
 interrupted run resumes rather than restarting. To force a stage to redo its
 work, delete its output.
 
-- [Configuration](configuration.md) — every key a config file accepts
-- [Command line](cli.md) — running the stages individually
-- [Python API](api.md) — driving it from a notebook instead
+- [`archive/configuration.md`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive/configuration.md) — every key a config file accepts
+- [`archive/cli.md`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive/cli.md) — running the stages individually
+- [`archive/api.md`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive/api.md) — driving it from a notebook instead
+
+Those three are not on the site yet; they are being rewritten and reintroduced
+one at a time.

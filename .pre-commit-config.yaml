@@ -3,7 +3,7 @@
 # This repository is public and lives on a cluster holding UK Biobank and All of
 # Us data. Twice, files from the working directory reached somewhere they should
 # not have: once into a pull request via `git add -A`, once into a built source
-# distribution. Review caught neither. See docs/working-with-agents.md.
+# distribution. Review caught neither. See archive/working-with-agents.md.
 #
 # Install once per clone:
 #

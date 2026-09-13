@@ -87,7 +87,7 @@ jobs:
 
   # Runs before anything expensive, because what it guards against is permanent:
   # this repository is public and lives on a cluster holding controlled-access
-  # cohorts. See docs/working-with-agents.md for the two incidents that prompted
+  # cohorts. See archive/working-with-agents.md for the two incidents that prompted
   # it. Stdlib only, so it needs no environment.
   leak-check:
     runs-on: ubuntu-latest
