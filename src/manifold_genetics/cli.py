@@ -440,12 +440,28 @@ def cmd_init(args):
     """Write a runnable config, and the data to run it on."""
     setup_logging(args.verbose)
 
-    from .scaffold import init_hgdp, init_synthetic
+    from .scaffold import init_custom, init_hgdp, init_synthetic
 
     out = Path(args.out)
     try:
         if args.target == "synthetic":
             config = init_synthetic(out, force=args.force)
+        elif args.target == "custom":
+            if not args.fit_plink or not args.labels:
+                print(
+                    "Error: init custom needs --fit-plink and --labels.",
+                    file=sys.stderr,
+                )
+                return 1
+            config = init_custom(
+                out,
+                fit_plink=args.fit_plink,
+                labels=args.labels,
+                project_plink=args.project_plink,
+                preset=args.preset,
+                n_pcs=args.n_pcs,
+                force=args.force,
+            )
         else:
             config = init_hgdp(
                 out,
@@ -457,6 +473,9 @@ def cmd_init(args):
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except RuntimeError as exc:
@@ -1280,14 +1299,35 @@ def main(argv: Optional[List[str]] = None):
             "              fitted on the 3,400 that are also unrelated. Needs internet\n"
             "              and plink2, which is fetched if missing -- so on a cluster,\n"
             "              run this on a login node.\n\n"
-            "Neither overwrites an existing config.yaml unless you pass --force."
+            "  custom      Write a config and colormap for genotypes you already\n"
+            "              have. Generates a colour for every label value, and\n"
+            "              refuses if the labels do not describe the cohort --\n"
+            "              the two things worth not doing by hand.\n\n"
+            "None of them overwrites an existing config.yaml unless you pass --force."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     init_parser.add_argument(
         "target",
-        choices=["synthetic", "hgdp"],
+        choices=["synthetic", "hgdp", "custom"],
         help="Which cohort to scaffold",
+    )
+    init_parser.add_argument("--fit-plink", help="custom only: PLINK prefix the model is fitted on")
+    init_parser.add_argument(
+        "--project-plink",
+        help="custom only: PLINK prefix to embed (default: the fit set)",
+    )
+    init_parser.add_argument(
+        "--labels", help="custom only: CSV with sample_id and columns to colour by"
+    )
+    init_parser.add_argument(
+        "--preset",
+        default="whole_cohort",
+        choices=["whole_cohort", "projection", "subsample"],
+        help="custom only: the shape of the run (default: whole_cohort)",
+    )
+    init_parser.add_argument(
+        "--n-pcs", type=int, default=20, help="custom only: components to compute"
     )
     init_parser.add_argument(
         "--out", default=".", help="Directory to write into (default: the current one)"

@@ -703,3 +703,173 @@ def _write_hgdp_labels(
 def clean(out_dir: PathLike) -> None:
     """Remove a scaffolded directory. Used by tests, not by the CLI."""
     shutil.rmtree(Path(out_dir), ignore_errors=True)
+
+
+# Distinguishable at a glance and colourblind-safe enough to start from: Okabe-Ito,
+# extended by cycling with varied lightness. A generated colormap is a starting
+# point, not a publication choice.
+_PALETTE = (
+    "#0072B2",
+    "#D55E00",
+    "#009E73",
+    "#CC79A7",
+    "#E69F00",
+    "#56B4E9",
+    "#F0E442",
+    "#000000",
+    "#8C564B",
+    "#7F7F7F",
+)
+
+_CUSTOM_CONFIG = """\
+# Written by `manifold-genetics init custom`.
+#
+#   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
+#   manifold-genetics run config.yaml             # do the work
+#
+# Paths are relative to this file.
+
+# `whole_cohort` fits on the fit set and embeds the whole project set. The others
+# are `projection` (fit a reference panel, project your cohort onto it) and
+# `subsample` (embed a subset of a cohort too large to embed whole), which also
+# supplies landmarking.
+preset: {preset}
+
+data:
+  fit_plink: {fit_plink}
+  project_plink: {project_plink}
+  labels: {labels}
+  colormap: colormap.json
+  output_dir: outputs
+
+pca:
+  n_pcs: {n_pcs}
+
+embedding:
+  method: phate
+
+# Admixture needs the `admixture` extra (torch), so it is off until you want it.
+skip:
+  admixture: true
+"""
+
+
+def _require_plink(prefix: Path) -> None:
+    missing = [ext for ext in ("bed", "bim", "fam") if not Path(f"{prefix}.{ext}").exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"{prefix} is not a complete PLINK triple: missing "
+            + ", ".join(f".{ext}" for ext in missing)
+        )
+
+
+def init_custom(
+    out_dir: PathLike,
+    fit_plink: PathLike,
+    labels: PathLike,
+    project_plink: Optional[PathLike] = None,
+    preset: str = "whole_cohort",
+    n_pcs: int = 20,
+    force: bool = False,
+    min_overlap: float = 0.5,
+) -> Path:
+    """Write a config and colormap for genotypes you already have.
+
+    The config is fifteen obvious lines; the colormap is not -- UK Biobank's
+    needs 22 hex colours for one column -- and a value missing from it is drawn
+    grey and dropped from the legend. The other trap is sample IDs: a label file
+    that does not match the ``.fam`` does not crash, it colours a fraction of the
+    points. Both are handled here rather than left to be discovered in a figure.
+
+    Args:
+        out_dir: Directory to write the config and colormap into.
+        fit_plink: PLINK prefix the model is fitted on.
+        labels: CSV with ``sample_id`` and one column per grouping.
+        project_plink: PLINK prefix to embed. Defaults to ``fit_plink``, which is
+            the common case of one cohort embedded whole.
+        preset: ``whole_cohort``, ``projection`` or ``subsample``.
+        n_pcs: Components to compute.
+        force: Overwrite an existing ``config.yaml``.
+        min_overlap: Refuse if fewer than this fraction of genotyped samples
+            appear in the label file.
+
+    Returns:
+        The path of the config file written.
+
+    Raises:
+        FileNotFoundError: a PLINK file or the label file is missing.
+        ValueError: the labels do not describe this cohort.
+    """
+    out_dir = Path(out_dir)
+    config_path = out_dir / "config.yaml"
+    _refuse_to_clobber(config_path, force)
+
+    fit_plink = Path(fit_plink)
+    project_plink = Path(project_plink) if project_plink else fit_plink
+    labels = Path(labels)
+
+    # Everything is checked before anything is written, so a rejected run leaves
+    # no half-made directory to puzzle over.
+    _require_plink(fit_plink)
+    _require_plink(project_plink)
+    if not labels.exists():
+        raise FileNotFoundError(f"{labels} does not exist")
+
+    label_frame = pd.read_csv(labels, dtype=str)
+    if "sample_id" not in label_frame.columns:
+        raise ValueError(f"{labels} has no 'sample_id' column; found {list(label_frame.columns)}")
+
+    from .pca.plink import read_fam_ids
+
+    genotyped = set(read_fam_ids(project_plink))
+    described = set(label_frame["sample_id"])
+    overlap = len(genotyped & described) / max(len(genotyped), 1)
+    if overlap < min_overlap:
+        raise ValueError(
+            f"{labels} describes {overlap:.1%} of the samples in {project_plink}.fam. "
+            "Below 50% these are treated as different datasets: a label file that "
+            "half-matches produces figures that colour half the points and look "
+            "finished. Check the two describe the same cohort."
+        )
+    if overlap < 1.0:
+        logger.warning(
+            "%.1f%% of genotyped samples have labels; the rest will be drawn grey.",
+            100 * overlap,
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _write_generated_colormap(label_frame, out_dir / "colormap.json")
+
+    config_path.write_text(
+        _CUSTOM_CONFIG.format(
+            preset=preset,
+            fit_plink=fit_plink,
+            project_plink=project_plink,
+            labels=labels,
+            n_pcs=n_pcs,
+        )
+    )
+    logger.info("Wrote a config for %s to %s", fit_plink.name, out_dir)
+    return config_path
+
+
+def _write_generated_colormap(labels: pd.DataFrame, path: Path) -> None:
+    """A colour for every value of every label column, so no point goes grey.
+
+    Generated, therefore provisional: it is the file you recolour for a figure,
+    and it exists so that nobody hand-writes 22 hex codes to find out whether
+    their pipeline runs.
+    """
+    colormap = {}
+    for column in labels.columns:
+        if column == "sample_id":
+            continue
+        values = sorted(labels[column].dropna().astype(str).unique())
+        colormap[column] = {value: _PALETTE[i % len(_PALETTE)] for i, value in enumerate(values)}
+
+    if not colormap:
+        raise ValueError("the label file has no columns besides sample_id to colour by")
+
+    import json as _json
+
+    path.write_text(_json.dumps(colormap, indent=2) + "\n")

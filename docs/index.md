@@ -3,24 +3,13 @@
 An end-to-end pipeline from PLINK genotypes to publication figures: PCA →
 admixture → manifold embedding → visualisation → metrics.
 
-```bash
-pip install manifold-genetics
-manifold-genetics init synthetic     # a simulated cohort, and a config for it
-manifold-genetics run config.yaml
-```
-
-Those three commands produce figures from nothing, in about a minute, with no
-data of your own and nothing to download. `init hgdp` does the same with the
-real HGDP+1KGP cohort instead, fetching it for you.
-
-That is also the whole install. PCA runs in process — it reads PLINK `.bed`
-directly and computes a randomized SVD — so there is no binary to fetch and no
-platform it only works on. FlashPCA remains available as an opt-in accelerator
-and writes the same artefacts, so a model fitted by either is readable by the
-other.
+PCA runs in process — it reads PLINK `.bed` directly and computes a randomized
+SVD — so there is no binary to fetch and no platform it only works on. FlashPCA
+remains an opt-in accelerator and writes the same artefacts, so a model fitted
+by either is readable by the other.
 
 [Install](install.md){ .md-button .md-button--primary }
-[Tutorial](tutorial.ipynb){ .md-button }
+[Quickstart](quickstart.md){ .md-button }
 
 ## What it is for
 
@@ -70,10 +59,12 @@ individually.
 
 ## Where to start
 
-- [Installation](install.md) — including the optional extras
-- [Quickstart](quickstart.md) — a full run on public data, and the file formats
-- [Tutorial](tutorial.ipynb) — a full run on a cohort it simulates as it goes,
-  under a minute, nothing to download
+- [Install](install.md) — pip or from source, the optional extras, and how to
+  check it works
+- [Quickstart](quickstart.md) — the two experiments as commands, and the file
+  formats going in and out
+- [Tutorial](tutorial.ipynb) — the same run narrated: what each stage produces
+  and how to read it
 
 Reference material — every config key, every subcommand, the Python API — is
 being rewritten and is not on the site yet. Until it is, it lives in the

@@ -30,6 +30,58 @@ matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
 
 
+def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
+    """Warn, loudly, about label values the colormap has no colour for.
+
+    Those points are drawn as background grey and never appear in the legend, so
+    a colormap that does not match its labels produces a figure that looks
+    finished and is wrong. On 2026-09-13 a generated colormap matched nothing at
+    all: every point came out the same grey, the run reported success, and the
+    only detector was someone recognising the picture was not what it should be.
+
+    Scaled to the damage: a couple of stray values is a note, a cohort with no
+    colours at all is a wrong file.
+    """
+    import pandas as pd
+
+    values = pd.Series(values).dropna().astype(str)
+    if values.empty:
+        return
+
+    coloured = {str(k) for k in color_dict}
+    counts = values.value_counts()
+    unmatched = counts[[v not in coloured for v in counts.index]]
+    if unmatched.empty:
+        return
+
+    affected = int(unmatched.sum())
+    share = affected / len(values)
+    named = ", ".join(map(str, unmatched.index[:8]))
+    if len(unmatched) > 8:
+        named += f", and {len(unmatched) - 8} more"
+
+    if share == 1.0:
+        logger.warning(
+            "COLORMAP MISMATCH: none of the %d values in %r have a colour (%s). "
+            "Every point will be drawn grey and the legend will be empty. This "
+            "usually means the colormap and the label file describe different "
+            "cohorts, or the column was renamed.",
+            len(counts),
+            label_column,
+            named,
+        )
+    else:
+        logger.warning(
+            "COLORMAP MISMATCH: %d of %d samples (%.1f%%) have a value in %r with "
+            "no colour: %s. Those points are drawn grey and left out of the legend.",
+            affected,
+            len(values),
+            100 * share,
+            label_column,
+            named,
+        )
+
+
 def plot_embedding(
     embedding: Union[pd.DataFrame, str, Path],
     labels: Union[pd.DataFrame, str, Path],
@@ -115,6 +167,7 @@ def plot_embedding(
         # SECOND: Plot each color group separately (foreground layer)
         # Use the ordering from the color_dict (Python 3.7+ preserves insertion order)
         # Plot in REVERSE order so that the first items in colormap appear on top
+        warn_about_unmatched_labels(merged_df[label_col], color_dict, label_col)
         color_groups = [k for k in color_dict.keys() if k in merged_df[label_col].values]
         for label in reversed(color_groups):
             mask = merged_df[label_col] == label
@@ -302,6 +355,7 @@ def plot_pca_pairs(
 
         # SECOND: Plot each color group separately (foreground layer)
         # Plot in REVERSE order so that the first items in colormap appear on top
+        warn_about_unmatched_labels(merged_df[label_column], color_dict, label_column)
         color_groups = [k for k in color_dict.keys() if k in merged_df[label_column].values]
         for label in reversed(color_groups):
             mask = merged_df[label_column] == label

@@ -401,3 +401,81 @@ class TestHgdpLabels:
                 tmp_path / "labels.csv",
                 tmp_path / "colormap.json",
             )
+
+
+class TestInitCustom:
+    """Scaffolding a config for genotypes the user already has.
+
+    The YAML is fifteen obvious lines; the colormap is not. UK Biobank's needs
+    22 hex colours for `self_described_ancestry` alone, hand-written into JSON,
+    and a value missing from it is drawn grey and dropped from the legend. The
+    other trap is sample IDs: a label file that does not match the .fam does not
+    crash, it colours a fraction of the points.
+
+    So this writes the colormap and checks the overlap, which are the two things
+    a person should not be doing by hand.
+    """
+
+    @pytest.fixture
+    def cohort(self, tmp_path):
+        from manifold_genetics.scaffold import write_bed
+
+        rng = __import__("numpy").random.default_rng(0)
+        dosages = rng.binomial(2, 0.3, size=(40, 60)).astype("uint8")
+        ids = [f"S{i:03d}" for i in range(40)]
+        write_bed(tmp_path / "cohort", dosages, ids)
+        pd.DataFrame({"sample_id": ids, "population": ["A", "B", "C", "D"] * 10}).to_csv(
+            tmp_path / "labels.csv", index=False
+        )
+        return tmp_path
+
+    def test_writes_a_config_the_loader_accepts(self, cohort):
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import init_custom
+
+        config = init_custom(
+            cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv"
+        )
+
+        kwargs = load_config(config)
+        assert kwargs["fit_plink"] == cohort / "cohort"
+
+    def test_generates_a_colour_for_every_label_value(self, cohort):
+        """The 22-colours-by-hand problem is the reason this command exists."""
+        from manifold_genetics.scaffold import init_custom
+
+        init_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv")
+
+        colours = json.loads((cohort / "out" / "colormap.json").read_text())
+        assert set(colours["population"]) == {"A", "B", "C", "D"}
+        assert all(c.startswith("#") for c in colours["population"].values())
+
+    def test_refuses_labels_that_do_not_match_the_genotypes(self, cohort):
+        """The silent failure: a stale label file colours a fraction of the points."""
+        from manifold_genetics.scaffold import init_custom
+
+        pd.DataFrame(
+            {"sample_id": [f"OTHER{i}" for i in range(40)], "population": ["A"] * 40}
+        ).to_csv(cohort / "wrong.csv", index=False)
+
+        with pytest.raises(ValueError, match="different datasets"):
+            init_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "wrong.csv")
+
+    def test_project_plink_defaults_to_the_fit_set(self, cohort):
+        """The common case is one cohort, embedded whole."""
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import init_custom
+
+        config = init_custom(
+            cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv"
+        )
+
+        kwargs = load_config(config)
+        assert kwargs["project_plink"] == kwargs["fit_plink"]
+
+    def test_missing_plink_files_are_reported_before_anything_is_written(self, cohort):
+        from manifold_genetics.scaffold import init_custom
+
+        with pytest.raises(FileNotFoundError, match="bim"):
+            init_custom(cohort / "out", fit_plink=cohort / "absent", labels=cohort / "labels.csv")
+        assert not (cohort / "out" / "config.yaml").exists()
