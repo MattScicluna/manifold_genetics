@@ -14,9 +14,6 @@
 # (PCA fit on 10K WB + 5K Irish, projected to all UKBB samples):
 #   examples/ukbb/10k_WB_5K_Irish/outputs/pca/project_pca_20.csv
 #
-# The same PCA coordinates are written to outputs/pca/fit_pca_20.csv (for the
-# selected samples) so that `manifold-genetics run ... --skip-pca` uses the correct space.
-#
 # Usage:
 #   bash examples/ukbb/geosketch_phate/prepare_data.sh
 #
@@ -187,12 +184,21 @@ done
 print_success "Labels created"
 
 # =============================================================================
-# STEP 5: Create fit PCA file for --skip-pca
+# STEP 5: Create fit PCA file (not used by config.yaml -- see below)
 # =============================================================================
 print_subheader "Step 5: Create fit PCA file"
 
-# Subset PCA_CSV to the selected fit samples so that `manifold-genetics run ... --skip-pca`
-# uses the same 10k_WB_5K_Irish coordinate space that geosketch ran in.
+# Subsets PCA_CSV to the selected fit samples, which would let a run be given the
+# same 10k_WB_5K_Irish coordinate space that geosketch ran in.
+#
+# The shipped config.yaml does NOT do this: it has no skip section, so the
+# pipeline fits a fresh PCA on the sketched subset. That is deliberate -- the
+# config embeds the sketch exactly as 10k_WB_5K_Irish embeds its own subset, so
+# that how the fit subset was chosen does not change how it is embedded. Every
+# geosketch figure in outputs/ was produced that way.
+#
+# This step is therefore unused by the shipped example, and kept only for
+# someone deliberately embedding the sketch in its selection space.
 OUTPUT_PCA_DIR="${SCRIPT_DIR}/outputs/pca"
 FIT_PCA_FILE="${OUTPUT_PCA_DIR}/fit_pca_${N_PCS}.csv"
 
