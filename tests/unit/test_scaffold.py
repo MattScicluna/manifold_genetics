@@ -9,10 +9,61 @@ unreachable for everyone who installed the package the documented way.
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
-from manifold_genetics.scaffold import hgdp_subsets, init_synthetic
+from manifold_genetics.scaffold import (
+    DLA_TREE_EDGES,
+    DLA_TREE_GAPS,
+    dla_tree,
+    genotypes_from_coordinates,
+    hgdp_subsets,
+    init_synthetic,
+)
+
+
+class TestDlaTree:
+    """The cohort lies along the tree in manylatents' `dla_tree_from_graph.yaml`.
+
+    The generator is a port, not an import, and was checked against the
+    original array for array (seed 42, 2026-09-13). These guard the properties
+    that check relied on, so a later edit cannot quietly break the match.
+    """
+
+    def test_one_sample_per_position_on_each_data_edge(self):
+        coordinates, branch = dla_tree()
+
+        data_edges = [edge for edge in DLA_TREE_EDGES if edge[2] not in DLA_TREE_GAPS]
+        assert coordinates.shape == (sum(edge[3] for edge in data_edges), 100)
+        counts = dict(zip(*np.unique(branch, return_counts=True)))
+        assert counts == {edge[2]: edge[3] for edge in data_edges}
+
+    def test_is_reproducible(self):
+        first, _ = dla_tree()
+        second, _ = dla_tree()
+
+        assert np.array_equal(first, second)
+
+    def test_a_gap_edge_leaves_a_gap(self):
+        """Edge 2 continues edge 1 at node 2, so it starts where edge 1 ends.
+        Edge 3 starts at node 8, on the far side of a gap edge from node 2, so
+        it does not -- that gap is the point of having gap edges."""
+        coordinates, branch = dla_tree(sigma=0.0)
+
+        end_of_1 = coordinates[branch == 1][-1]
+        step = np.linalg.norm(np.diff(coordinates[branch == 1], axis=0), axis=1).max()
+
+        assert np.allclose(coordinates[branch == 2][0], end_of_1)
+        assert np.linalg.norm(coordinates[branch == 3][0] - end_of_1) > 10 * step
+
+    def test_genotypes_are_plink_dosages(self):
+        coordinates, _ = dla_tree()
+
+        dosages = genotypes_from_coordinates(coordinates, n_variants=50)
+
+        assert dosages.shape == (len(coordinates), 50)
+        assert set(np.unique(dosages)) <= {0, 1, 2}
 
 
 class TestSyntheticScaffold:
