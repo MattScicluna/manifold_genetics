@@ -12,6 +12,7 @@ which one to reach for.
 ```bash
 manifold-genetics init synthetic     # simulate a cohort and a config beside it
 manifold-genetics init hgdp          # fetch and prepare the real HGDP+1KGP cohort
+manifold-genetics init custom        # a config for genotypes you already have
 ```
 
 A `pip install` ships no data and no example config, so `init` is what gives you
@@ -38,8 +39,14 @@ manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
 usually already trusts the proxy. `--no-download` means never fetch: it still
 unpacks an archive that is already there.
 
-Both take `--out DIR`, and neither overwrites an existing `config.yaml` without
-`--force`.
+`custom` takes `--fit-plink`, `--labels`, and optionally `--project-plink`,
+`--preset` and `--n-pcs`. It writes a colour for every label value -- 22 of them
+for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
+genotyped samples appear in the label file, which is the failure that otherwise
+shows up as a figure colouring some of its points.
+
+All three take `--out DIR`, and none overwrites an existing `config.yaml`
+without `--force`.
 
 ## Running a whole pipeline
 

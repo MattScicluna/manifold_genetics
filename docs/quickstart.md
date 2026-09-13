@@ -76,10 +76,32 @@ manifold-genetics run config.yaml --memory-gb 4
 
 ## Your own data
 
-`init` exists to give you something to run. With your own cohort you skip it and
-write a config yourself — the formats are below, and
-[`init synthetic`](#1-pick-a-cohort) writes a working example of every one of
-them, which is often the fastest way to see what is expected.
+Once you have PLINK files and a label CSV, `init custom` writes the config and
+the colormap for them:
+
+```bash
+manifold-genetics init custom \
+    --fit-plink data/my_cohort \
+    --labels data/my_labels.csv \
+    --preset whole_cohort
+```
+
+`--project-plink` defaults to the fit set, which is the common case of one
+cohort embedded whole. Pass it when the two differ — fitting a reference panel
+and projecting onto it, for instance.
+
+It does two things worth not doing by hand:
+
+- **Writes a colour for every value of every label column.** UK Biobank's
+  `self_described_ancestry` has 22 of them; a value missing from the colormap is
+  drawn grey and left out of the legend. The generated file is a starting point
+  you recolour for a figure, not a final answer.
+- **Checks the labels describe the cohort.** Below 50% of genotyped samples
+  appearing in the label file it refuses and tells you the fraction it found.
+  This is the failure that does not announce itself: a stale label file produces
+  a figure that colours some of the points and looks finished.
+
+You can of course write both files yourself — the formats are below.
 
 ## What goes in
 
