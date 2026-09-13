@@ -10,6 +10,13 @@ on:
 
 jobs:
   test:
+    # The name is pinned rather than left to the matrix. Adding `os` renamed
+    # these jobs to "test (ubuntu-latest, 3.10)", which silently orphaned the
+    # three checks the protect-main ruleset requires by their old names --
+    # every job passed and the merge blocked forever waiting for checks that no
+    # longer existed. Keeping the names stable decouples the branch rules from
+    # the shape of the matrix, so adding a platform never breaks a merge again.
+    name: test (${{ matrix.python-version }})${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -26,6 +33,10 @@ jobs:
         include:
           - os: macos-latest
             python-version: "3.12"
+            # Distinguishes this from the ubuntu 3.12 job, which would otherwise
+            # share its name. Undefined for the ubuntu entries, which renders as
+            # an empty string.
+            label: " macOS"
       fail-fast: false
 
     steps:
