@@ -21,7 +21,7 @@ Requires Python 3.10–3.12, on Linux or macOS.
 pip install manifold-genetics
 ```
 
-Admixture is an optional extra, because it pulls in torch:
+Admixture is an optional extra:
 
 ```bash
 pip install 'manifold-genetics[admixture]'
