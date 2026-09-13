@@ -22,6 +22,12 @@ import numpy as np
 __all__ = ["binom2_stats", "standardize_dosages"]
 
 
+# Variants per block when accumulating per-variant statistics. Chosen so the
+# temporary is a few hundred MB at realistic cohort sizes rather than a copy of
+# the whole matrix.
+_STATS_BLOCK_VARIANTS = 8192
+
+
 def binom2_stats(dosages: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Per-variant mean and binomial SD, flashpca's default convention.
 
@@ -34,10 +40,23 @@ def binom2_stats(dosages: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         nothing instead of poisoning every sample's coordinates.
     """
     dosages = np.asarray(dosages, dtype=np.float64)
-    observed = ~np.isnan(dosages)
-    counts = observed.sum(axis=0)
+    # Computed in column blocks, because every whole-array route allocates a
+    # second copy of the cohort: np.where(observed, dosages, 0) does it
+    # explicitly, and np.nansum does it internally -- _replace_nan copies when
+    # NaNs are present. On 3,400 x 172,152 that is 4.4 GB on top of the 4.4 GB
+    # already held, and it OOM-killed a fit on an 8 GB node, 2026-09-13.
+    #
+    # A block holds n_samples x BLOCK, which is ~220 MB at this cohort size.
+    n_samples, n_variants = dosages.shape
+    counts = np.empty(n_variants, dtype=np.int64)
+    totals = np.empty(n_variants, dtype=np.float64)
+    for start in range(0, n_variants, _STATS_BLOCK_VARIANTS):
+        stop = min(start + _STATS_BLOCK_VARIANTS, n_variants)
+        block = dosages[:, start:stop]
+        missing = np.isnan(block)
+        counts[start:stop] = n_samples - missing.sum(axis=0)
+        totals[start:stop] = np.where(missing, 0.0, block).sum(axis=0)
 
-    totals = np.nansum(np.where(observed, dosages, 0.0), axis=0)
     mean = np.divide(totals, counts, out=np.zeros(counts.shape, dtype=np.float64), where=counts > 0)
 
     # sqrt(2p(1-p)) with p = mean/2, written so it cannot go negative on
@@ -87,13 +106,28 @@ def standardize_dosages(
         # nan_to_num's copy. At ~32 bytes per element a 3,400 x 172,152 fit
         # wants 17 GB, while the budget deciding whether to hold it counts 8
         # bytes per element. A fit was OOM-killed on that gap, 2026-09-13.
-        out = np.subtract(dosages, mean, out=dosages)
+        out = dosages
 
-    np.divide(out, sd, out=out, where=sd > 0)
-    # `where` leaves those entries untouched rather than zeroed, so the
-    # zero-variance columns still carry their centred values and must be set.
-    zero_variance = sd <= 0
-    if zero_variance.any():
-        out[:, zero_variance] = 0.0
+    # Column blocks, because the whole-array form still allocated: nan_to_num
+    # builds a full boolean mask per non-finite kind even under copy=False,
+    # which measured +2.1 GB on that cohort. A block's masks are ~220 MB.
+    for start in range(0, n_variants, _STATS_BLOCK_VARIANTS):
+        stop = min(start + _STATS_BLOCK_VARIANTS, n_variants)
+        block = out[:, start:stop]
+        block_sd = sd[start:stop]
 
-    return np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        if copy:
+            # Already centred above; only the scaling remains.
+            pass
+        else:
+            np.subtract(block, mean[start:stop], out=block)
+
+        np.divide(block, block_sd, out=block, where=block_sd > 0)
+        # `where` leaves those entries untouched rather than zeroed, so the
+        # zero-variance columns still carry their centred values and must be set.
+        zero_variance = block_sd <= 0
+        if zero_variance.any():
+            block[:, zero_variance] = 0.0
+        np.nan_to_num(block, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+
+    return out

@@ -647,37 +647,54 @@ def _run_plink2_keep(bfile: Path, keep: Path, out: Path, plink2: Optional[str]) 
     )
 
 
-# The metadata column naming the genetic region each sample belongs to, in the
-# order the published figures colour them.
-_HGDP_REGION_COLUMN = "project_meta.genetic_region"
+# The metadata column naming each sample's genetic region, and the colours the
+# shipped example uses for it -- examples/colormaps/hgdp_1kgp.json -- so a figure
+# from `init hgdp` is comparable with the published ones.
+_HGDP_REGION_COLUMN = "Genetic_region_merged"
 _HGDP_REGION_COLOURS = {
-    "AFR": "#008000",
-    "AMR": "#FF0000",
-    "CSA": "#FFA500",
-    "EAS": "#0000FF",
-    "EUR": "#9370DB",
-    "MID": "#8B4513",
-    "OCE": "#FF69B4",
+    "Africa": "#008000",
+    "America": "#FF0000",
+    "Central_South_Asia": "#FFA500",
+    "East_Asia": "#0000FF",
+    "Europe": "#800080",
+    "Middle_East": "#808080",
+    "Oceania": "#FFFF00",
 }
 
 
 def _write_hgdp_labels(
     metadata: pd.DataFrame, project_ids: pd.Series, labels_path: Path, colormap_path: Path
 ) -> None:
+    """Write the label file and colormap for the prepared cohort.
+
+    Raises rather than substituting a placeholder when the region column is
+    absent. It previously wrote "Unknown" for every sample, which produced a
+    complete run, a drawn figure, and every point in it the same grey -- a
+    failure that looks like success until someone reads the legend.
+    """
+    if _HGDP_REGION_COLUMN not in metadata.columns:
+        raise KeyError(
+            f"{_HGDP_REGION_COLUMN!r} is not a column of the cohort metadata "
+            f"(found: {sorted(metadata.columns)[:8]}...). Without it the samples "
+            "cannot be labelled, and an unlabelled figure is worse than none."
+        )
+
     keep = metadata[metadata["project_meta.sample_id"].isin(set(project_ids))]
-    region = (
-        keep[_HGDP_REGION_COLUMN]
-        if _HGDP_REGION_COLUMN in keep.columns
-        else pd.Series(["Unknown"] * len(keep), index=keep.index)
-    )
-    pd.DataFrame({"sample_id": keep["project_meta.sample_id"], "genetic_region": region}).to_csv(
+    region = keep[_HGDP_REGION_COLUMN].astype(str)
+
+    pd.DataFrame({"sample_id": keep["project_meta.sample_id"], _HGDP_REGION_COLUMN: region}).to_csv(
         labels_path, index=False
     )
 
-    present = sorted(set(region.astype(str)))
-    colours = {r: _HGDP_REGION_COLOURS.get(r, "#999999") for r in present}
+    unknown = sorted(set(region) - set(_HGDP_REGION_COLOURS))
+    if unknown:
+        logger.warning("No published colour for %s; drawn in grey", ", ".join(unknown))
+
+    colours = {r: _HGDP_REGION_COLOURS.get(r, "#999999") for r in sorted(set(region))}
     colormap_path.write_text(
-        '{\n  "genetic_region": {\n'
+        '{\n  "'
+        + _HGDP_REGION_COLUMN
+        + '": {\n'
         + ",\n".join(f'    "{r}": "{c}"' for r, c in colours.items())
         + "\n  }\n}\n"
     )

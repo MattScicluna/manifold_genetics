@@ -220,8 +220,9 @@ class TestHgdpWithoutWorkingNetwork:
         (raw / "full_dataset.bim").write_text("1 rs0 0 1 A G\n")
         (raw / "full_dataset.fam").write_text("s1 s1 0 0 0 -9\n")
         (raw / "metadata.csv").write_text(
-            "project_meta.sample_id,filter_pca_outlier,hard_filtered,"
-            "filter_king_related,filter_contaminated\ns1,False,False,False,False\n"
+            "project_meta.sample_id,Genetic_region_merged,filter_pca_outlier,"
+            "hard_filtered,filter_king_related,filter_contaminated\n"
+            "s1,Africa,False,False,False,False\n"
         )
         path = tmp_path / "hgdp_1kgp_full.tar.gz"
         with tarfile.open(path, "w:gz") as tar:
@@ -329,3 +330,74 @@ class TestDownloadFallsBackToSystemTools:
 
         for forbidden in ("--insecure", "-k ", "verify=False", "_create_unverified_context"):
             assert forbidden not in source, f"{forbidden!r} disables certificate checking"
+
+
+class TestHgdpLabels:
+    """The labels have to actually label something.
+
+    `init hgdp` looked for a column `project_meta.genetic_region`, which the
+    cohort's metadata does not have -- it is `Genetic_region_merged` -- and fell
+    back to writing "Unknown" for every sample. The run completed, the figure was
+    drawn, and every point in it was the same grey. Reported 2026-09-13.
+
+    A label file that silently does not match its cohort is this project's most
+    expensive failure mode; it has caused published figures to colour 40% of
+    their points from a superseded selection. So the fallback is gone: a missing
+    column is now an error.
+    """
+
+    @pytest.fixture
+    def metadata(self):
+        return pd.DataFrame(
+            {
+                "project_meta.sample_id": ["a", "b", "c"],
+                "Genetic_region_merged": ["Africa", "Europe", "East_Asia"],
+                "filter_pca_outlier": [False] * 3,
+                "hard_filtered": [False] * 3,
+                "filter_king_related": [False] * 3,
+                "filter_contaminated": [False] * 3,
+            }
+        )
+
+    def test_labels_carry_the_real_regions(self, tmp_path, metadata):
+        from manifold_genetics.scaffold import _write_hgdp_labels
+
+        _write_hgdp_labels(
+            metadata,
+            metadata["project_meta.sample_id"],
+            tmp_path / "labels.csv",
+            tmp_path / "colormap.json",
+        )
+
+        labels = pd.read_csv(tmp_path / "labels.csv")
+        assert sorted(labels.iloc[:, 1]) == ["Africa", "East_Asia", "Europe"]
+        assert "Unknown" not in set(labels.iloc[:, 1])
+
+    def test_the_colormap_uses_the_published_colours(self, tmp_path, metadata):
+        """So a figure from `init hgdp` is comparable with the shipped example's."""
+        from manifold_genetics.scaffold import _write_hgdp_labels
+
+        _write_hgdp_labels(
+            metadata,
+            metadata["project_meta.sample_id"],
+            tmp_path / "labels.csv",
+            tmp_path / "colormap.json",
+        )
+
+        colours = json.loads((tmp_path / "colormap.json").read_text())
+        column = next(iter(colours))
+        assert colours[column]["Africa"] == "#008000"
+        assert colours[column]["East_Asia"] == "#0000FF"
+
+    def test_a_missing_region_column_is_an_error_not_a_placeholder(self, tmp_path, metadata):
+        from manifold_genetics.scaffold import _write_hgdp_labels
+
+        without = metadata.drop(columns=["Genetic_region_merged"])
+
+        with pytest.raises(KeyError, match="Genetic_region_merged"):
+            _write_hgdp_labels(
+                without,
+                without["project_meta.sample_id"],
+                tmp_path / "labels.csv",
+                tmp_path / "colormap.json",
+            )
