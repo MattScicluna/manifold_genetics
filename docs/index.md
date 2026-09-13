@@ -27,28 +27,33 @@ Below are PHATE embeddings for UK Biobank and All of Us cohorts.
 | **Visualisation** | scatter plots by any label column, admixture bar plots |
 | **Metrics** | geographic and admixture preservation |
 
-See XXX for the format of files required for each step. 
-Note that there is a CLI available at XXX so you can run individual steps or compose stages in whatever order makes sense for your project.
+Every stage reads and writes the same shape of file, so they compose: see
+[formats](formats.md) for what each one expects, and the
+[command line](cli.md) for running them individually.
 
-Stages are checkpointed: a run that already produced PCA output reuses it. This matters on cohorts where PCA is the expensive part.
-
-This part has a problem. we need to describe the 3 modes first I think. whether we have a fit and transform/project or them seperate. somehow this should be introduced here? else the next section makes no sense
+Stages are checkpointed: a run that already produced PCA output reuses it. This
+matters on cohorts where PCA is the expensive part.
 
 ## Inputs
 
-The user passes a cohort to  cohorts.  Two cohorts go in, and which one the model is *fitted* on is the choice that
-defines the analysis:
-- **`fit`** - reference panel ...
-- **`projection`** — fit on a reference panel, project a target cohort onto it.
-  Places your cohort in a frame of reference somebody else defined.
-- **`subsample`** — fit on a subset of your own cohort, embed that subset. For
-  cohorts too large, or too dominated by one group, to embed whole.
-- **`whole_cohort`** — fit on a subset, embed the whole cohort. The default shape
-  when the project set contains the fit set, and what `init` writes.
+Every run takes two genotype sets, in two roles:
 
-Those three are presets, because the settings that
-follow from the choice — particularly landmarking — are easy to get wrong
-individually.
+- **fit** — the cohort the model is *estimated* on: the PCA loadings, the
+  embedding.
+- **project** — the cohort that fitted model is then *applied* to.
+
+They can be the same set, one can contain the other, or they can be different
+cohorts entirely. How they relate is the analysis, and each arrangement has a
+preset:
+
+| preset | fit | project | for |
+|---|---|---|---|
+| **`projection`** | a reference panel | your cohort | placing your cohort in a frame of reference someone else defined |
+| **`subsample`** | a subset of your cohort | that same subset | cohorts too large, or too dominated by one group, to embed whole |
+| **`whole_cohort`** | a subset of your cohort | the whole cohort | the default, and what `init` writes |
+
+They are presets rather than loose settings because what follows from the choice
+— particularly landmarking — is easy to get wrong individually.
 
 ## Where to start
 
