@@ -221,17 +221,10 @@ class Pipeline:
             admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
 
         Returns:
-            PipelineResult with the typed outputs of every stage that ran.
-            ``admixture`` and ``embedding`` are None when their stage did not
-            run (``skip_admixture`` / ``skip_embedding``), as are
-            ``geographic_metrics`` and ``admixture_metrics`` when their
-            metric did not run. ``pca`` is different: it is never None —
-            under ``skip_pca`` it is still a ``PCAStepResult``, but with
-            ``skipped=True`` and ``fit_pca``/``project_pca`` populated only
-            from whatever cached output already exists on disk (possibly
-            both None). Check ``.skipped``, not truthiness, to tell whether
-            PCA ran. Figure families are empty tuples/dicts when their stage
-            did not run or produced nothing.
+            PipelineResult: The typed outputs of every stage that ran. Fields
+                for skipped stages are None, except ``pca``, which is always a
+                ``PCAStepResult`` -- check its ``.skipped`` rather than
+                truthiness. Figure families are empty rather than None.
         """
         failed = []
 

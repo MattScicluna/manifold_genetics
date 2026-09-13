@@ -60,19 +60,32 @@ manifold-genetics run config.yaml --memory-gb 4
 ## Your own data
 
 `init custom` writes the config and colormap for PLINK files you already have.
-This is the UK Biobank shape — two genotype sets, each with its own labels:
+
+**One cohort**, fitting on a subset of it and embedding that subset — the UK
+Biobank case:
 
 ```bash
 manifold-genetics init custom \
     --fit-plink data/fit_subset \
     --project-plink data/project_subset \
-    --fit-labels data/fit_labels.csv \
-    --project-labels data/project_labels.csv \
+    --labels data/labels.csv \
     --preset subsample
 ```
 
-For one cohort described by one label file, `--fit-plink` and `--labels` are
-enough; `--project-plink` then defaults to the fit set.
+Both sets come from the same cohort: `fit_subset` is the subset the model is
+estimated on, `project_subset` the full cohort the components are computed for.
+
+**Two cohorts**, projecting yours onto a reference panel — separate label files,
+because the cohorts are described differently:
+
+```bash
+manifold-genetics init custom \
+    --fit-plink data/reference_panel \
+    --project-plink data/my_cohort \
+    --fit-labels data/reference_labels.csv \
+    --project-labels data/my_labels.csv \
+    --preset projection
+```
 
 It generates a colour for every label value, and refuses if fewer than half the
 genotyped samples appear in the label file — a mismatch otherwise shows up as a

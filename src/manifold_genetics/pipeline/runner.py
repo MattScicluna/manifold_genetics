@@ -65,6 +65,16 @@ def run_pipeline(
     This is the canonical entry point for running the full genetic analysis pipeline.
     It coordinates PCA, Admixture, Embeddings, Visualization, and Metrics computation.
 
+    Which fields are populated depends on what ran. ``admixture`` and
+    ``embedding`` are None when their stage was skipped, as are
+    ``geographic_metrics`` and ``admixture_metrics``. Figure families are empty
+    rather than None.
+
+    ``pca`` is the exception: it is never None. Under ``skip_pca`` it is still a
+    ``PCAStepResult``, with ``skipped=True`` and ``fit_pca``/``project_pca``
+    filled only from cached output already on disk — possibly both None. Check
+    ``.skipped`` rather than truthiness to tell whether PCA ran.
+
     Args:
         fit_plink: Path to fit subset PLINK files (prefix for .bed/.bim/.fam)
         project_plink: Path to project subset PLINK files (prefix for .bed/.bim/.fam)
@@ -110,17 +120,7 @@ def run_pipeline(
         skip_metrics: Skip metrics computation
 
     Returns:
-        PipelineResult with the typed outputs of every stage that ran.
-        ``admixture`` and ``embedding`` are None when their stage did not run
-        (``skip_admixture`` / ``skip_embedding``), as are
-        ``geographic_metrics`` and ``admixture_metrics`` when their metric
-        did not run. ``pca`` is different: it is never None — under
-        ``skip_pca`` it is still a ``PCAStepResult``, but with
-        ``skipped=True`` and ``fit_pca``/``project_pca`` populated only from
-        whatever cached output already exists on disk (possibly both None).
-        Check ``.skipped``, not truthiness, to tell whether PCA ran. Figure
-        families are empty tuples/dicts when their stage did not run or
-        produced nothing.
+        PipelineResult: The typed outputs of every stage that ran.
 
     Examples:
         >>> # Basic usage with shared labels/colormap
