@@ -14,16 +14,17 @@ The code has been tested on Python 3.10–3.12, on Linux or macOS.
 
 ## Checking it works
 
-You can run the test suite to ensure that the code is working as expected.
+Run the test suite to confirm the install:
 
-Change below code to just pip. we did not introduce uv!!!
 ```bash
 git clone https://github.com/MattScicluna/manifold_genetics
 cd manifold_genetics
-uv sync --frozen --extra dev
+pip install -e '.[dev]'
 
-uv run pytest -m "not slow and not network"
+pytest -m "not slow and not network"
 ```
+
+No data of your own and no network; about two minutes.
 
 ## Extras
 
@@ -32,20 +33,11 @@ pip install 'manifold-genetics[admixture]'   # torch + neural-admixture
 pip install 'manifold-genetics[geosketch]'   # geometric-sketch subsetting
 ```
 
-Note that Admixture is much faster when a GPU is available
+Admixture is much faster when a GPU is available.
 
-`geosketch` is needed only to *select* a geometric sketch of a large cohort.
-
-NOTE we are deprecating examples so you can remove this line: in
-`examples/_shared/select_samples_geosketch.py`. Nothing in the pipeline itself
-imports it.
-
-We add this somewhere else (stuff below)
-That selection runs on **PCA coordinates, not genotypes** — sketching 486,748
-samples across 120,849 raw dosages would take far too long, and the PCA space is
-what the sketch is meant to be representative of. So it needs an existing PCA
-CSV as input, which is a preparation step, not a change to how the pipeline
-works: the run that follows still starts from PLINK files like any other.
+`geosketch` is needed only to *select* a geometric sketch of a large cohort, and
+runs on PCA coordinates rather than genotypes. Nothing in the pipeline imports
+it.
 
 ## External tools
 
@@ -54,11 +46,11 @@ the example `prepare_data.sh` scripts use them to build fit and project subsets
 from a full cohort, intersect variants across cohorts, and handle strand flips.
 
 You do not normally have to fetch them yourself. The first time something needs
-one, it is automatically downloaded and cached per user — `~/.cache/manifold-genetics/bin` on
-Linux, `~/Library/Caches/manifold-genetics/bin` on macOS — and reused
-thereafter.
-Note that if your computing environment has limited access to the internet (e.g. computing nodes on a cluster without internet access)
-You can run the following when you have internet access to pre-fetches everything in one go:
+one it is downloaded and cached per user — `~/.cache/manifold-genetics/bin` on
+Linux, `~/Library/Caches/manifold-genetics/bin` on macOS — and reused after that.
+
+If the machine that runs the pipeline has no internet, as compute nodes on a
+cluster often do not, pre-fetch them from one that does:
 
 ```bash
 manifold-genetics setup
