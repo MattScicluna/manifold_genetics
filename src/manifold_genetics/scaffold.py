@@ -739,7 +739,7 @@ preset: {preset}
 data:
   fit_plink: {fit_plink}
   project_plink: {project_plink}
-  labels: {labels}
+{label_lines}
   colormap: colormap.json
   output_dir: outputs
 
@@ -764,11 +764,42 @@ def _require_plink(prefix: Path) -> None:
         )
 
 
+def _checked_labels(labels: Path, plink: Path, min_overlap: float) -> pd.DataFrame:
+    """Read a label file, refusing one that does not describe ``plink``."""
+    if not labels.exists():
+        raise FileNotFoundError(f"{labels} does not exist")
+
+    frame = pd.read_csv(labels, dtype=str)
+    if "sample_id" not in frame.columns:
+        raise ValueError(f"{labels} has no 'sample_id' column; found {list(frame.columns)}")
+
+    from .pca.plink import read_fam_ids
+
+    genotyped = set(read_fam_ids(plink))
+    overlap = len(genotyped & set(frame["sample_id"])) / max(len(genotyped), 1)
+    if overlap < min_overlap:
+        raise ValueError(
+            f"{labels} describes {overlap:.1%} of the samples in {plink}.fam. "
+            "Below 50% these are treated as different datasets: a label file that "
+            "half-matches produces figures that colour half the points and look "
+            "finished. Check the two describe the same cohort."
+        )
+    if overlap < 1.0:
+        logger.warning(
+            "%.1f%% of samples in %s.fam have labels; the rest will be drawn grey.",
+            100 * overlap,
+            plink.name,
+        )
+    return frame
+
+
 def init_custom(
     out_dir: PathLike,
     fit_plink: PathLike,
-    labels: PathLike,
+    labels: Optional[PathLike] = None,
     project_plink: Optional[PathLike] = None,
+    fit_labels: Optional[PathLike] = None,
+    project_labels: Optional[PathLike] = None,
     preset: str = "whole_cohort",
     n_pcs: int = 20,
     force: bool = False,
@@ -785,7 +816,12 @@ def init_custom(
     Args:
         out_dir: Directory to write the config and colormap into.
         fit_plink: PLINK prefix the model is fitted on.
-        labels: CSV with ``sample_id`` and one column per grouping.
+        labels: CSV with ``sample_id`` and one column per grouping, describing
+            both sets. Give ``fit_labels`` and ``project_labels`` instead when
+            the two cohorts are described by different files, as every UK
+            Biobank config does.
+        fit_labels: Labels for the fit set.
+        project_labels: Labels for the project set.
         project_plink: PLINK prefix to embed. Defaults to ``fit_plink``, which is
             the common case of one cohort embedded whole.
         preset: ``whole_cohort``, ``projection`` or ``subsample``.
@@ -807,46 +843,43 @@ def init_custom(
 
     fit_plink = Path(fit_plink)
     project_plink = Path(project_plink) if project_plink else fit_plink
-    labels = Path(labels)
+
+    if fit_labels or project_labels:
+        if not (fit_labels and project_labels):
+            raise ValueError(
+                "give both --fit-labels and --project-labels, or a single --labels "
+                "describing both sets"
+            )
+        pairs = [(Path(fit_labels), fit_plink), (Path(project_labels), project_plink)]
+    elif labels:
+        pairs = [(Path(labels), project_plink)]
+    else:
+        raise ValueError("no labels given: pass --labels, or --fit-labels and --project-labels")
 
     # Everything is checked before anything is written, so a rejected run leaves
     # no half-made directory to puzzle over.
     _require_plink(fit_plink)
     _require_plink(project_plink)
-    if not labels.exists():
-        raise FileNotFoundError(f"{labels} does not exist")
 
-    label_frame = pd.read_csv(labels, dtype=str)
-    if "sample_id" not in label_frame.columns:
-        raise ValueError(f"{labels} has no 'sample_id' column; found {list(label_frame.columns)}")
-
-    from .pca.plink import read_fam_ids
-
-    genotyped = set(read_fam_ids(project_plink))
-    described = set(label_frame["sample_id"])
-    overlap = len(genotyped & described) / max(len(genotyped), 1)
-    if overlap < min_overlap:
-        raise ValueError(
-            f"{labels} describes {overlap:.1%} of the samples in {project_plink}.fam. "
-            "Below 50% these are treated as different datasets: a label file that "
-            "half-matches produces figures that colour half the points and look "
-            "finished. Check the two describe the same cohort."
-        )
-    if overlap < 1.0:
-        logger.warning(
-            "%.1f%% of genotyped samples have labels; the rest will be drawn grey.",
-            100 * overlap,
-        )
+    frames = []
+    for label_path, plink in pairs:
+        frames.append(_checked_labels(label_path, plink, min_overlap))
+    label_frame = pd.concat(frames, ignore_index=True)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_generated_colormap(label_frame, out_dir / "colormap.json")
+
+    if fit_labels and project_labels:
+        label_lines = f"  fit_labels: {fit_labels}\n  project_labels: {project_labels}"
+    else:
+        label_lines = f"  labels: {labels}"
 
     config_path.write_text(
         _CUSTOM_CONFIG.format(
             preset=preset,
             fit_plink=fit_plink,
             project_plink=project_plink,
-            labels=labels,
+            label_lines=label_lines,
             n_pcs=n_pcs,
         )
     )

@@ -59,17 +59,20 @@ manifold-genetics run config.yaml --memory-gb 4
 
 ## Your own data
 
-`init custom` writes the config and colormap for PLINK files you already have:
+`init custom` writes the config and colormap for PLINK files you already have.
+This is the UK Biobank shape — two genotype sets, each with its own labels:
 
 ```bash
 manifold-genetics init custom \
-    --fit-plink data/my_cohort \
-    --labels data/my_labels.csv \
-    --preset whole_cohort
+    --fit-plink data/fit_subset \
+    --project-plink data/project_subset \
+    --fit-labels data/fit_labels.csv \
+    --project-labels data/project_labels.csv \
+    --preset subsample
 ```
 
-`--project-plink` defaults to the fit set. Pass it when the two differ, as in a
-projection onto a reference panel.
+For one cohort described by one label file, `--fit-plink` and `--labels` are
+enough; `--project-plink` then defaults to the fit set.
 
 It generates a colour for every label value, and refuses if fewer than half the
 genotyped samples appear in the label file — a mismatch otherwise shows up as a
@@ -79,27 +82,12 @@ See [formats](formats.md) if you would rather write both files yourself.
 
 ## All of Us
 
-For readers with access to the controlled data tier, working inside the
-Researcher Workbench. The data cannot be reached from outside.
+For readers working in the All of Us Researcher Workbench with access to the
+controlled data tier:
 
 ```bash
 manifold-genetics init aou
 ```
 
-This one does not fetch anything — preparing All of Us is workbench-specific
-work the package does not reproduce. It checks you are somewhere it could run,
-names anything missing, and writes the config matching
-`examples/aou/hgdp_1kgp_proj/`. Run that example's `prepare_data.sh` first.
-
-## Then what
-
-Stages are checkpointed: re-running reuses whatever is already on disk, so an
-interrupted run resumes rather than restarting. To force a stage to redo its
-work, delete its output.
-
-- [`archive/configuration.md`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive/configuration.md) — every key a config file accepts
-- [`archive/cli.md`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive/cli.md) — running the stages individually
-- [`archive/api.md`](https://github.com/MattScicluna/manifold_genetics/blob/main/archive/api.md) — driving it from a notebook instead
-
-Those three are not on the site yet; they are being rewritten and reintroduced
-one at a time.
+Running this in the workbench reproduces the All of Us experiments from the
+manuscript.
