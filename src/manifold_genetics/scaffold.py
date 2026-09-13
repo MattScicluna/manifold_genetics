@@ -544,7 +544,10 @@ data:
   output_dir: outputs
 
 pca:
-  n_pcs: 20
+  # 50, matching examples/hgdp_1kgp/config.yaml. PHATE is computed on the
+  # principal components, so this is not a performance dial: at 20 the
+  # embedding is visibly different from the published figure for this cohort.
+  n_pcs: 50
 
 embedding:
   method: phate

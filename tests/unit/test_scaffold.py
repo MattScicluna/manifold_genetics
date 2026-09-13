@@ -401,3 +401,43 @@ class TestHgdpLabels:
                 tmp_path / "labels.csv",
                 tmp_path / "colormap.json",
             )
+
+
+class TestHgdpConfigMatchesTheShippedExample:
+    """`init hgdp` must reproduce the published analysis, not merely run.
+
+    It wrote `n_pcs: 20` where examples/hgdp_1kgp/config.yaml uses 50. PHATE is
+    computed on the principal components, so the embedding came out visibly
+    different from the published figure -- reported 2026-09-13 as "doesn't look
+    exactly right". Running at 50 reproduced the published figure.
+
+    Anything here that changes the embedding has to track the example, or the
+    command quietly produces a different scientific result than the one it
+    claims to be a demonstration of.
+    """
+
+    @pytest.fixture
+    def shipped(self):
+        import yaml
+
+        path = Path(__file__).resolve().parents[2] / "examples" / "hgdp_1kgp" / "config.yaml"
+        return yaml.safe_load(path.read_text())
+
+    @pytest.fixture
+    def written(self, tmp_path):
+        import yaml
+
+        from manifold_genetics.scaffold import _HGDP_CONFIG
+
+        (tmp_path / "config.yaml").write_text(_HGDP_CONFIG)
+        return yaml.safe_load((tmp_path / "config.yaml").read_text())
+
+    def test_the_component_count_matches(self, shipped, written):
+        assert written["pca"]["n_pcs"] == shipped["pca"]["n_pcs"]
+
+    def test_the_preset_matches(self, shipped, written):
+        """The preset carries knn, t and the landmarking settings."""
+        assert written["preset"] == shipped["preset"]
+
+    def test_the_embedding_method_matches(self, shipped, written):
+        assert written["embedding"]["method"] == shipped["embedding"]["method"]
