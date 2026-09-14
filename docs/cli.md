@@ -12,7 +12,7 @@ Every command prints its own options and a worked example.
 manifold-genetics acquire synthetic  # simulate a cohort and a config beside it
 manifold-genetics acquire hgdp       # fetch and prepare the real HGDP+1KGP cohort
 manifold-genetics acquire custom     # a config for genotypes you already have
-manifold-genetics acquire aou        # a config for All of Us (workbench only)
+manifold-genetics acquire aou        # fetch All of Us (workbench only)
 ```
 
 `pip install` downloads no data and no example config, so `acquire` is what gives you
@@ -49,11 +49,14 @@ for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
 
-`aou` does **not** fetch anything: All of Us is controlled-access and prepared
-by workbench-specific tooling. It checks the environment — `GOOGLE_PROJECT`,
-`WORKSPACE_CDR`, `gsutil`, `bq`, `plink2` — names everything missing at once, and
-writes the config. Run in the workbench, it reproduces the All of Us experiments
-from the manuscript.
+`aou` fetches the All of Us V8 array genotypes from their bucket and labels
+every sample by self-reported race and ethnicity from the CDR, which needs the
+`aou` extra (`pip install 'manifold-genetics[aou]'`). It only works inside the
+Researcher Workbench: it checks the environment first — `GOOGLE_PROJECT`,
+`WORKSPACE_CDR`, `gsutil`, `bq` — and names everything missing at once. What it
+writes is the cohort alone; the manuscript's figures projected it onto HGDP+1KGP,
+which is `acquire hgdp --archive gs://…/1KGPHGDP.tar.gz` followed by
+`preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`.
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.

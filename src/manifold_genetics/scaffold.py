@@ -17,7 +17,6 @@ Two targets, because they answer different questions:
 """
 
 import logging
-import os
 import shutil
 import subprocess
 import tarfile
@@ -27,6 +26,14 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 
+# All of Us lives in its own module: the port of download_aou_data.sh is long
+# enough to deserve one. Re-exported here because `acquire` has always found it
+# under this name, and so have the tests. aou imports this module's helpers
+# lazily, so this is not circular.
+from .aou import _AOU_CONFIG  # noqa: F401
+from .aou import _AOU_REQUIRED_ENV  # noqa: F401
+from .aou import _AOU_REQUIRED_TOOLS  # noqa: F401
+from .aou import acquire_aou, aou_environment_problems  # noqa: F401
 from .utils.tools import fetch_url
 
 logger = logging.getLogger(__name__)
@@ -1056,121 +1063,3 @@ def _write_generated_colormap(labels: pd.DataFrame, path: Path) -> None:
     import json as _json
 
     path.write_text(_json.dumps(colormap, indent=2) + "\n")
-
-
-# What the All of Us preparation needs, and where each comes from. Checked
-# together rather than one at a time: reporting them singly would be three round
-# trips for someone who is simply not in the workbench.
-_AOU_REQUIRED_ENV = {
-    "GOOGLE_PROJECT": "the workbench's billing project, set for you inside it",
-    "WORKSPACE_CDR": "the CDR version, used to read demographics from BigQuery",
-}
-_AOU_REQUIRED_TOOLS = {
-    "gsutil": "to read gs://fc-aou-datasets-controlled",
-    "bq": "to query the CDR for sample demographics",
-    "plink2": "to filter and harmonise the genotypes",
-}
-
-_AOU_CONFIG = """\
-# Written by `manifold-genetics acquire aou`.
-#
-# All of Us projected onto the HGDP+1KGP reference panel, matching
-# examples/aou/hgdp_1kgp_proj/config.yaml.
-#
-#   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
-#   manifold-genetics run config.yaml             # do the work
-#
-# The genotypes are NOT fetched by `acquire`: All of Us is controlled-access and its
-# preparation is about 1,300 lines of workbench-specific shell -- a GCS download,
-# a per-chromosome split, filtering, harmonisation and intersection with the
-# reference panel. Run that first:
-#
-#   bash examples/aou/hgdp_1kgp_proj/prepare_data.sh
-#
-# and point the paths below at what it produced.
-
-# "projection" fits on the reference panel and transforms the cohort onto it.
-preset: projection
-
-data:
-  fit_plink: data/fit_subset
-  project_plink: data/project_subset
-  fit_labels: data/fit_labels.csv
-  project_labels: data/project_labels.csv
-  fit_colormap: colormap_fit.json
-  project_colormap: colormap_project.json
-  output_dir: outputs
-
-pca:
-  n_pcs: 20
-
-embedding:
-  method: phate
-  # 400,000-odd samples are transformed; batching keeps peak memory bounded.
-  embed_batch_size: 60000
-
-visualization:
-  projection_plot_fit_column: Population
-  projection_plot_project_column: race_ethnicity
-
-# Admixture needs the `admixture` extra (torch) and a GPU to be worth running.
-skip:
-  admixture: true
-"""
-
-
-def aou_environment_problems() -> list:
-    """What is missing before All of Us data can be prepared, in one pass."""
-    problems = []
-    for variable, why in _AOU_REQUIRED_ENV.items():
-        if not os.environ.get(variable):
-            problems.append(f"  ${variable} is not set -- {why}")
-    for tool, why in _AOU_REQUIRED_TOOLS.items():
-        if not shutil.which(tool):
-            problems.append(f"  {tool} is not on PATH -- {why}")
-    return problems
-
-
-def acquire_aou(out_dir: PathLike, force: bool = False) -> Path:
-    """Write a config for All of Us, after checking this is a place it can run.
-
-    Deliberately does not fetch anything. Unlike HGDP -- one archive over HTTPS
-    and two plink2 calls -- All of Us is controlled-access, lives in
-    ``gs://fc-aou-datasets-controlled``, and its preparation is about 1,300
-    lines of workbench-specific shell. Hiding that behind one command would
-    promise something it cannot deliver, and the failure would arrive deep
-    inside a download rather than at the start.
-
-    So this checks the environment, reports everything missing at once, and
-    writes the config for the prepared cohort.
-
-    Raises:
-        EnvironmentError: this is not an All of Us Researcher Workbench.
-    """
-    out_dir = Path(out_dir)
-    config_path = out_dir / "config.yaml"
-    _refuse_to_clobber(config_path, force)
-
-    problems = aou_environment_problems()
-    if problems:
-        raise EnvironmentError(
-            "All of Us data can only be prepared inside the Researcher Workbench, "
-            "and this does not look like one:\n\n"
-            + "\n".join(problems)
-            + "\n\nIf you are in the workbench, these are normally set for you; "
-            "check the notebook environment. If you are not, there is no way to "
-            "reach the data from here -- it is controlled-access.\n\n"
-            "To try the pipeline without it: `manifold-genetics acquire synthetic`, "
-            "or `acquire hgdp` for a real public cohort."
-        )
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(_AOU_CONFIG)
-    logger.info("Wrote an All of Us config to %s", out_dir)
-    logger.warning(
-        "The genotypes are not fetched by acquire. Run "
-        "examples/aou/hgdp_1kgp_proj/prepare_data.sh first, then point the paths "
-        "in %s at what it produced.",
-        config_path,
-    )
-    return config_path

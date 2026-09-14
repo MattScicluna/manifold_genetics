@@ -718,23 +718,13 @@ class TestInitCustom:
 class TestInitAou:
     """All of Us is controlled-access and lives in a workbench.
 
-    Unlike HGDP -- one archive over HTTPS and two plink2 calls -- its data comes
-    from `gs://fc-aou-datasets-controlled` and needs GOOGLE_PROJECT, gsutil, bq
-    and about 1,300 lines of preparation that only run inside the Researcher
-    Workbench. So this command does not pretend to fetch anything: it checks the
-    environment, says plainly what is missing, and writes the config.
-
-    The failure path is what almost everyone who types this will see, so it is
-    the part that is tested.
+    Its data comes from `gs://fc-aou-datasets-controlled` and needs
+    GOOGLE_PROJECT, gsutil and bq, which only exist inside the Researcher
+    Workbench. What the command does once it is there -- the download, the FAM
+    fix, the BigQuery metadata, the labels -- is tested against stubs in
+    `test_aou_acquire.py`. The failure path is what almost everyone who types
+    this will see, so it is the part that is tested here.
     """
-
-    @pytest.fixture
-    def in_workbench(self, monkeypatch):
-        from manifold_genetics import scaffold
-
-        monkeypatch.setenv("GOOGLE_PROJECT", "aou-rw-1234")
-        monkeypatch.setenv("WORKSPACE_CDR", "fc-aou-cdr-prod.C2024Q3R5")
-        monkeypatch.setattr(scaffold.shutil, "which", lambda n: f"/usr/bin/{n}")
 
     def test_outside_the_workbench_it_says_so_and_writes_nothing(self, tmp_path, monkeypatch):
         from manifold_genetics import scaffold
@@ -760,36 +750,36 @@ class TestInitAou:
         with pytest.raises(EnvironmentError) as excinfo:
             scaffold.acquire_aou(tmp_path)
 
-        for expected in ("GOOGLE_PROJECT", "gsutil", "plink2"):
+        for expected in ("GOOGLE_PROJECT", "gsutil", "bq"):
             assert expected in str(excinfo.value)
 
-    def test_inside_the_workbench_it_writes_a_config(self, tmp_path, in_workbench):
-        from manifold_genetics.pipeline.configfile import load_config
-        from manifold_genetics.scaffold import acquire_aou
+    def test_plink_is_not_a_prerequisite(self):
+        """The script's per-chromosome split was the only plink call, and it
+        is not ported: nothing downstream read the per-chromosome files."""
+        from manifold_genetics import scaffold
 
-        config = acquire_aou(tmp_path)
+        assert "plink2" not in scaffold._AOU_REQUIRED_TOOLS
+        assert "plink" not in scaffold._AOU_REQUIRED_TOOLS
 
-        kwargs = load_config(config)
-        assert kwargs["embedding_input"] == "both", "AoU is a projection onto HGDP"
-
-    def test_the_config_matches_the_shipped_aou_example(self, tmp_path, in_workbench):
-        """It should reproduce that analysis, not a variation on it."""
+    def test_the_config_is_the_cohort_alone(self):
+        """`acquire aou` writes the cohort as a whole_cohort directory;
+        examples/aou/hgdp_1kgp_proj/config.yaml is the *projection* of it onto
+        HGDP+1KGP, which `preprocess` now produces from two cohort directories.
+        So the two are no longer compared -- only what carries over is pinned:
+        the PCA count and the batch size that bounds memory on 400k+ samples.
+        """
         import yaml
 
-        from manifold_genetics.scaffold import acquire_aou
+        from manifold_genetics import scaffold
 
-        shipped = yaml.safe_load(
-            (
-                Path(__file__).resolve().parents[2] / "examples/aou/hgdp_1kgp_proj/config.yaml"
-            ).read_text()
-        )
-        written = yaml.safe_load(acquire_aou(tmp_path).read_text())
+        written = yaml.safe_load(scaffold._AOU_CONFIG)
 
-        assert written["preset"] == shipped["preset"]
-        assert written["pca"]["n_pcs"] == shipped["pca"]["n_pcs"]
-        assert (
-            written["embedding"]["embed_batch_size"] == shipped["embedding"]["embed_batch_size"]
-        ), "the batch size bounds memory on 400k+ samples"
+        assert written["preset"] == "whole_cohort"
+        assert written["data"]["fit_plink"] == written["data"]["project_plink"]
+        assert written["pca"]["n_pcs"] == 20
+        assert written["embedding"]["embed_batch_size"] == 60000
+        assert written["skip"]["admixture"] is True
+        assert "visualization" not in written, "projection_plot_* are preprocess's to set"
 
 
 class TestInitCustomSeparateLabels:

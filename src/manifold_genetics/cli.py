@@ -488,6 +488,12 @@ def cmd_acquire(args):
         # commands stay copy-pasteable.
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as exc:
+        # A gsutil copy that failed: name the command, since its own output
+        # went to the terminal above and the exit code alone says nothing.
+        command = " ".join(str(a) for a in exc.cmd) if isinstance(exc.cmd, list) else exc.cmd
+        print(f"Error: `{command}` failed with exit status {exc.returncode}.", file=sys.stderr)
+        return 1
 
     relative = config if out != Path(".") else config.name
     print(f"\nWrote {config}")
@@ -1395,10 +1401,10 @@ def main(argv: Optional[List[str]] = None):
             "              have. Generates a colour for every label value, and\n"
             "              refuses if the labels do not describe the cohort --\n"
             "              the two things worth not doing by hand.\n\n"
-            "  aou         Write a config for All of Us. Checks this is a Researcher\n"
-            "              Workbench and says what is missing if not. It does NOT\n"
-            "              fetch the data: that is controlled-access and about 1,300\n"
-            "              lines of workbench-specific preparation.\n\n"
+            "  aou         Fetch All of Us (V8 arrays) from its bucket and label it\n"
+            "              from the CDR, as examples/aou/shared/download_aou_data.sh\n"
+            "              did. Only works inside a Researcher Workbench, and says\n"
+            "              what is missing if this is not one. Needs the `aou` extra.\n\n"
             "None of them overwrites an existing config.yaml unless you pass --force."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
