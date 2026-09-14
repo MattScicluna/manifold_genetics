@@ -32,3 +32,22 @@ def test_the_example_copies_are_links_to_the_shipped_one(tmp_path):
         pytest.skip("not running from a checkout")
     assert link.is_symlink()
     assert link.resolve() == preprocessing.SHELL_SCRIPT.resolve()
+
+
+NEW_FLAGS = ["--plink2", "--plink", "--python", "--min-common-snps"]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not on PATH")
+def test_help_lists_the_flags_python_passes():
+    out = subprocess.run(
+        ["bash", str(preprocessing.SHELL_SCRIPT), "--help"], capture_output=True, text=True
+    )
+    assert out.returncode == 0
+    for flag in NEW_FLAGS:
+        assert flag in out.stdout, f"{flag} missing from --help"
+
+
+def test_the_shell_no_longer_reaches_for_src():
+    text = preprocessing.SHELL_SCRIPT.read_text()
+    assert "sys.path.insert" not in text
+    assert "python3 " not in text and "python3\n" not in text, "python3 must go through ${PYTHON}"

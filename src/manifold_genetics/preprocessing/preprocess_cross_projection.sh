@@ -42,6 +42,13 @@ OUTPUT_DIR=""
 TEMP_DIR=""
 TOOLS_DIR="${SCRIPT_DIR}/../tools"
 
+# Set by `manifold-genetics preprocess`, which resolves the tools itself. Left
+# empty, the script searches the way it always has (bin/, modules, PATH).
+PLINK2="${PLINK2:-}"
+PLINK="${PLINK:-}"
+PYTHON="${PYTHON:-python3}"
+MIN_COMMON_SNPS="${MIN_COMMON_SNPS:-50000}"
+
 # Performance
 MEMORY="${MEMORY:-100000}"
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
@@ -159,6 +166,22 @@ while [[ $# -gt 0 ]]; do
             REFERENCE_HAS_CHR_PREFIX=true
             shift
             ;;
+        --plink2)
+            PLINK2="$2"
+            shift 2
+            ;;
+        --plink)
+            PLINK="$2"
+            shift 2
+            ;;
+        --python)
+            PYTHON="$2"
+            shift 2
+            ;;
+        --min-common-snps)
+            MIN_COMMON_SNPS="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Cross-Projection Preprocessing Script"
             echo ""
@@ -174,6 +197,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --tools-dir PATH          Directory for external tools (default: _shared/tools)"
             echo "  --memory MB               plink2 memory limit (default: 100000)"
             echo "  --threads N               Number of threads (default: SLURM_CPUS_PER_TASK or 4)"
+            echo "  --plink2 PATH             plink2 binary (default: search bin/, modules, PATH)"
+            echo "  --plink PATH              plink v1.9 binary (default: search as above)"
+            echo "  --python PATH             Python with manifold_genetics importable (default: python3)"
+            echo "  --min-common-snps N       Abort below this many shared SNPs (default: 50000)"
             echo ""
             echo "Filtering parameters:"
             echo "  --maf FLOAT               MAF threshold (default: 0.01)"
@@ -274,12 +301,16 @@ echo ""
 print_header "Checking Required Tools"
 
 print_status "Looking for plink2..."
-if ! find_plink2 "$PROJECT_ROOT"; then
+if [[ -n "$PLINK2" ]]; then
+    print_success "Using plink2 given on the command line: ${PLINK2}"
+elif ! find_plink2 "$PROJECT_ROOT"; then
     exit 1
 fi
 
 print_status "Looking for plink (v1.9)..."
-if ! find_plink "$PROJECT_ROOT"; then
+if [[ -n "$PLINK" ]]; then
+    print_success "Using plink given on the command line: ${PLINK}"
+elif ! find_plink "$PROJECT_ROOT"; then
     exit 1
 fi
 
@@ -406,7 +437,7 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
 
         # Run Python script to identify SNPs to keep
         echo "    Identifying best SNP per position..."
-        python3 -m manifold_genetics.utils.filter_duplicates \
+        "${PYTHON}" -m manifold_genetics.utils.filter_duplicates \
             --bim ${CURRENT_REF}.bim \
             --lmiss ${TEMP_DIR}/reference_missing.lmiss \
             --frq ${TEMP_DIR}/reference_freq.frq \
@@ -785,8 +816,8 @@ else
     COMMON_SNP_COUNT=$(wc -l < "${TEMP_DIR}/common_snps.txt")
     print_success "Found $COMMON_SNP_COUNT common SNPs"
 
-    if [[ $COMMON_SNP_COUNT -lt 50000 ]]; then
-        print_error "Less than 50K common SNPs! Data may be incompatible."
+    if [[ $COMMON_SNP_COUNT -lt $MIN_COMMON_SNPS ]]; then
+        print_error "Fewer than ${MIN_COMMON_SNPS} common SNPs! Data may be incompatible."
         exit 1
     elif [[ $COMMON_SNP_COUNT -lt 100000 ]]; then
         print_warning "Less than 100K common SNPs! Check data compatibility."
@@ -794,12 +825,9 @@ else
 
     print_status "Checking allele consistency..."
 
-    python3 << EOF
+    "${PYTHON}" << EOF
 import sys
 from pathlib import Path
-
-# Add package to path
-sys.path.insert(0, str(Path("${PROJECT_ROOT}/src")))
 
 from manifold_genetics.utils.io import check_allele_compatibility
 
