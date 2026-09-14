@@ -218,6 +218,34 @@ Decisions:
   becomes a CI-adjacent test (see Testing). Compare on `(chr, pos, a1, a2)`
   sets and sample-ID sets, not bytes: the shell rewrites variant IDs to
   `chr:pos:ref:alt`, and `.bed` byte order is not guaranteed.
+
+  **Observed on the real archive (Task 9, 2026-09-14, `tests/integration/test_hgdp_idempotence.py`,
+  172,152 SNPs, `acquire hgdp` fit=3,400/project=4,094).** Neither parametrisation
+  is exactly lossless, and both are `xfail(strict=True)` rather than passing or
+  having their assertion loosened:
+  - `--preset intersect-only`: 747 of 172,152 (0.43%) lost on both sides, not 0.
+    Cause: the shell's `--geno 0.05` missingness filter has **no `--skip` flag** —
+    it runs even under `intersect-only`. The public panel's missingness was
+    computed at n=4,151; recomputed on `acquire_hgdp`'s smaller, different
+    subsets (3,400 fit / 4,094 project) it newly exceeds 5% on 739 reference-side
+    and 36 project-side SNPs, and the post-filter position-overlap step drops the
+    union of those. Sample IDs and chromosome names (still bare `1`, not `chr1`,
+    on both sides — consistent with Task 5's synthetic-cohort finding) are
+    unaffected. Fixing this is out of scope here — it needs a `--skip-geno`
+    lever in the shell and `flags.py` — but the exact-idempotence claim above
+    should be read as "same variants modulo the panel's own missingness filter
+    recomputed on a different sample count."
+  - UKBB flag set (`skip_wrayner`, `skip_project_maf`, everything else on): 70,795
+    of 172,152 (41.1%) lost on both sides. Breakdown on the reference/fit side:
+    GIAB+HLA region exclusion −47,714, the unconditional `--geno` filter −121,
+    MAF≥0.01 on the reference −3,008 (the project side only loses its own 36 to
+    `--geno`, since `--skip-biobank-maf` is set), then LD-pruning the
+    already-pruned, now much-smaller intersected set at the same parameters
+    (`--indep-pairwise 150 1 0.05`) removes a further 19,952 — far more than the
+    "few" a re-prune of an already-pruned panel was expected to cost, because by
+    that point GIAB/HLA/geno/MAF have already changed which SNPs and LD
+    structure are present. HLA exclusion itself removed 0 extra (the panel is
+    already `.noHLA`); GIAB accounts for essentially all of the 47,714.
 - **The AoU flow is reproduced as-is**, including the final SNP count landing
   below the shell's 100k warning. The workbench has its own HGDP+1KGP, and its
   layout differs, so `acquire hgdp --archive PATH|gs://URL` detects which
