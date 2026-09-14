@@ -63,7 +63,9 @@ def read_cohort(config_path: PathLike) -> CohortConfig:
         preset=raw.get("preset"),
         fit=side("fit"),
         project=side("project"),
-        shared_labels="labels" in resolved and "fit_labels" not in resolved,
+        shared_labels="labels" in resolved
+        and "fit_labels" not in resolved
+        and "project_labels" not in resolved,
     )
 
 

@@ -45,6 +45,25 @@ def test_a_projection_config_keeps_the_sides_apart(tmp_path):
     assert cohort.fit.colormap.name == "a.json" and cohort.project.colormap.name == "b.json"
 
 
+def test_shared_labels_is_false_when_only_one_side_overrides_it(tmp_path):
+    (tmp_path / "data").mkdir()
+    for name in ("a", "b"):
+        for ext in ("bed", "bim", "fam"):
+            (tmp_path / "data" / f"{name}.{ext}").write_text("")
+        (tmp_path / f"{name}.json").write_text("{}")
+    (tmp_path / "shared.csv").write_text("sample_id,x\n")
+    (tmp_path / "data" / "b.csv").write_text("sample_id,x\n")
+    (tmp_path / "config.yaml").write_text(
+        "preset: projection\ndata:\n  fit_plink: data/a\n  project_plink: data/b\n"
+        "  labels: shared.csv\n  project_labels: data/b.csv\n"
+        "  fit_colormap: a.json\n  project_colormap: b.json\n  output_dir: outputs\n"
+    )
+    cohort = read_cohort(tmp_path / "config.yaml")
+    assert not cohort.shared_labels
+    assert cohort.fit.labels.name == "shared.csv"
+    assert cohort.project.labels.name == "b.csv"
+
+
 def test_fam_ids_come_back_in_file_order(cohort):
     ids = read_fam_ids(cohort.fit.plink)
     fam = pd.read_csv(f"{cohort.fit.plink}.fam", sep=r"\s+", header=None, dtype=str)
@@ -64,6 +83,17 @@ def test_labels_that_do_not_cover_the_fam_are_an_error(cohort, tmp_path):
     pd.read_csv(cohort.project.labels).iloc[:5].to_csv(partial, index=False)
     with pytest.raises(ValueError, match="not in"):
         filter_labels_to_fam(partial, cohort.fit.plink, tmp_path / "out.csv")
+
+
+def test_labels_with_a_duplicate_sample_id_do_not_expand_the_output(cohort, tmp_path):
+    labels = pd.read_csv(cohort.project.labels, dtype=str)
+    duplicated = pd.concat([labels, labels.iloc[[0]]], ignore_index=True)
+    dup_path = tmp_path / "duplicated.csv"
+    duplicated.to_csv(dup_path, index=False)
+
+    out = tmp_path / "filtered.csv"
+    n = filter_labels_to_fam(dup_path, cohort.fit.plink, out)
+    assert n == len(read_fam_ids(cohort.fit.plink))
 
 
 def test_the_written_config_is_accepted_by_the_loader_and_carries_settings(cohort, tmp_path):
