@@ -1,6 +1,6 @@
 # Quickstart
 
-Two commands to a figure. Assumes you have [installed it](install.md).
+There are two experiments that you can run immediately. First, make sure you have [installed this package](install.md).
 
 ## 1. Pick a cohort
 
@@ -42,8 +42,7 @@ manifold-genetics run config.yaml --dry-run
 ```
 
 Prints every setting the run will use, marking `(default)` on anything the
-package supplied rather than the config file, then exits. Worth doing before any
-long run.
+package supplied rather than the config file, then exits. This can help you determine what is going on especially during any complex run.
 
 ## 3. Run it
 
@@ -51,7 +50,7 @@ long run.
 manifold-genetics run config.yaml
 ```
 
-If the run is killed, set a memory budget:
+If the run is OOM killed, set a memory budget:
 
 ```bash
 manifold-genetics run config.yaml --memory-gb 4
@@ -61,8 +60,7 @@ manifold-genetics run config.yaml --memory-gb 4
 
 `init custom` writes the config and colormap for PLINK files you already have.
 
-**One cohort**, fitting on a subset of it and embedding that subset — the UK
-Biobank case:
+**One cohort**, fitting on a subset of it and embedding that subset:
 
 ```bash
 manifold-genetics init custom \
@@ -76,7 +74,7 @@ Both sets come from the same cohort: `fit_subset` is the subset the model is
 estimated on, `project_subset` the full cohort the components are computed for.
 
 **Two cohorts**, projecting yours onto a reference panel — separate label files,
-because the cohorts are described differently:
+because the cohorts need not have the same labels:
 
 ```bash
 manifold-genetics init custom \
