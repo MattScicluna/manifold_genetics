@@ -56,7 +56,10 @@ Researcher Workbench: it checks the environment first — `GOOGLE_PROJECT`,
 `WORKSPACE_CDR`, `gsutil`, `bq` — and names everything missing at once. What it
 writes is the cohort alone; the manuscript's figures projected it onto HGDP+1KGP,
 which is `acquire hgdp --archive gs://…/1KGPHGDP.tar.gz` followed by
-`preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`.
+`preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`
+(see [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench)).
+It is a port of the shell script that produced the published figures and has
+not yet been run inside the workbench itself (issue #124).
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.
@@ -131,13 +134,42 @@ either is readable by the other.
 ## preprocess
 
 ```bash
-manifold-genetics preprocess fit/config.yaml --out filtered/
-manifold-genetics preprocess fit/config.yaml project/config.yaml --out filtered/ --preset harmonise
+manifold-genetics preprocess cohort/config.yaml --out filtered/
+manifold-genetics preprocess ref/config.yaml biobank/config.yaml --out proj/ --preset harmonise
 ```
 
-Filter SNPs of one cohort, or intersect two, into a new cohort directory in the
-same layout, so the result can go to `run`, `pipeline`, or another `preprocess`.
-Samples are never removed here. See [Preprocessing](preprocessing.md).
+Optional. Filters the SNPs of one cohort, or intersects two, into a new cohort
+directory in the same layout, so the result can go to `run`, `subsample`, or
+another `preprocess`. With one config, the cohort's own fit and project sets
+are the two sides; with two, the first supplies the fit set and the output is a
+`projection`. Samples are never removed here. It runs the shell script that
+produced the published figures, shipped inside the package, and needs `bash`,
+`plink2` and `plink` v1.9.
+
+| preset | what runs |
+|---|---|
+| `--preset intersect-only` | indels, missingness, intersection — no external references |
+| `--preset harmonise` | everything: WRayner/TOPMed, GIAB, HLA, dedup, MAF, LD pruning, `--cleanup` |
+| *(none)* | the shell defaults; add `--skip-*` flags |
+
+- `--skip-wrayner`, `--skip-giab`, `--skip-hla`, `--skip-ld-prune`,
+  `--skip-dedup`, `--skip-maf`, `--skip-geno`, `--skip-project-maf` turn off
+  one step each, on top of any preset. The UK Biobank flow is
+  `--skip-wrayner --skip-project-maf`.
+- `--maf`, `--geno`, `--ld-window`, `--ld-step`, `--ld-r2` set the thresholds
+  (shell defaults 0.01, 0.05, 150 kb, 1, 0.05).
+- `--fit-has-chr-prefix` when the fit set's chromosomes are already `chr1`,
+  not `1` — true of the workbench HGDP+1KGP panel `acquire hgdp --archive`
+  writes.
+- `--threads`, `--memory` (MB, default 100000), `--temp-dir`, `--cleanup` for
+  resources; `--tools-dir` for where the `harmonise` references live;
+  `--min-common-snps` (50,000) is the floor below which the run aborts.
+
+`harmonise` downloads its references at run time unless
+`manifold-genetics setup --preprocessing` has fetched them — and one of those
+downloads is currently broken upstream. See
+[Preprocessing](preprocessing.md), which also has the worked UK Biobank and
+All of Us examples.
 
 ## subsample
 
@@ -167,7 +199,7 @@ Choose the fit samples by exactly one of:
 ## Setup
 
 ```bash
-manifold-genetics setup
+manifold-genetics setup [--skip-plink1] [--preprocessing]
 ```
 
 Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
@@ -176,6 +208,12 @@ from one). They are also fetched on first use, so this is optional — what it i
 for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
+
+`--preprocessing` also fetches the GIAB, WRayner and TOPMed references that
+`preprocess --preset harmonise` needs (about 1 GB), into the cache's
+`preprocessing/` subdirectory. The WRayner URL currently returns 404 upstream,
+so that one fails; [Preprocessing](preprocessing.md#what-needs-internet) says
+where to place the file by hand.
 
 ## Exit codes and logging
 

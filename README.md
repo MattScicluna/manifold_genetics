@@ -33,6 +33,18 @@ pip install 'manifold-genetics[admixture]'
 pip install git+https://github.com/MattScicluna/manifold_genetics
 ```
 
+## Usage
+
+```bash
+manifold-genetics acquire synthetic     # a simulated cohort and its config, in seconds
+manifold-genetics run config.yaml
+```
+
+`acquire hgdp` fetches the public HGDP+1KGP cohort instead; `acquire custom`
+writes a config for PLINK files you already have. For raw biobank genotypes,
+`preprocess` filters and intersects SNPs and `subsample` chooses the fit
+samples, each writing a directory `run` accepts.
+
 ## Documentation and tutorials
 
 - **[Documentation](https://mattscicluna.github.io/manifold_genetics/)**
@@ -42,6 +54,8 @@ pip install git+https://github.com/MattScicluna/manifold_genetics
   a complete run on a simulated cohort, under a minute, nothing to download
 - **[Install](https://mattscicluna.github.io/manifold_genetics/install/)** —
   optional extras, external tools, and developing on the repository
+- **[Preprocessing](https://mattscicluna.github.io/manifold_genetics/preprocessing/)** —
+  filtering raw biobank genotypes and projecting them onto a reference panel
 
 ## Help
 
