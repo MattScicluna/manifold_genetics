@@ -1,6 +1,7 @@
 """What `preprocess` does around the shell, with the shell replaced by a stub
 that writes the two outputs the real one writes."""
 
+import dataclasses
 import shutil
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing import PreprocessOptions, preprocess  # noqa: F401
+from manifold_genetics.preprocessing.references import default_tools_dir
 from manifold_genetics.scaffold import init_synthetic
 
 
@@ -76,6 +78,38 @@ def test_the_shell_gets_the_resolved_tools(tmp_path, tools):
     assert argv[argv.index("--plink2") + 1] == "/stub/plink2"
     assert argv[argv.index("--plink") + 1] == "/stub/plink"
     assert argv[argv.index("--output-dir") + 1] == str(tmp_path / "out/data")
+
+
+def test_tools_dir_defaults_when_not_given(tmp_path, tools):
+    seen = {}
+
+    def spy(argv):
+        seen["argv"] = argv
+        _fake_shell(argv)
+
+    init_synthetic(tmp_path / "in")
+    preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=spy)
+    argv = seen["argv"]
+    assert argv[argv.index("--tools-dir") + 1] == str(default_tools_dir())
+
+
+def test_tools_dir_is_kept_when_given(tmp_path, tools):
+    seen = {}
+
+    def spy(argv):
+        seen["argv"] = argv
+        _fake_shell(argv)
+
+    given = tmp_path / "custom-tools"
+    init_synthetic(tmp_path / "in")
+    preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "out",
+        options=dataclasses.replace(PreprocessOptions(), tools_dir=given),
+        runner=spy,
+    )
+    argv = seen["argv"]
+    assert argv[argv.index("--tools-dir") + 1] == str(given)
 
 
 def test_refuses_to_overwrite_a_config_without_force(tmp_path, tools):

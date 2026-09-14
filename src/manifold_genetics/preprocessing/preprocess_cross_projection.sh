@@ -40,12 +40,17 @@ REFERENCE_PLINK=""
 BIOBANK_PLINK=""
 OUTPUT_DIR=""
 TEMP_DIR=""
+# `manifold-genetics preprocess` always passes `--tools-dir`; this default is
+# only for running the script by hand from a checkout (it resolves relative to
+# this file, which is not meaningful once the script runs from the wheel).
 TOOLS_DIR="${SCRIPT_DIR}/../tools"
 
 # Set by `manifold-genetics preprocess`, which resolves the tools itself. Left
-# empty, the script searches the way it always has (bin/, modules, PATH).
-PLINK2="${PLINK2:-}"
-PLINK="${PLINK:-}"
+# empty, the script searches the way it always has (bin/, modules, PATH). Not
+# given an env fallback: an exported PLINK/PLINK2 in the caller's environment
+# must not silently short-circuit that search.
+PLINK2=""
+PLINK=""
 PYTHON="${PYTHON:-python3}"
 MIN_COMMON_SNPS="${MIN_COMMON_SNPS:-50000}"
 

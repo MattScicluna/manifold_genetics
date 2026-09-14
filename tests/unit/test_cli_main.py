@@ -234,6 +234,41 @@ def test_cmd_setup_skip_plink1(monkeypatch):
     assert captured["include_plink1"] is False
 
 
+def test_setup_preprocessing_flag_is_parsed(monkeypatch):
+    seen = {}
+
+    def fake_cmd_setup(args):
+        seen["preprocessing"] = args.preprocessing
+        return 0
+
+    monkeypatch.setattr(mg_cli, "cmd_setup", fake_cmd_setup)
+    assert mg_cli.main(["setup", "--preprocessing"]) == 0
+    assert seen["preprocessing"] is True
+    assert mg_cli.main(["setup"]) == 0
+    assert seen["preprocessing"] is False
+
+
+def test_cmd_setup_preprocessing_installs_harmonisation_references(monkeypatch):
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2"}
+
+    calls = []
+
+    def fake_install():
+        calls.append(True)
+        return {"giab": "/tools/giab/GRCh38_alldifficultregions.bed"}
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    monkeypatch.setattr(
+        "manifold_genetics.preprocessing.references.install_harmonisation_references",
+        fake_install,
+    )
+    out = mg_cli.main(["setup", "--preprocessing"])
+    assert out == 0
+    assert calls == [True]
+
+
 def test_cmd_pca_fit_project(monkeypatch, tmp_path):
     """--fit-plink + --project-plink fits one dataset and projects the other."""
     calls = []

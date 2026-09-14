@@ -562,6 +562,10 @@ def cmd_setup(args):
 
     resolver = ToolResolver()
     tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+    if args.preprocessing:
+        from .preprocessing.references import install_harmonisation_references
+
+        tools.update(install_harmonisation_references())
 
     print("External tools installed:")
     for name, path in tools.items():
@@ -1492,6 +1496,9 @@ def main(argv: Optional[List[str]] = None):
             "  plink2   (~20 MB)\n"
             "  flashpca (~2 MB, Linux x86-64 only)\n"
             "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
+            "With --preprocessing, also fetches the GIAB, WRayner and TOPMed\n"
+            "references the harmonise preset needs (~1 GB), so preprocess can\n"
+            "run its harmonisation step on a compute node without internet.\n\n"
             "Requires internet access (run on a login node, not a compute node).\n"
             "This command does NOT manage the Python environment."
         ),
@@ -1501,6 +1508,11 @@ def main(argv: Optional[List[str]] = None):
         "--skip-plink1",
         action="store_true",
         help="Skip downloading PLINK v1.9",
+    )
+    setup_parser.add_argument(
+        "--preprocessing",
+        action="store_true",
+        help="Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs (~1 GB)",
     )
     setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     setup_parser.set_defaults(func=cmd_setup)

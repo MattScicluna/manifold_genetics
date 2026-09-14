@@ -1,5 +1,6 @@
 """`preprocess`: one cohort directory in, one out, SNPs filtered in between."""
 
+import dataclasses
 import logging
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ from .cohort import (
     write_cohort_config,
 )
 from .flags import PreprocessOptions, shell_argv
+from .references import default_tools_dir
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,9 @@ def preprocess(
 
     data_dir = out_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+
+    if options.tools_dir is None:
+        options = dataclasses.replace(options, tools_dir=default_tools_dir())
 
     resolver = ToolResolver()
     runner(
