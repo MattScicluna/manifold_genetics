@@ -1,0 +1,97 @@
+"""Reading and writing the cohort directory -- the unit `preprocess`, `subsample`
+and `run` exchange."""
+
+import pandas as pd
+import pytest
+
+from manifold_genetics.pipeline.configfile import load_config
+from manifold_genetics.preprocessing.cohort import (
+    filter_labels_to_fam,
+    read_cohort,
+    read_fam_ids,
+    write_cohort_config,
+)
+from manifold_genetics.scaffold import init_synthetic
+
+
+@pytest.fixture
+def cohort(tmp_path):
+    init_synthetic(tmp_path)
+    return read_cohort(tmp_path / "config.yaml")
+
+
+def test_a_whole_cohort_config_uses_one_label_file_for_both_sides(cohort):
+    assert cohort.preset == "whole_cohort"
+    assert cohort.shared_labels
+    assert cohort.fit.labels == cohort.project.labels == cohort.path.parent / "data" / "labels.csv"
+    assert cohort.fit.colormap == cohort.project.colormap
+
+
+def test_a_projection_config_keeps_the_sides_apart(tmp_path):
+    (tmp_path / "data").mkdir()
+    for name in ("a", "b"):
+        for ext in ("bed", "bim", "fam"):
+            (tmp_path / "data" / f"{name}.{ext}").write_text("")
+        (tmp_path / "data" / f"{name}.csv").write_text("sample_id,x\n")
+        (tmp_path / f"{name}.json").write_text("{}")
+    (tmp_path / "config.yaml").write_text(
+        "preset: projection\ndata:\n  fit_plink: data/a\n  project_plink: data/b\n"
+        "  fit_labels: data/a.csv\n  project_labels: data/b.csv\n"
+        "  fit_colormap: a.json\n  project_colormap: b.json\n  output_dir: outputs\n"
+    )
+    cohort = read_cohort(tmp_path / "config.yaml")
+    assert not cohort.shared_labels
+    assert cohort.fit.labels.name == "a.csv" and cohort.project.labels.name == "b.csv"
+    assert cohort.fit.colormap.name == "a.json" and cohort.project.colormap.name == "b.json"
+
+
+def test_fam_ids_come_back_in_file_order(cohort):
+    ids = read_fam_ids(cohort.fit.plink)
+    fam = pd.read_csv(f"{cohort.fit.plink}.fam", sep=r"\s+", header=None, dtype=str)
+    assert ids == list(fam[1])
+
+
+def test_labels_are_filtered_to_the_fam_and_keep_their_columns(cohort, tmp_path):
+    out = tmp_path / "filtered.csv"
+    n = filter_labels_to_fam(cohort.project.labels, cohort.fit.plink, out)
+    written = pd.read_csv(out, dtype=str)
+    assert n == len(written) == len(read_fam_ids(cohort.fit.plink))
+    assert list(written.columns) == list(pd.read_csv(cohort.project.labels, nrows=0).columns)
+
+
+def test_labels_that_do_not_cover_the_fam_are_an_error(cohort, tmp_path):
+    partial = tmp_path / "partial.csv"
+    pd.read_csv(cohort.project.labels).iloc[:5].to_csv(partial, index=False)
+    with pytest.raises(ValueError, match="not in"):
+        filter_labels_to_fam(partial, cohort.fit.plink, tmp_path / "out.csv")
+
+
+def test_the_written_config_is_accepted_by_the_loader_and_carries_settings(cohort, tmp_path):
+    out = tmp_path / "next"
+    out.mkdir()
+    path = write_cohort_config(
+        out,
+        based_on=cohort,
+        preset="projection",
+        data={
+            "fit_plink": "data/fit_subset",
+            "project_plink": "data/project_subset",
+            "fit_labels": "data/fit_labels.csv",
+            "project_labels": "data/project_labels.csv",
+            "fit_colormap": "colormap_fit.json",
+            "project_colormap": "colormap_project.json",
+            "output_dir": "outputs",
+        },
+        visualization={
+            "projection_plot_fit_column": "branch",
+            "projection_plot_project_column": "branch",
+        },
+        written_by="manifold-genetics preprocess",
+    )
+    text = path.read_text()
+    assert text.startswith("# Written by `manifold-genetics preprocess`")
+    loaded = load_config(path)
+    assert loaded["fit_plink"] == (out / "data/fit_subset").resolve()
+    assert loaded["n_pcs"] == cohort.raw["pca"]["n_pcs"], "pca settings must carry forward"
+    assert loaded["projection_plot_fit_column"] == "branch"
+    assert "labels" not in loaded, "the old shared-label key must not survive a projection rewrite"
