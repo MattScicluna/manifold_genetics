@@ -265,8 +265,7 @@ Three ties to the checkout break once the script lives in `site-packages`:
   runs: true in the workbench, false on a Narval compute node. This is why the
   UKBB flow skips WRayner, and the docs say so.
 
-Open for the user: whether `setup --preprocessing` is worth its ~GB of cache,
-or whether "run `harmonise` on the login node / in the workbench" is enough.
+Decided 2026-09-14: `setup --preprocessing` is in.
 
 ### 5. `acquire custom` fetches nothing — decided: fine
 
