@@ -11,12 +11,12 @@ from manifold_genetics.preprocessing.cohort import (
     read_fam_ids,
     write_cohort_config,
 )
-from manifold_genetics.scaffold import init_synthetic
+from manifold_genetics.scaffold import acquire_synthetic
 
 
 @pytest.fixture
 def cohort(tmp_path):
-    init_synthetic(tmp_path)
+    acquire_synthetic(tmp_path)
     return read_cohort(tmp_path / "config.yaml")
 
 

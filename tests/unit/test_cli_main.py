@@ -32,6 +32,7 @@ SUBCOMMANDS = [
     "metrics-geographic",
     "metrics-admixture",
     "pipeline",
+    "acquire",
     "preprocess",
 ]
 

@@ -437,23 +437,23 @@ def cmd_plot_knn_composition(args):
     return 0
 
 
-def cmd_init(args):
+def cmd_acquire(args):
     """Write a runnable config, and the data to run it on."""
     setup_logging(args.verbose)
 
-    from .scaffold import init_aou, init_custom, init_hgdp, init_synthetic
+    from .scaffold import acquire_aou, acquire_custom, acquire_hgdp, acquire_synthetic
 
     out = Path(args.out)
     try:
         if args.target == "synthetic":
-            config = init_synthetic(out, force=args.force)
+            config = acquire_synthetic(out, force=args.force)
         elif args.target == "aou":
-            config = init_aou(out, force=args.force)
+            config = acquire_aou(out, force=args.force)
         elif args.target == "custom":
             if not args.fit_plink:
-                print("Error: init custom needs --fit-plink.", file=sys.stderr)
+                print("Error: acquire custom needs --fit-plink.", file=sys.stderr)
                 return 1
-            config = init_custom(
+            config = acquire_custom(
                 out,
                 fit_plink=args.fit_plink,
                 labels=args.labels,
@@ -465,7 +465,7 @@ def cmd_init(args):
                 force=args.force,
             )
         else:
-            config = init_hgdp(
+            config = acquire_hgdp(
                 out,
                 force=args.force,
                 download=not args.no_download,
@@ -1349,12 +1349,12 @@ def main(argv: Optional[List[str]] = None):
     plot_proj_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_proj_parser.set_defaults(func=cmd_plot_projection)
 
-    # Setup command (download external tools)
-    init_parser = subparsers.add_parser(
-        "init",
+    # Acquire command (get a cohort into a cohort directory)
+    acquire_parser = subparsers.add_parser(
+        "acquire",
         help="Write a runnable config, and the data to run it on",
         description=(
-            "Scaffold a working pipeline in one command.\n\n"
+            "Get a cohort into a cohort directory: genotypes, labels, colormap, config.\n\n"
             "  synthetic   Simulate a small cohort and write everything beside it.\n"
             "              No network, a few seconds, and it runs end to end -- the\n"
             "              quickest way to confirm an installation works.\n\n"
@@ -1375,51 +1375,53 @@ def main(argv: Optional[List[str]] = None):
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "target",
         choices=["synthetic", "hgdp", "custom", "aou"],
         help="Which cohort to scaffold",
     )
-    init_parser.add_argument("--fit-plink", help="custom only: PLINK prefix the model is fitted on")
-    init_parser.add_argument(
+    acquire_parser.add_argument(
+        "--fit-plink", help="custom only: PLINK prefix the model is fitted on"
+    )
+    acquire_parser.add_argument(
         "--project-plink",
         help="custom only: PLINK prefix to embed (default: the fit set)",
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--labels", help="custom only: CSV with sample_id and columns to colour by"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--fit-labels", help="custom only: labels for the fit set, if they differ"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--project-labels", help="custom only: labels for the project set, if they differ"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--preset",
         default="whole_cohort",
         choices=["whole_cohort", "projection", "subsample"],
         help="custom only: the shape of the run (default: whole_cohort)",
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--n-pcs", type=int, default=20, help="custom only: components to compute"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--out", default=".", help="Directory to write into (default: the current one)"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing config.yaml"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--no-download",
         action="store_true",
         help="hgdp only: never fetch; use a local archive or already-extracted data",
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--archive",
         help="hgdp only: path to an already-downloaded hgdp_1kgp_full.tar.gz",
     )
-    init_parser.add_argument("--verbose", action="store_true", help="Verbose output")
-    init_parser.set_defaults(func=cmd_init)
+    acquire_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    acquire_parser.set_defaults(func=cmd_acquire)
 
     pre_parser = subparsers.add_parser(
         "preprocess",

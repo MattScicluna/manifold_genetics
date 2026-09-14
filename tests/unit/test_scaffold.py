@@ -1,4 +1,4 @@
-"""`manifold-genetics init` — the scaffolding a fresh install has nothing without.
+"""`manifold-genetics acquire` — the scaffolding a fresh install has nothing without.
 
 `pip install manifold-genetics` ships no example config and no data: `examples/`
 is in neither the wheel nor the sdist. Until this command existed the
@@ -17,10 +17,10 @@ from manifold_genetics.scaffold import (
     DLA_TREE_EDGES,
     DLA_TREE_GAPS,
     _tree_layout,
+    acquire_synthetic,
     dla_tree,
     genotypes_from_coordinates,
     hgdp_subsets,
-    init_synthetic,
     plot_dla_tree,
 )
 
@@ -86,7 +86,7 @@ class TestDlaTree:
 
 class TestSyntheticScaffold:
     def test_writes_everything_a_run_needs(self, tmp_path):
-        written = init_synthetic(tmp_path)
+        written = acquire_synthetic(tmp_path)
 
         for name in (
             "config.yaml",
@@ -107,7 +107,7 @@ class TestSyntheticScaffold:
         """The point of the command: what it writes must actually load."""
         from manifold_genetics.pipeline.configfile import load_config
 
-        init_synthetic(tmp_path)
+        acquire_synthetic(tmp_path)
         kwargs = load_config(tmp_path / "config.yaml")
 
         assert kwargs["fit_plink"] == tmp_path / "data/fit_subset"
@@ -116,7 +116,7 @@ class TestSyntheticScaffold:
     def test_labels_cover_every_genotyped_sample(self, tmp_path):
         """A label file that does not match its genotypes is this project's
         most expensive failure mode, so the one it ships cannot have it."""
-        init_synthetic(tmp_path)
+        acquire_synthetic(tmp_path)
 
         fam = pd.read_csv(tmp_path / "data/project_subset.fam", sep=r"\s+", header=None, dtype=str)
         labels = pd.read_csv(tmp_path / "data/labels.csv", dtype=str)
@@ -124,7 +124,7 @@ class TestSyntheticScaffold:
         assert set(labels["sample_id"]) >= set(fam[1])
 
     def test_the_colormap_names_a_real_label_column(self, tmp_path):
-        init_synthetic(tmp_path)
+        acquire_synthetic(tmp_path)
 
         colormap = json.loads((tmp_path / "colormap.json").read_text())
         labels = pd.read_csv(tmp_path / "data/labels.csv")
@@ -134,18 +134,18 @@ class TestSyntheticScaffold:
             assert set(labels[column].astype(str)) <= set(values), "a label value has no colour"
 
     def test_refuses_to_overwrite_without_force(self, tmp_path):
-        init_synthetic(tmp_path)
+        acquire_synthetic(tmp_path)
 
         with pytest.raises(FileExistsError, match="--force"):
-            init_synthetic(tmp_path)
+            acquire_synthetic(tmp_path)
 
-        init_synthetic(tmp_path, force=True)  # explicit is fine
+        acquire_synthetic(tmp_path, force=True)  # explicit is fine
 
     def test_the_bed_it_writes_is_readable(self, tmp_path):
         """It hand-encodes PLINK's 2-bit format, so round-tripping is the check."""
         from manifold_genetics.pca.plink import count_lines, read_bed_dosages
 
-        init_synthetic(tmp_path)
+        acquire_synthetic(tmp_path)
         prefix = tmp_path / "data/fit_subset"
         n_samples = count_lines(f"{prefix}.fam")
         n_variants = count_lines(f"{prefix}.bim")
@@ -204,7 +204,7 @@ class TestHgdpWithoutWorkingNetwork:
 
     The same shape of problem is routine on HPC compute nodes, which have no
     internet at all. In both cases the user can obtain the archive by some other
-    means, so `init` has to be able to pick up from there -- and the message it
+    means, so `acquire` has to be able to pick up from there -- and the message it
     prints has to say so, rather than telling them to retry the download that
     just failed.
     """
@@ -242,9 +242,9 @@ class TestHgdpWithoutWorkingNetwork:
             "manifold_genetics.scaffold._run_plink2_keep",
             lambda *a, **k: None,
         )
-        from manifold_genetics.scaffold import init_hgdp
+        from manifold_genetics.scaffold import acquire_hgdp
 
-        init_hgdp(out, download=False)
+        acquire_hgdp(out, download=False)
 
         assert (out / "data" / "raw" / "full_dataset.bed").exists()
 
@@ -253,9 +253,9 @@ class TestHgdpWithoutWorkingNetwork:
             "manifold_genetics.scaffold._run_plink2_keep",
             lambda *a, **k: None,
         )
-        from manifold_genetics.scaffold import init_hgdp
+        from manifold_genetics.scaffold import acquire_hgdp
 
-        init_hgdp(tmp_path / "out", archive=archive)
+        acquire_hgdp(tmp_path / "out", archive=archive)
 
         assert (tmp_path / "out" / "data" / "raw" / "metadata.csv").exists()
 
@@ -271,10 +271,10 @@ class TestHgdpWithoutWorkingNetwork:
         from manifold_genetics.utils import tools
 
         monkeypatch.setattr(tools.shutil, "which", lambda _: None)
-        from manifold_genetics.scaffold import init_hgdp
+        from manifold_genetics.scaffold import acquire_hgdp
 
         with pytest.raises(RuntimeError) as excinfo:
-            init_hgdp(tmp_path / "out")
+            acquire_hgdp(tmp_path / "out")
 
         message = str(excinfo.value)
         assert "--archive" in message, "the error must name the way to supply the file"
@@ -335,7 +335,7 @@ class TestDownloadFallsBackToSystemTools:
 class TestHgdpLabels:
     """The labels have to actually label something.
 
-    `init hgdp` looked for a column `project_meta.genetic_region`, which the
+    `acquire hgdp` looked for a column `project_meta.genetic_region`, which the
     cohort's metadata does not have -- it is `Genetic_region_merged` -- and fell
     back to writing "Unknown" for every sample. The run completed, the figure was
     drawn, and every point in it was the same grey. Reported 2026-09-13.
@@ -374,7 +374,7 @@ class TestHgdpLabels:
         assert "Unknown" not in set(labels.iloc[:, 1])
 
     def test_the_colormap_uses_the_published_colours(self, tmp_path, metadata):
-        """So a figure from `init hgdp` is comparable with the shipped example's."""
+        """So a figure from `acquire hgdp` is comparable with the shipped example's."""
         from manifold_genetics.scaffold import _write_hgdp_labels
 
         _write_hgdp_labels(
@@ -431,9 +431,9 @@ class TestInitCustom:
 
     def test_writes_a_config_the_loader_accepts(self, cohort):
         from manifold_genetics.pipeline.configfile import load_config
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
-        config = init_custom(
+        config = acquire_custom(
             cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv"
         )
 
@@ -442,9 +442,9 @@ class TestInitCustom:
 
     def test_generates_a_colour_for_every_label_value(self, cohort):
         """The 22-colours-by-hand problem is the reason this command exists."""
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
-        init_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv")
+        acquire_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv")
 
         colours = json.loads((cohort / "out" / "colormap.json").read_text())
         assert set(colours["population"]) == {"A", "B", "C", "D"}
@@ -452,21 +452,21 @@ class TestInitCustom:
 
     def test_refuses_labels_that_do_not_match_the_genotypes(self, cohort):
         """The silent failure: a stale label file colours a fraction of the points."""
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
         pd.DataFrame(
             {"sample_id": [f"OTHER{i}" for i in range(40)], "population": ["A"] * 40}
         ).to_csv(cohort / "wrong.csv", index=False)
 
         with pytest.raises(ValueError, match="different datasets"):
-            init_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "wrong.csv")
+            acquire_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "wrong.csv")
 
     def test_project_plink_defaults_to_the_fit_set(self, cohort):
         """The common case is one cohort, embedded whole."""
         from manifold_genetics.pipeline.configfile import load_config
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
-        config = init_custom(
+        config = acquire_custom(
             cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "labels.csv"
         )
 
@@ -474,10 +474,12 @@ class TestInitCustom:
         assert kwargs["project_plink"] == kwargs["fit_plink"]
 
     def test_missing_plink_files_are_reported_before_anything_is_written(self, cohort):
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
         with pytest.raises(FileNotFoundError, match="bim"):
-            init_custom(cohort / "out", fit_plink=cohort / "absent", labels=cohort / "labels.csv")
+            acquire_custom(
+                cohort / "out", fit_plink=cohort / "absent", labels=cohort / "labels.csv"
+            )
         assert not (cohort / "out" / "config.yaml").exists()
 
 
@@ -509,7 +511,7 @@ class TestInitAou:
         monkeypatch.setattr(scaffold.shutil, "which", lambda n: None)
 
         with pytest.raises(EnvironmentError) as excinfo:
-            scaffold.init_aou(tmp_path)
+            scaffold.acquire_aou(tmp_path)
 
         message = str(excinfo.value)
         assert "GOOGLE_PROJECT" in message
@@ -524,16 +526,16 @@ class TestInitAou:
         monkeypatch.setattr(scaffold.shutil, "which", lambda n: None)
 
         with pytest.raises(EnvironmentError) as excinfo:
-            scaffold.init_aou(tmp_path)
+            scaffold.acquire_aou(tmp_path)
 
         for expected in ("GOOGLE_PROJECT", "gsutil", "plink2"):
             assert expected in str(excinfo.value)
 
     def test_inside_the_workbench_it_writes_a_config(self, tmp_path, in_workbench):
         from manifold_genetics.pipeline.configfile import load_config
-        from manifold_genetics.scaffold import init_aou
+        from manifold_genetics.scaffold import acquire_aou
 
-        config = init_aou(tmp_path)
+        config = acquire_aou(tmp_path)
 
         kwargs = load_config(config)
         assert kwargs["embedding_input"] == "both", "AoU is a projection onto HGDP"
@@ -542,14 +544,14 @@ class TestInitAou:
         """It should reproduce that analysis, not a variation on it."""
         import yaml
 
-        from manifold_genetics.scaffold import init_aou
+        from manifold_genetics.scaffold import acquire_aou
 
         shipped = yaml.safe_load(
             (
                 Path(__file__).resolve().parents[2] / "examples/aou/hgdp_1kgp_proj/config.yaml"
             ).read_text()
         )
-        written = yaml.safe_load(init_aou(tmp_path).read_text())
+        written = yaml.safe_load(acquire_aou(tmp_path).read_text())
 
         assert written["preset"] == shipped["preset"]
         assert written["pca"]["n_pcs"] == shipped["pca"]["n_pcs"]
@@ -583,9 +585,9 @@ class TestInitCustomSeparateLabels:
 
     def test_separate_label_files_reach_the_config(self, cohort):
         from manifold_genetics.pipeline.configfile import load_config
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
-        config = init_custom(
+        config = acquire_custom(
             cohort / "out",
             fit_plink=cohort / "fit",
             project_plink=cohort / "proj",
@@ -600,16 +602,16 @@ class TestInitCustomSeparateLabels:
 
     def test_one_label_file_still_works(self, cohort):
         from manifold_genetics.pipeline.configfile import load_config
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
-        config = init_custom(
+        config = acquire_custom(
             cohort / "out", fit_plink=cohort / "fit", labels=cohort / "fit_labels.csv"
         )
 
         assert load_config(config)["labels"] == cohort / "fit_labels.csv"
 
     def test_it_asks_for_labels_of_some_kind(self, cohort):
-        from manifold_genetics.scaffold import init_custom
+        from manifold_genetics.scaffold import acquire_custom
 
         with pytest.raises(ValueError, match="labels"):
-            init_custom(cohort / "out", fit_plink=cohort / "fit")
+            acquire_custom(cohort / "out", fit_plink=cohort / "fit")

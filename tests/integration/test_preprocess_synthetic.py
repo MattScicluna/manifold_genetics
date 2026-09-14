@@ -6,7 +6,7 @@ import pytest
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing import PreprocessOptions, preprocess
-from manifold_genetics.scaffold import init_synthetic
+from manifold_genetics.scaffold import acquire_synthetic
 from manifold_genetics.utils.tools import ToolNotFoundError, ToolResolver
 
 pytestmark = pytest.mark.integration
@@ -30,7 +30,7 @@ def _samples(prefix):
 
 
 def test_intersect_only_on_a_whole_cohort_is_lossless(tmp_path, tools):
-    init_synthetic(tmp_path / "in")
+    acquire_synthetic(tmp_path / "in")
     config = preprocess(
         tmp_path / "in/config.yaml",
         tmp_path / "out",
@@ -45,8 +45,8 @@ def test_intersect_only_on_a_whole_cohort_is_lossless(tmp_path, tools):
 
 
 def test_two_cohorts_intersect_to_the_shared_variants(tmp_path, tools):
-    init_synthetic(tmp_path / "a", seed=1)
-    init_synthetic(tmp_path / "b", seed=2)
+    acquire_synthetic(tmp_path / "a", seed=1)
+    acquire_synthetic(tmp_path / "b", seed=2)
     config = preprocess(
         tmp_path / "a/config.yaml",
         tmp_path / "out",
@@ -62,7 +62,7 @@ def test_two_cohorts_intersect_to_the_shared_variants(tmp_path, tools):
 def test_the_output_dry_runs(tmp_path, tools):
     from manifold_genetics.cli import main
 
-    init_synthetic(tmp_path / "in")
+    acquire_synthetic(tmp_path / "in")
     config = preprocess(
         tmp_path / "in/config.yaml",
         tmp_path / "out",

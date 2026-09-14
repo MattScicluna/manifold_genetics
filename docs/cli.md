@@ -9,13 +9,13 @@ Every command prints its own options and a worked example.
 ## Starting from nothing
 
 ```bash
-manifold-genetics init synthetic     # simulate a cohort and a config beside it
-manifold-genetics init hgdp          # fetch and prepare the real HGDP+1KGP cohort
-manifold-genetics init custom        # a config for genotypes you already have
-manifold-genetics init aou           # a config for All of Us (workbench only)
+manifold-genetics acquire synthetic  # simulate a cohort and a config beside it
+manifold-genetics acquire hgdp       # fetch and prepare the real HGDP+1KGP cohort
+manifold-genetics acquire custom     # a config for genotypes you already have
+manifold-genetics acquire aou        # a config for All of Us (workbench only)
 ```
 
-`pip install` downloads no data and no example config, so `init` is what gives you
+`pip install` downloads no data and no example config, so `acquire` is what gives you
 something to run.
 
 `synthetic` needs no network and takes under a minute. It places 2,000 samples
@@ -33,10 +33,10 @@ and the 3,400 of those that are also unrelated, using the flags in the archive's
 filtering, because the archive arrives with that already done. It needs
 internet, so on a cluster run it on a login node.
 
-You can also point `init` at archived data:
+You can also point `acquire` at archived data:
 
 ```bash
-manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
+manifold-genetics acquire hgdp --archive hgdp_1kgp_full.tar.gz
 ```
 
 `--no-download` means never fetch: it still unpacks an archive already present.

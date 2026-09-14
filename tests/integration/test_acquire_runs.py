@@ -1,4 +1,4 @@
-"""`init synthetic` must produce something that actually runs.
+"""`acquire synthetic` must produce something that actually runs.
 
 This is the claim the front page makes to someone who has just installed the
 package, so it is worth asserting rather than assuming: two commands, no
@@ -9,13 +9,13 @@ import pytest
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.pipeline.runner import run_pipeline
-from manifold_genetics.scaffold import init_synthetic
+from manifold_genetics.scaffold import acquire_synthetic
 
 pytestmark = pytest.mark.integration
 
 
 def test_a_scaffolded_cohort_runs_end_to_end(tmp_path):
-    init_synthetic(tmp_path)
+    acquire_synthetic(tmp_path)
 
     result = run_pipeline(**load_config(tmp_path / "config.yaml"))
 
@@ -38,7 +38,7 @@ def test_the_embedding_recovers_the_tree_it_simulated(tmp_path):
     from manifold_genetics.scaffold import dla_tree
     from tests.science import neighbourhood_preservation_over_chance, separation_over_chance
 
-    init_synthetic(tmp_path)
+    acquire_synthetic(tmp_path)
     result = run_pipeline(**load_config(tmp_path / "config.yaml"))
 
     embedding = pd.read_csv(result.embedding.embedding_file, dtype={"sample_id": str})

@@ -1,6 +1,6 @@
 """A label value with no colour must be impossible to miss.
 
-`init hgdp` once wrote "Unknown" as every sample's label. The colormap had one
+`acquire hgdp` once wrote "Unknown" as every sample's label. The colormap had one
 entry, the run completed, the figure was drawn, and every point in it was the
 same grey. Nothing in the logs said anything was wrong -- the only detector was
 a person looking at the picture and knowing what it should look like.

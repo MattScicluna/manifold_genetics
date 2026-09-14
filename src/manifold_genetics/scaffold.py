@@ -4,7 +4,7 @@
 ``examples/`` is in neither the wheel nor the sdist. So the documented first
 command, ``manifold-genetics run config.yaml``, had nothing to run: there was no
 config to point it at and no template to copy one from. This module is what
-``manifold-genetics init`` uses to fix that.
+``manifold-genetics acquire`` uses to fix that.
 
 Two targets, because they answer different questions:
 
@@ -89,7 +89,7 @@ DLA_TREE_EDGES = (
 )
 DLA_TREE_GAPS = (9, 10, 11, 12)
 
-# Drawn beside the config by `init synthetic`, so the shape the embedding is
+# Drawn beside the config by `acquire synthetic`, so the shape the embedding is
 # supposed to recover is on disk next to the embedding.
 GROUND_TRUTH_FIGURE = "dla_tree_ground_truth.png"
 
@@ -355,7 +355,7 @@ def simulate_cohort(n_variants: int = 1000, seed: int = 0) -> Tuple[np.ndarray, 
 
 
 _SYNTHETIC_CONFIG = """\
-# Written by `manifold-genetics init synthetic`.
+# Written by `manifold-genetics acquire synthetic`.
 #
 # A simulated cohort of {n_samples} samples lying along a branching tree: {n_branches}
 # branches, in pieces separated by {n_gaps} unsampled gaps, with genotypes drawn
@@ -395,7 +395,7 @@ skip:
 """
 
 
-def init_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Path:
+def acquire_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Path:
     """Write a simulated cohort and a config that runs on it.
 
     Args:
@@ -495,9 +495,9 @@ def _download_hgdp_archive(destination: Path) -> Path:
         raise RuntimeError(
             f"Could not download the HGDP+1KGP archive: {exc}\n\n"
             "If this is a proxy or an offline machine, fetch it by other means and "
-            "point init at the file:\n\n"
+            "point acquire at the file:\n\n"
             f"    curl -L -o hgdp_1kgp_full.tar.gz '{HGDP_ARCHIVE_URL}'\n"
-            "    manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz\n\n"
+            "    manifold-genetics acquire hgdp --archive hgdp_1kgp_full.tar.gz\n\n"
             "curl and wget use the system certificate store, which on a managed "
             "network usually already trusts the proxy."
         ) from exc
@@ -524,7 +524,7 @@ def _extract_hgdp_archive(archive: Path, raw_dir: Path) -> None:
 
 
 _HGDP_CONFIG = """\
-# Written by `manifold-genetics init hgdp`.
+# Written by `manifold-genetics acquire hgdp`.
 #
 # HGDP+1KGP: 4,094 QC-passing samples across seven genetic regions, with the
 # model fitted on the 3,400 that are also unrelated. This is the cohort the
@@ -556,7 +556,7 @@ skip:
 """
 
 
-def init_hgdp(
+def acquire_hgdp(
     out_dir: PathLike,
     force: bool = False,
     download: bool = True,
@@ -650,7 +650,7 @@ def _run_plink2_keep(bfile: Path, keep: Path, out: Path, plink2: Optional[str]) 
 
 # The metadata column naming each sample's genetic region, and the colours the
 # shipped example uses for it -- examples/colormaps/hgdp_1kgp.json -- so a figure
-# from `init hgdp` is comparable with the published ones.
+# from `acquire hgdp` is comparable with the published ones.
 _HGDP_REGION_COLUMN = "Genetic_region_merged"
 _HGDP_REGION_COLOURS = {
     "Africa": "#008000",
@@ -723,7 +723,7 @@ _PALETTE = (
 )
 
 _CUSTOM_CONFIG = """\
-# Written by `manifold-genetics init custom`.
+# Written by `manifold-genetics acquire custom`.
 #
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
@@ -793,7 +793,7 @@ def _checked_labels(labels: Path, plink: Path, min_overlap: float) -> pd.DataFra
     return frame
 
 
-def init_custom(
+def acquire_custom(
     out_dir: PathLike,
     fit_plink: PathLike,
     labels: Optional[PathLike] = None,
@@ -923,7 +923,7 @@ _AOU_REQUIRED_TOOLS = {
 }
 
 _AOU_CONFIG = """\
-# Written by `manifold-genetics init aou`.
+# Written by `manifold-genetics acquire aou`.
 #
 # All of Us projected onto the HGDP+1KGP reference panel, matching
 # examples/aou/hgdp_1kgp_proj/config.yaml.
@@ -931,7 +931,7 @@ _AOU_CONFIG = """\
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
 #
-# The genotypes are NOT fetched by `init`: All of Us is controlled-access and its
+# The genotypes are NOT fetched by `acquire`: All of Us is controlled-access and its
 # preparation is about 1,300 lines of workbench-specific shell -- a GCS download,
 # a per-chromosome split, filtering, harmonisation and intersection with the
 # reference panel. Run that first:
@@ -982,7 +982,7 @@ def aou_environment_problems() -> list:
     return problems
 
 
-def init_aou(out_dir: PathLike, force: bool = False) -> Path:
+def acquire_aou(out_dir: PathLike, force: bool = False) -> Path:
     """Write a config for All of Us, after checking this is a place it can run.
 
     Deliberately does not fetch anything. Unlike HGDP -- one archive over HTTPS
@@ -1011,15 +1011,15 @@ def init_aou(out_dir: PathLike, force: bool = False) -> Path:
             + "\n\nIf you are in the workbench, these are normally set for you; "
             "check the notebook environment. If you are not, there is no way to "
             "reach the data from here -- it is controlled-access.\n\n"
-            "To try the pipeline without it: `manifold-genetics init synthetic`, "
-            "or `init hgdp` for a real public cohort."
+            "To try the pipeline without it: `manifold-genetics acquire synthetic`, "
+            "or `acquire hgdp` for a real public cohort."
         )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_AOU_CONFIG)
     logger.info("Wrote an All of Us config to %s", out_dir)
     logger.warning(
-        "The genotypes are not fetched by init. Run "
+        "The genotypes are not fetched by acquire. Run "
         "examples/aou/hgdp_1kgp_proj/prepare_data.sh first, then point the paths "
         "in %s at what it produced.",
         config_path,
