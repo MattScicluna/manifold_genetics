@@ -11,9 +11,10 @@ Two commands to a figure. Assumes you have [installed it](install.md).
     manifold-genetics run config.yaml
     ```
 
-    2,000 samples simulated along a branching tree, with the genotypes, labels,
-    colormap and config written beside each other. Under a minute, nothing
-    downloaded.
+    2,000 samples placed along a branching tree, with 1,000 variants whose
+    allele frequencies drift along it — no single variant carries the tree.
+    Genotypes, labels, colormap and config are written beside each other. Under
+    a minute, nothing downloaded.
 
     It also writes `dla_tree_ground_truth.png`, the tree the cohort was drawn
     along. Compare it with
@@ -27,10 +28,10 @@ Two commands to a figure. Assumes you have [installed it](install.md).
     manifold-genetics run config.yaml
     ```
 
-    The public HGDP+1KGP cohort: 4,094 QC-passing samples across seven genetic
-    regions, fitted on the 3,400 that are also unrelated. Needs internet and
-    `plink2`, which is fetched automatically — on a cluster, run `init` on a
-    login node. A few minutes.
+    The public HGDP+1KGP cohort, downloaded already variant-processed. Two
+    `plink2 --keep` calls select the 4,094 samples that pass QC and the 3,400 of
+    those that are also unrelated. Needs internet and `plink2`, which is fetched
+    automatically — on a cluster, run `init` on a login node. A few minutes.
 
 Both write into the current directory; `--out DIR` puts them elsewhere, and
 neither overwrites an existing `config.yaml` without `--force`.

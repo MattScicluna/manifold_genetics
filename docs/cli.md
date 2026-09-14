@@ -19,16 +19,20 @@ manifold-genetics init aou           # a config for All of Us (workbench only)
 A `pip install` ships no data and no example config, so `init` is what gives you
 something to run.
 
-`synthetic` needs no network and takes under a minute: it simulates 2,000
-samples along a branching tree — eight branches, some separated by unsampled
-gaps — over 1,000 variants, and writes the PLINK triples, labels, colormap and
-`config.yaml`. It also writes `dla_tree_ground_truth.png`, the tree the cohort
-was drawn along, so the embedding can be checked against the shape it should
-recover.
+`synthetic` needs no network and takes under a minute. It places 2,000 samples
+along a branching tree — eight branches, some separated by unsampled gaps — then
+draws 1,000 variants whose allele frequencies drift along it. No single variant
+carries the tree; it is recoverable only from all of them together, which is the
+situation the pipeline exists for. It writes the PLINK triples, labels, colormap
+and `config.yaml`, plus `dla_tree_ground_truth.png` — the tree itself, to check
+the embedding against.
 
-`hgdp` downloads about 183 MB and prepares it with plink2 — 4,094 QC-passing
-samples across seven genetic regions, fitted on the 3,400 that are also
-unrelated. It needs internet, so on a cluster run it on a login node.
+`hgdp` downloads about 183 MB: a variant-processed cohort of 4,151 samples over
+172,152 SNPs. From it, two `plink2 --keep` calls select the 4,094 that pass QC
+and the 3,400 of those that are also unrelated, using the flags in the archive's
+`metadata.csv`. Sample selection only — no MAF, missingness, indel or LD
+filtering, because the archive arrives with that already done. It needs
+internet, so on a cluster run it on a login node.
 
 A TLS-intercepting proxy needs nothing from you: `init` falls back to `curl` and
 `wget`, which use the system certificate store rather than Python's.
