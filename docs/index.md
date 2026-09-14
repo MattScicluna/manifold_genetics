@@ -27,7 +27,7 @@ Below are PHATE embeddings for UK Biobank and All of Us cohorts.
 | **Visualisation** | scatter plots by any label column, admixture bar plots |
 | **Metrics** | geographic and admixture preservation |
 
-Every stage reads and writes the same shape of file, so they compose: see
+Every stage reads and writes the same kinds of files, so they compose: see
 [formats](formats.md) for what each one expects, and the
 [command line](cli.md) for running them individually.
 
@@ -48,12 +48,9 @@ preset:
 
 | preset | fit | project | for |
 |---|---|---|---|
-| **`projection`** | a reference panel | your cohort | placing your cohort in a frame of reference someone else defined |
-| **`subsample`** | a subset of your cohort | that same subset | cohorts too large, or too dominated by one group, to embed whole — UK Biobank and All of Us |
-| **`whole_cohort`** | a subset of your cohort | the whole cohort | a cohort small enough to embed entirely, as in the HGDP+1KGP example |
-
-They are presets rather than loose settings because what follows from the choice
-— particularly landmarking — is easy to get wrong individually.
+| **`projection`** | a reference panel | your cohort | Visualizing your cohort along axes of genetic variation defined by a reference cohort |
+| **`subsample`** | a subset of your cohort | that same subset | Cohorts that are too large—or too strongly dominated by one group—to embed in full, such as UK Biobank or All of Us |
+| **`whole_cohort`** | a subset of your cohort | the whole cohort | Cohorts small enough to embed in full, such as the HGDP+1KGP example |
 
 ## Where to start
 
