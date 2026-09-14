@@ -24,7 +24,7 @@ pip install -e '.[dev]'
 pytest -m "not slow and not network"
 ```
 
-No data of your own and no network; about two minutes.
+This test should take about two minutes.
 
 ## Extras
 
@@ -33,7 +33,7 @@ pip install 'manifold-genetics[admixture]'   # torch + neural-admixture
 pip install 'manifold-genetics[geosketch]'   # geometric-sketch subsetting
 ```
 
-Admixture is much faster when a GPU is available.
+`admixture` installs [neural admixture](https://github.com/AI-sandbox/neural-admixture) and its dependencies.
 
 `geosketch` is needed only to *select* a geometric sketch of a large cohort, and
 runs on PCA coordinates rather than genotypes. Nothing in the pipeline imports
@@ -50,13 +50,13 @@ one it is downloaded and cached per user — `~/.cache/manifold-genetics/bin` on
 Linux, `~/Library/Caches/manifold-genetics/bin` on macOS — and reused after that.
 
 If the machine that runs the pipeline has no internet, as compute nodes on a
-cluster often do not, pre-fetch them from one that does:
+cluster may not, pre-fetch them from one that does:
 
 ```bash
 manifold-genetics setup
 ```
 
-To keep the binaries somewhere else — a shared project directory, say — set:
+To keep the binaries somewhere else — e.g. a shared project directory, set:
 
 ```bash
 export MANIFOLD_GENETICS_TOOL_DIR=/project/shared/manifold-tools
