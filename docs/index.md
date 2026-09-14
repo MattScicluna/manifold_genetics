@@ -38,13 +38,10 @@ matters on cohorts where PCA is the expensive part.
 
 Every run takes two genotype sets, in two roles:
 
-- **fit** — the cohort the model is *estimated* on: the PCA loadings, the
-  embedding.
-- **project** — the cohort that fitted model is then *applied* to.
+- **fit** — the cohort used to estimate the model, including the PCA loadings and embedding.
+- **project** — the cohort to which the fitted model is applied.
 
-They can be the same set, one can contain the other, or they can be different
-cohorts entirely. How they relate is the analysis, and each arrangement has a
-preset:
+These sets may be identical, one may be a subset of the other, or they may come from entirely different cohorts. Their relationship determines the analysis, with each common arrangement represented by a preset:
 
 | preset | fit | project | for |
 |---|---|---|---|
