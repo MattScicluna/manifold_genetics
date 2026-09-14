@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from ..utils.tools import ToolResolver
-from .cohort import PathLike, filter_labels_to_fam, read_cohort, write_cohort_config
+from .cohort import (
+    PathLike,
+    filter_labels_to_fam,
+    filter_labels_to_ids,
+    read_cohort,
+    read_fam_ids,
+    write_cohort_config,
+)
 from .flags import PreprocessOptions, shell_argv
 
 logger = logging.getLogger(__name__)
@@ -123,20 +130,14 @@ def preprocess(
 
 
 def _filter_shared_labels(labels: Path, data_dir: Path) -> None:
-    import pandas as pd
-
-    from .cohort import read_fam_ids
-
+    # Union of both sides' ids, fit first and order-preserving, so a sample that
+    # appears in both subsets is not requested (and so not duplicated) twice.
     ids = list(
         dict.fromkeys(
             read_fam_ids(data_dir / "fit_subset") + read_fam_ids(data_dir / "project_subset")
         )
     )
-    frame = pd.read_csv(labels, dtype={"sample_id": str}, low_memory=False)
-    missing = set(ids) - set(frame["sample_id"])
-    if missing:
-        raise ValueError(f"{len(missing)} samples in the output have no row in {labels}")
-    frame.set_index("sample_id").loc[ids].reset_index().to_csv(data_dir / "labels.csv", index=False)
+    filter_labels_to_ids(labels, ids, data_dir / "labels.csv")
 
 
 __all__ = ["preprocess"]

@@ -74,6 +74,34 @@ def read_fam_ids(prefix: PathLike) -> List[str]:
     return list(fam[1])
 
 
+def filter_labels_to_ids(labels: PathLike, ids: List[str], out: PathLike) -> int:
+    """Write the rows of ``labels`` for ``ids``, in that order.
+
+    Raises:
+        ValueError: ``labels`` has no ``sample_id`` column, or an id has no label
+            row. A label file must cover its genotypes; a filtered copy that
+            silently dropped samples would produce a figure with grey points and
+            no error.
+    """
+    frame = pd.read_csv(labels, dtype={"sample_id": str}, low_memory=False)
+    if "sample_id" not in frame.columns:
+        raise ValueError(f"{labels} has no sample_id column")
+    missing = set(ids) - set(frame["sample_id"])
+    if missing:
+        example = ", ".join(sorted(missing)[:5])
+        raise ValueError(
+            f"{len(missing)} of {len(ids)} samples are not in {labels} "
+            f"(e.g. {example}). Labels must cover the genotypes they describe."
+        )
+    # Drop duplicate sample_ids *before* indexing by the requested order, so a
+    # label file with repeated ids does not expand `.loc[ids]` into extra rows.
+    frame = frame.drop_duplicates("sample_id")
+    kept = frame.set_index("sample_id").loc[ids].reset_index()
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    kept.to_csv(out, index=False)
+    return len(kept)
+
+
 def filter_labels_to_fam(labels: PathLike, prefix: PathLike, out: PathLike) -> int:
     """Write the rows of ``labels`` for the samples in ``prefix``.fam, in .fam order.
 
@@ -82,24 +110,7 @@ def filter_labels_to_fam(labels: PathLike, prefix: PathLike, out: PathLike) -> i
             cover its genotypes; a filtered copy that silently dropped samples
             would produce a figure with grey points and no error.
     """
-    ids = read_fam_ids(prefix)
-    frame = pd.read_csv(labels, dtype={"sample_id": str}, low_memory=False)
-    if "sample_id" not in frame.columns:
-        raise ValueError(f"{labels} has no sample_id column")
-    missing = set(ids) - set(frame["sample_id"])
-    if missing:
-        example = ", ".join(sorted(missing)[:5])
-        raise ValueError(
-            f"{len(missing)} of {len(ids)} samples in {prefix}.fam are not in {labels} "
-            f"(e.g. {example}). Labels must cover the genotypes they describe."
-        )
-    # Drop duplicate sample_ids *before* indexing by the .fam order, so a label
-    # file with repeated ids does not expand `.loc[ids]` into extra rows.
-    frame = frame.drop_duplicates("sample_id")
-    kept = frame.set_index("sample_id").loc[ids].reset_index()
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    kept.to_csv(out, index=False)
-    return len(kept)
+    return filter_labels_to_ids(labels, read_fam_ids(prefix), out)
 
 
 _CARRIED_SECTIONS = ("pca", "admixture", "embedding", "visualization", "skip")
@@ -145,6 +156,7 @@ __all__ = [
     "CohortConfig",
     "Side",
     "filter_labels_to_fam",
+    "filter_labels_to_ids",
     "read_cohort",
     "read_fam_ids",
     "write_cohort_config",

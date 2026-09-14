@@ -92,3 +92,30 @@ def test_labels_are_rewritten_not_reused(tmp_path, tools):
     (tmp_path / "out/data/labels.csv").write_text("sample_id,branch\nSTALE,0\n")
     preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
     assert "STALE" not in (tmp_path / "out/data/labels.csv").read_text()
+
+
+def test_a_duplicated_shared_label_row_is_not_duplicated_in_the_output(tmp_path, tools):
+    """A shared labels.csv with a repeated sample_id must not silently expand the
+    output: the union of both .fam files, not len(labels) * duplicates, decides
+    the row count."""
+    init_synthetic(tmp_path / "in")
+    labels_path = tmp_path / "in/data/labels.csv"
+    lines = labels_path.read_text().splitlines()
+    labels_path.write_text("\n".join(lines[:2] + [lines[1]] + lines[2:]) + "\n")
+
+    preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
+
+    fit_ids = set(
+        pd.read_csv(tmp_path / "out/data/fit_subset.fam", sep=r"\s+", header=None, dtype=str)[1]
+    )
+    project_ids = set(
+        pd.read_csv(tmp_path / "out/data/project_subset.fam", sep=r"\s+", header=None, dtype=str)[1]
+    )
+    labels = pd.read_csv(tmp_path / "out/data/labels.csv", dtype=str)
+    assert len(labels) == len(fit_ids | project_ids)
+
+
+def test_missing_shell_output_raises_runtime_error(tmp_path, tools):
+    init_synthetic(tmp_path / "in")
+    with pytest.raises(RuntimeError, match="fit_subset"):
+        preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=lambda argv: None)
