@@ -34,6 +34,7 @@ SUBCOMMANDS = [
     "pipeline",
     "acquire",
     "preprocess",
+    "subsample",
 ]
 
 _VALIDATORS = [
@@ -176,6 +177,46 @@ def test_preprocess_passes_configs_options_and_out(monkeypatch, tmp_path):
     assert seen["options"].skip_wrayner and seen["options"].fit_has_chr_prefix
     assert seen["options"].skip_geno
     assert seen["options"].maf == 0.02 and seen["options"].threads == 4
+
+
+def test_subsample_passes_groups_and_include_rest(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(
+        config, out_dir, *, groups=(), include_rest=False, seed=42, fit_samples=None, force=False
+    ):
+        seen.update(
+            config=config,
+            out=out_dir,
+            groups=groups,
+            include_rest=include_rest,
+            seed=seed,
+            fit_samples=fit_samples,
+            force=force,
+        )
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(
+        [
+            "subsample",
+            "a.yaml",
+            "--out",
+            str(tmp_path),
+            "--group",
+            "race_ethnicity=White|European:10000",
+            "--include-rest",
+            "--seed",
+            "7",
+        ]
+    )
+    assert rc == 0
+    assert seen["config"] == "a.yaml"
+    from manifold_genetics.preprocessing.subsample import Group
+
+    assert seen["groups"] == [Group("race_ethnicity", "White|European", 10000)]
+    assert seen["include_rest"] is True
+    assert seen["seed"] == 7
 
 
 # ---------------------------------------------------------------------------

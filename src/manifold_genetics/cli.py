@@ -557,6 +557,33 @@ def cmd_preprocess(args):
     return 0
 
 
+def cmd_subsample(args):
+    """Choose the fit samples of a cohort."""
+    setup_logging(args.verbose)
+
+    from . import preprocessing
+
+    try:
+        groups = [preprocessing.parse_group(g) for g in (args.group or [])]
+        config = preprocessing.subsample(
+            args.config,
+            args.out,
+            groups=groups,
+            include_rest=args.include_rest,
+            seed=args.seed,
+            fit_samples=args.fit_samples,
+            force=args.force,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print(f"\nWrote {config}")
+    print("\nNext:")
+    print(f"  manifold-genetics run {config} --dry-run")
+    print(f"  manifold-genetics run {config}")
+    return 0
+
+
 def cmd_setup(args):
     """Download external tools (plink2, flashpca, optional plink v1.9)."""
     setup_logging(args.verbose)
@@ -1492,6 +1519,46 @@ def main(argv: Optional[List[str]] = None):
     )
     pre_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     pre_parser.set_defaults(func=cmd_preprocess)
+
+    sub_parser = subparsers.add_parser(
+        "subsample",
+        help="Choose a cohort's fit samples by label counts or a list",
+        description=(
+            "Optional. Reads a cohort directory and writes one whose fit set is a chosen\n"
+            "subset of its project set; the project set is linked, not copied. The output\n"
+            "uses the `subsample` preset (fit on the subset, embed the subset, landmarked).\n\n"
+            "  --group COLUMN=PATTERN:COUNT   take COUNT samples whose COLUMN matches PATTERN\n"
+            "                                 (case-insensitive regex); repeatable; a sample is\n"
+            "                                 taken once. --include-rest adds every unmatched sample.\n"
+            "  --fit-samples FILE             a FID IID list chosen elsewhere.\n\n"
+            "  subsample proj/config.yaml --out 10k/ \\\n"
+            '      --group "race_ethnicity=White|European:10000" \\\n'
+            '      --group "race_ethnicity=Black or African American:10000" --include-rest'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub_parser.add_argument("config", help="Config of the cohort to choose fit samples from")
+    sub_parser.add_argument("--out", required=True, help="Directory to write the new cohort into")
+    sub_parser.add_argument(
+        "--group",
+        action="append",
+        metavar="COLUMN=PATTERN:COUNT",
+        help="Take COUNT samples whose COLUMN matches PATTERN (repeatable)",
+    )
+    sub_parser.add_argument(
+        "--include-rest",
+        action="store_true",
+        help="Also include every sample matched by no group",
+    )
+    sub_parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed for subsampling (default: 42)"
+    )
+    sub_parser.add_argument("--fit-samples", help="A FID IID list chosen elsewhere")
+    sub_parser.add_argument(
+        "--force", action="store_true", help="Overwrite an existing config.yaml"
+    )
+    sub_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    sub_parser.set_defaults(func=cmd_subsample)
 
     setup_parser = subparsers.add_parser(
         "setup",

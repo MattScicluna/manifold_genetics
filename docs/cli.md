@@ -136,6 +136,26 @@ Filter SNPs of one cohort, or intersect two, into a new cohort directory in the
 same layout, so the result can go to `run`, `pipeline`, or another `preprocess`.
 Samples are never removed here. See [Preprocessing](preprocessing.md).
 
+## subsample
+
+```bash
+manifold-genetics subsample proj/config.yaml --out 10k/ \
+    --group "race_ethnicity=White|European:10000" \
+    --group "race_ethnicity=Black or African American:10000" --include-rest
+```
+
+Reads a cohort directory and writes one whose fit set is a chosen subset of
+its project set; the project set is linked, not copied (a biobank `.bed` can
+be tens of GB). The output uses the `subsample` preset.
+
+Choose the fit samples by exactly one of:
+
+- `--group COLUMN=PATTERN:COUNT` — take COUNT samples whose COLUMN matches
+  PATTERN (case-insensitive regex); repeatable, and a sample is taken at most
+  once across groups. `--include-rest` also adds every sample matched by no
+  group.
+- `--fit-samples FILE` — a `FID IID` list chosen elsewhere.
+
 ## Setup
 
 ```bash

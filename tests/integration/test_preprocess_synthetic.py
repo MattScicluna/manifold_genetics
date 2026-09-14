@@ -71,3 +71,19 @@ def test_the_output_dry_runs(tmp_path, tools):
         ),
     )
     assert main(["run", str(config), "--dry-run"]) == 0
+
+
+def test_preprocess_then_subsample_then_dry_run(tmp_path, tools):
+    from manifold_genetics.cli import main
+    from manifold_genetics.preprocessing import Group, subsample
+
+    acquire_synthetic(tmp_path / "in")
+    filtered = preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "filtered",
+        options=PreprocessOptions(
+            preset="intersect-only", min_common_snps=100, memory=2000, threads=2
+        ),
+    )
+    config = subsample(filtered, tmp_path / "sub", groups=[Group("branch", ".", 20)])
+    assert main(["run", str(config), "--dry-run"]) == 0

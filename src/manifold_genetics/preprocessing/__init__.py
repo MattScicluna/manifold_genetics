@@ -13,5 +13,13 @@ SHELL_SCRIPT = Path(__file__).resolve().parent / "preprocess_cross_projection.sh
 
 from .flags import PreprocessOptions  # noqa: E402
 from .runner import preprocess  # noqa: E402
+from .subsample import Group, parse_group, subsample  # noqa: E402
 
-__all__ = ["SHELL_SCRIPT", "PreprocessOptions", "preprocess"]
+__all__ = [
+    "SHELL_SCRIPT",
+    "PreprocessOptions",
+    "preprocess",
+    "Group",
+    "parse_group",
+    "subsample",
+]
