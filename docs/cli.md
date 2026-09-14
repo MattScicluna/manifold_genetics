@@ -4,8 +4,7 @@
 manifold-genetics <command> --help
 ```
 
-Every command prints its own options and a worked example. This page is about
-which one to reach for.
+Every command prints its own options and a worked example.
 
 ## Starting from nothing
 
@@ -16,7 +15,7 @@ manifold-genetics init custom        # a config for genotypes you already have
 manifold-genetics init aou           # a config for All of Us (workbench only)
 ```
 
-A `pip install` ships no data and no example config, so `init` is what gives you
+`pip install` downloads no data and no example config, so `init` is what gives you
 something to run.
 
 `synthetic` needs no network and takes under a minute: it simulates 2,000
@@ -30,11 +29,7 @@ recover.
 samples across seven genetic regions, fitted on the 3,400 that are also
 unrelated. It needs internet, so on a cluster run it on a login node.
 
-A TLS-intercepting proxy needs nothing from you: `init` falls back to `curl` and
-`wget`, which use the system certificate store rather than Python's.
-
-On a machine with no route out at all — a compute node, say — fetch the archive
-elsewhere and point `init` at it:
+You can also point `init` at archived data:
 
 ```bash
 manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
