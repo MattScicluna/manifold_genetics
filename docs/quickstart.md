@@ -98,7 +98,7 @@ For readers working in the All of Us Researcher Workbench with access to the
 controlled data tier:
 
 ```bash
-manifold-genetics init aou
+manifold-genetics acquire aou
 ```
 
 Running this in the workbench reproduces the All of Us experiments from the

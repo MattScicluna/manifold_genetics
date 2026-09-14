@@ -187,9 +187,8 @@ class TestFamFix:
         )
 
     def test_the_fix_is_not_applied_twice(self, tmp_path, workbench):
-        """The .Original.fam is the marker, as in the script: a second pass over
-        an already-fixed .fam would keep AOU as FID and be harmless, but the
-        original must survive."""
+        """Once .Original.fam exists the download is never renamed again, so
+        the original survives every run and the .fam is the same fixed form."""
         _acquire(tmp_path)
         raw = tmp_path / "data/raw"
         fixed = (raw / "extractedChrAll.fam").read_text()
@@ -198,6 +197,27 @@ class TestFamFix:
 
         assert (raw / "extractedChrAll.Original.fam").read_text() == _BUCKET_FAM
         assert (raw / "extractedChrAll.fam").read_text() == fixed
+
+    def test_an_orphaned_marker_does_not_let_a_raw_fam_through(self, tmp_path, workbench):
+        """Interrupted between the rename and the rewrite (or the .fam deleted):
+        the marker is present, the .fam is missing, so the next run downloads
+        the raw .fam again. The script would then have skipped the fix and
+        linked an unfixed .fam. The original is the source of truth; the .fam
+        is regenerated from it every time."""
+        _acquire(tmp_path)
+        raw = tmp_path / "data/raw"
+        (raw / "extractedChrAll.fam").unlink()
+        (tmp_path / "config.yaml").unlink()
+
+        calls = []
+        _acquire(tmp_path, calls=calls)
+
+        assert [c[-2] for c in calls if c[0] == "gsutil"] == [
+            "gs://fc-aou-datasets-controlled/v8/microarray/plink/arrays.fam"
+        ], "the raw .fam was fetched again"
+        assert (raw / "extractedChrAll.fam").read_text().startswith("AOU\t1000001\t0\t0\t1\t-9")
+        assert (raw / "extractedChrAll.Original.fam").read_text() == _BUCKET_FAM
+        assert (tmp_path / "data/project_subset.fam").read_text().startswith("AOU\t")
 
 
 class TestMetadata:
@@ -282,7 +302,9 @@ class TestLabels:
         assert "stale" not in set(labels["sample_id"])
 
     def test_samples_without_metadata_are_counted(self, tmp_path, workbench, caplog):
-        person = pd.DataFrame({"person_id": [1000001], "race": ["White"], "ethnicity": ["x"]})
+        person = pd.DataFrame(
+            {"person_id": [1000001, 1000002], "race": ["White", "Asian"], "ethnicity": ["x", "y"]}
+        )
         calls, queries = [], []
         with caplog.at_level("WARNING"):
             aou.acquire_aou(
@@ -291,9 +313,39 @@ class TestLabels:
                 query=_query_factory(queries, person=person),
             )
 
-        assert "2 samples" in caplog.text
+        assert "1 samples" in caplog.text
         labels = pd.read_csv(tmp_path / "data/labels.csv", dtype=str)
-        assert list(labels["sample_id"]) == ["1000001"]
+        assert list(labels["sample_id"]) == ["1000001", "1000002"]
+
+    def test_metadata_covering_under_half_the_cohort_is_refused(self, tmp_path, workbench):
+        """The rule `acquire custom` applies to a label file it is handed, so a
+        wrong-CDR query result cannot become a label file that colours nothing."""
+        person = pd.DataFrame({"person_id": [1000001], "race": ["White"], "ethnicity": ["x"]})
+
+        with pytest.raises(ValueError, match=r"DemographicData\.tsv.*33\.3%.*Delete it"):
+            aou.acquire_aou(
+                tmp_path, runner=_runner_factory([]), query=_query_factory([], person=person)
+            )
+        assert not (tmp_path / "config.yaml").exists()
+        assert not (tmp_path / "data/labels.csv").exists()
+
+    @pytest.mark.parametrize(
+        "content", ["", "person_id\trace\tethnicity\trace_ethnicity\n"], ids=["empty", "header"]
+    )
+    def test_an_empty_demographics_file_is_refused_not_reused(self, tmp_path, workbench, content):
+        """A zero-byte or header-only DemographicData.tsv (crash mid-write, the
+        wrong CDR) is "present" to the metadata step; it must fail here with
+        the file named, not with pandas' EmptyDataError, and not succeed."""
+        meta = tmp_path / "data/raw/Metadata"
+        meta.mkdir(parents=True)
+        (meta / "DemographicData.tsv").write_text(content)
+        (meta / "SocioeconomicZipCodes.tsv").write_text("person_id\tzip_code\n")
+
+        queries = []
+        with pytest.raises(ValueError, match=r"DemographicData\.tsv.*0\.0%.*Delete it"):
+            _acquire(tmp_path, queries=queries)
+        assert queries == [], "both files were present, so nothing was queried"
+        assert not (tmp_path / "config.yaml").exists()
 
 
 class TestRefusals:

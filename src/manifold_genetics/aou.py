@@ -42,7 +42,9 @@ _AOU_REQUIRED_ENV = {
 }
 _AOU_REQUIRED_TOOLS = {
     "gsutil": "to read gs://fc-aou-datasets-controlled",
-    "bq": "to query the CDR for sample demographics",
+    # pandas-gbq does the querying; bq is on PATH wherever the Google Cloud SDK
+    # it authenticates through is installed, which is what is being checked.
+    "bq": "the Google Cloud SDK, through which BigQuery is reached",
 }
 
 # download_aou_data.sh: AOU_BUCKET_ROOT_V8. The bucket calls the files
@@ -146,17 +148,19 @@ def _fix_fam(prefix: Path) -> Path:
 
     The script: ``mv`` the download to ``.Original.fam``, then
     ``awk '{print "AOU\\t"$2"\\t"$3"\\t"$4"\\t"$5"\\t-9"}'`` over it. The
-    ``.Original.fam`` is the marker that it has been done, so a second run
-    leaves both files alone.
+    ``.Original.fam`` is the source of truth and the ``.fam`` is derived from
+    it, so the rewrite runs every time: the script skipped it once the
+    original existed, which let a ``.fam`` re-downloaded after an interrupted
+    run (marker present, ``.fam`` missing, so ``_fetch_plink`` fetched the raw
+    one again) through unfixed and silent. Rewriting a .fam is a second's work.
     """
     fam_path = prefix.with_suffix(".fam")
     orig_path = prefix.parent / f"{prefix.name}.Original.fam"
     if orig_path.exists():
-        logger.info("  FAM file already fixed")
-        return fam_path
-
-    logger.info("Fixing AoU FAM file (adding Family ID)...")
-    fam_path.rename(orig_path)
+        logger.info("  FAM file already fixed; regenerating it from the original")
+    else:
+        logger.info("Fixing AoU FAM file (adding Family ID)...")
+        fam_path.rename(orig_path)
     with orig_path.open() as src, fam_path.open("w") as dest:
         for line in src:
             fields = line.split()
@@ -267,28 +271,52 @@ def _derive_race_ethnicity(df_person: pd.DataFrame) -> pd.DataFrame:
 # prepare_data.sh step 14: project labels
 # =============================================================================
 _LABEL_COLUMNS = ("race", "ethnicity", "race_ethnicity")
+# The same threshold `acquire custom` applies to a label file it is handed.
+_MIN_LABEL_OVERLAP = 0.5
 
 
-def _write_labels(demographics: Path, fam_path: Path, labels_path: Path) -> pd.DataFrame:
+def _write_labels(demographics: Path, prefix: Path, labels_path: Path) -> pd.DataFrame:
     """The metadata rows that are in the .fam, with ``person_id`` as ``sample_id``
     and the race columns that are present -- ``prepare_data.sh``'s
     ``columns_to_keep``.
 
     Written every run: reusing the file because it exists is how
     ukbb/geosketch_phate's labels went stale, and the inputs are on disk.
+
+    Raises:
+        ValueError: fewer than half the genotyped samples have a metadata row
+            -- the rule ``acquire custom`` applies to a label file. A
+            ``DemographicData.tsv`` that is empty or header-only (a query
+            against the wrong CDR, a crash mid-write) counts as present to
+            ``_fetch_metadata``, and would otherwise become a header-only
+            label file and a config that runs.
     """
-    metadata = pd.read_csv(demographics, sep="\t", low_memory=False)
-    fam = pd.read_csv(fam_path, sep=r"\s+", header=None, usecols=[1], names=["IID"], dtype=str)
-    available = set(fam["IID"])
+    from .pca.plink import read_fam_ids
+
+    try:
+        metadata = pd.read_csv(demographics, sep="\t", low_memory=False)
+    except pd.errors.EmptyDataError:
+        metadata = pd.DataFrame(columns=["person_id"])
+    available = set(read_fam_ids(prefix))
 
     metadata["sample_id"] = metadata["person_id"].astype(str)
     labels = metadata[metadata["sample_id"].isin(available)].copy()
+    overlap = len(labels) / max(len(available), 1)
+    if overlap < _MIN_LABEL_OVERLAP:
+        raise ValueError(
+            f"{demographics} describes {overlap:.1%} of the {len(available)} samples in "
+            f"{prefix}.fam. Below {_MIN_LABEL_OVERLAP:.0%} it does not describe this cohort: "
+            "an empty or partial query result (the wrong CDR, an interrupted write) would "
+            "otherwise become a label file that colours nothing and a config that runs. "
+            "Delete it to query BigQuery again."
+        )
+
     columns = ["sample_id"] + [c for c in _LABEL_COLUMNS if c in labels.columns]
     labels = labels[columns]
     labels.to_csv(labels_path, index=False)
     logger.info("  Saved %s: %d samples", labels_path.name, len(labels))
 
-    if len(labels) < len(available):
+    if overlap < 1.0:
         logger.warning(
             "%d samples in the genotypes have no metadata and will be unlabelled",
             len(available) - len(labels),
@@ -362,11 +390,11 @@ def acquire_aou(
     meta_dir = raw_dir / "Metadata"
 
     prefix = _fetch_plink(AOU_BUCKET_ROOT_V8, os.environ["GOOGLE_PROJECT"], raw_dir, runner)
-    fam_path = _fix_fam(prefix)
+    _fix_fam(prefix)
     demographics = _fetch_metadata(os.environ["WORKSPACE_CDR"], meta_dir, query)
 
     subset = _link_project_subset(prefix, data_dir)
-    labels = _write_labels(demographics, fam_path, data_dir / "labels.csv")
+    labels = _write_labels(demographics, prefix, data_dir / "labels.csv")
     _write_generated_colormap(labels, out_dir / "colormap.json")
     config_path.write_text(_AOU_CONFIG)
 
