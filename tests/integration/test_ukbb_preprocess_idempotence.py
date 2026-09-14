@@ -186,7 +186,10 @@ def test_b_reproduction_from_raw_inputs(raw_cohorts, root):
             skip_wrayner=True,
             skip_project_maf=True,
             threads=THREADS,
-            memory=28000,
+            # 28000 OOM-killed the biobank ID-standardisation --make-bed on
+            # 486,748 samples (33.4 GB RSS observed); 100000 matches what the
+            # original prepare_data.sh wrappers passed.
+            memory=100000,
             temp_dir=root / "temp_b",
         ),
         force=True,

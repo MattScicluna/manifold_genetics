@@ -253,6 +253,57 @@ Decisions:
     that point GIAB/HLA/geno/MAF have already changed which SNPs and LD
     structure are present. HLA exclusion itself removed 0 extra (the panel is
     already `.noHLA`); GIAB accounts for essentially all of the 47,714.
+
+  **Observed on real UKBB/HGDP data (Task 11, 2026-09-14,
+  `tests/integration/test_ukbb_preprocess_idempotence.py`, `requires_private_data`).**
+  Two checks, chosen instead of re-running the UKBB flag set on the already-
+  intersected output (which would just repeat the lossy-LD-reprune finding
+  above at 200x the cost):
+  - **Test A, lossless round trip.** `--preset intersect-only --skip_geno=True`
+    on the published, already-intersected cohort
+    (`examples/ukbb/hgdp_1kgp_proj/data/{fit,project}_subset`, 3,340/486,748
+    samples, 120,849 SNPs each) is exactly lossless: 0 samples and 0 variants
+    lost on either side. Confirms Task 9b's fix generalises past HGDP: with
+    every lossy step off, re-filtering an already-filtered cohort is a no-op.
+  - **Test B, reproduction from raw inputs.** `acquire_custom` on the raw
+    prefixes named in `mappings_private.json` (`hgdp_plink`: the gnomAD-
+    derived HGDP panel, 3,340 samples x 189,783 SNPs; `ukbb_plink`: raw UKBB,
+    486,748 samples x 169,829 SNPs — sample counts already equal the published
+    subsets, so `acquire_custom` performs no sample-level filtering itself),
+    then `preprocess` with exactly `prepare_data.sh`'s flags
+    (`--skip-wrayner --skip-project-maf`, everything else on) **exactly**
+    reproduces the published cohort: same sample lists and the same
+    `(chr, pos, a1, a2)` sets on both sides, 3,340 x 120,849 fit and
+    486,748 x 120,849 project. Per-step SNP counts: reference filtering
+    189,783 → 184,681 (dedup/GIAB/HLA/geno/MAF); biobank filtering
+    169,829 → 154,365 (geno only, MAF skipped); position-overlap intersection
+    184,681/154,365 → 150,474 common; LD-pruning (on the reference, applied to
+    both) 150,474 → 120,849 (29,625 removed). Unlike the HGDP case, this is
+    not "refilter an independently-resampled subset" — the raw prefixes'
+    sample sets already match the published output exactly, so it is a
+    genuine from-scratch reproduction of `prepare_data.sh`'s own pipeline, not
+    a second, different filtering.
+  - **Memory.** The default 28,000 MB (28 GB) `--memory` OOM-killed the
+    biobank-side `--set-all-var-ids`/`--make-bed` ID-standardisation step on
+    486,748 samples (observed RSS 33.4 GB against an expected ~18.7 GB `.bed`)
+    on a 32 GB node. `--memory 100000`, matching what
+    `examples/ukbb/hgdp_1kgp_proj/prepare_data.sh` itself passes, succeeded on
+    a ≥128 GB node with peak RSS 85.4 GB. `PreprocessOptions.memory` should be
+    set to at least this for any real run over UKBB-sized (>400k sample)
+    cohorts; the shell has no internal safeguard against under-provisioning.
+  - **Resumability weakness (deferred, not fixed here).** After the OOM kill,
+    relaunching the same `preprocess` call against the same `temp_dir` did
+    not re-run the killed step: the shell's checkpointing
+    (`if [[ -f "$OUTPUT" ]]; then skip`) only checks that an intermediate file
+    *exists*, not that it is complete. The OOM had left a truncated
+    `biobank_standardized_ids.bed` (7.9 GB of the expected 18.7 GB); the
+    resumed run skipped straight past it, and the corruption only surfaced
+    several steps later as plink's own `Error: Unexpected PLINK 1 .bed file
+    size` during the SNP-intersection `--extract`. Recovery required manually
+    identifying and deleting every file written at or after the truncated one
+    (by timestamp) before a second resume would succeed. A future fix should
+    make the shell verify each checkpoint file's expected size (or write a
+    `.done` sentinel after each step) rather than trusting existence alone.
 - **The AoU flow is reproduced as-is**, including the final SNP count landing
   below the shell's 100k warning. The workbench has its own HGDP+1KGP, and its
   layout differs, so `acquire hgdp --archive PATH|gs://URL` detects which
