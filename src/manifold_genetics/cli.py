@@ -578,6 +578,9 @@ def cmd_subsample(args):
             include_rest=args.include_rest,
             seed=args.seed,
             fit_samples=args.fit_samples,
+            geosketch=args.geosketch,
+            pca=args.pca,
+            n_pcs=args.n_pcs,
             force=args.force,
         )
     except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -1536,7 +1539,10 @@ def main(argv: Optional[List[str]] = None):
             "  --group COLUMN=PATTERN:COUNT   take COUNT samples whose COLUMN matches PATTERN\n"
             "                                 (case-insensitive regex); repeatable; a sample is\n"
             "                                 taken once. --include-rest adds every unmatched sample.\n"
-            "  --fit-samples FILE             a FID IID list chosen elsewhere.\n\n"
+            "  --fit-samples FILE             a FID IID list chosen elsewhere.\n"
+            "  --geosketch N --pca CSV        take N samples via geometric sketching (Hie et al.\n"
+            "                                 2019) on the PCA coordinates in CSV; --n-pcs limits\n"
+            "                                 how many of its columns are used (default: all).\n\n"
             "  subsample proj/config.yaml --out 10k/ \\\n"
             '      --group "race_ethnicity=White|European:10000" \\\n'
             '      --group "race_ethnicity=Black or African American:10000" --include-rest'
@@ -1560,6 +1566,21 @@ def main(argv: Optional[List[str]] = None):
         "--seed", type=int, default=42, help="Random seed for subsampling (default: 42)"
     )
     sub_parser.add_argument("--fit-samples", help="A FID IID list chosen elsewhere")
+    sub_parser.add_argument(
+        "--geosketch",
+        type=int,
+        metavar="N",
+        help="Take N samples via geometric sketching on --pca coordinates",
+    )
+    sub_parser.add_argument(
+        "--pca", metavar="CSV", help="PCA CSV (sample_id, dim_1, dim_2, ...) for --geosketch"
+    )
+    sub_parser.add_argument(
+        "--n-pcs",
+        type=int,
+        metavar="N",
+        help="Use only the first N columns of --pca for --geosketch (default: all)",
+    )
     sub_parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing config.yaml"
     )

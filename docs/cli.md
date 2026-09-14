@@ -158,6 +158,11 @@ Choose the fit samples by exactly one of:
   once across groups. `--include-rest` also adds every sample matched by no
   group.
 - `--fit-samples FILE` — a `FID IID` list chosen elsewhere.
+- `--geosketch N --pca CSV` — take N samples via geometric sketching (Hie et
+  al. 2019) on the PCA coordinates in CSV (`sample_id, dim_1, dim_2, ...`),
+  restricted to the samples in the project `.fam` first. `--n-pcs` limits how
+  many of the CSV's columns are used (default: all). Needs the `geosketch`
+  extra: `pip install 'manifold-genetics[geosketch]'`.
 
 ## Setup
 

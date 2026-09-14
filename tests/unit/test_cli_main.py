@@ -183,7 +183,17 @@ def test_subsample_passes_groups_and_include_rest(monkeypatch, tmp_path):
     seen = {}
 
     def fake(
-        config, out_dir, *, groups=(), include_rest=False, seed=42, fit_samples=None, force=False
+        config,
+        out_dir,
+        *,
+        groups=(),
+        include_rest=False,
+        seed=42,
+        fit_samples=None,
+        geosketch=None,
+        pca=None,
+        n_pcs=None,
+        force=False,
     ):
         seen.update(
             config=config,
@@ -192,6 +202,9 @@ def test_subsample_passes_groups_and_include_rest(monkeypatch, tmp_path):
             include_rest=include_rest,
             seed=seed,
             fit_samples=fit_samples,
+            geosketch=geosketch,
+            pca=pca,
+            n_pcs=n_pcs,
             force=force,
         )
         return Path(out_dir) / "config.yaml"
@@ -217,6 +230,46 @@ def test_subsample_passes_groups_and_include_rest(monkeypatch, tmp_path):
     assert seen["groups"] == [Group("race_ethnicity", "White|European", 10000)]
     assert seen["include_rest"] is True
     assert seen["seed"] == 7
+
+
+def test_subsample_passes_geosketch_pca_and_n_pcs(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(
+        config,
+        out_dir,
+        *,
+        groups=(),
+        include_rest=False,
+        seed=42,
+        fit_samples=None,
+        geosketch=None,
+        pca=None,
+        n_pcs=None,
+        force=False,
+    ):
+        seen.update(geosketch=geosketch, pca=pca, n_pcs=n_pcs)
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(
+        [
+            "subsample",
+            "a.yaml",
+            "--out",
+            str(tmp_path),
+            "--geosketch",
+            "5000",
+            "--pca",
+            "project_pca_20.csv",
+            "--n-pcs",
+            "10",
+        ]
+    )
+    assert rc == 0
+    assert seen["geosketch"] == 5000
+    assert seen["pca"] == "project_pca_20.csv"
+    assert seen["n_pcs"] == 10
 
 
 # ---------------------------------------------------------------------------

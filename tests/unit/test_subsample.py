@@ -1,7 +1,9 @@
-"""Choosing the fit samples of a cohort by label counts or a list."""
+"""Choosing the fit samples of a cohort by label counts, a list, or geosketch."""
 
+import builtins
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -9,6 +11,7 @@ from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing.subsample import (
     Group,
     parse_group,
+    select_by_geosketch,
     select_by_groups,
     subsample,
 )
@@ -85,6 +88,62 @@ class TestSelectByGroups:
             select_by_groups(labels, [Group("nope", "x", 1)], include_rest=False, seed=0)
 
 
+class TestSelectByGeosketch:
+    def test_chooses_n_ids_from_the_pca_table(self):
+        pca = pd.DataFrame(
+            {"sample_id": [f"S{i}" for i in range(50)], "dim_1": range(50), "dim_2": range(50)}
+        )
+        chosen = select_by_geosketch(pca, 10, seed=0, sketch=lambda X, n, **kw: list(range(n)))
+        assert chosen == [f"S{i}" for i in range(10)]
+
+    def test_uses_every_column_but_sample_id_as_a_dimension(self):
+        # examples/_shared/select_samples_geosketch.py's rule is "everything
+        # except sample_id", not "columns named dim_*".
+        captured = {}
+
+        def sketch(X, n, **kw):
+            captured["X"] = X
+            captured["kwargs"] = kw
+            return list(range(n))
+
+        pca = pd.DataFrame(
+            {
+                "sample_id": ["A", "B", "C"],
+                "pc1": [1, 2, 3],
+                "pc2": [4, 5, 6],
+                "extra": [7, 8, 9],
+            }
+        )
+        select_by_geosketch(pca, 2, seed=3, sketch=sketch)
+        assert captured["X"].shape == (3, 3)
+        assert captured["X"].dtype == np.float32
+        assert captured["kwargs"] == {"seed": 3, "replace": False}
+
+    def test_n_pcs_truncates_the_dimensions_used(self):
+        captured = {}
+
+        def sketch(X, n, **kw):
+            captured["shape"] = X.shape
+            return list(range(n))
+
+        pca = pd.DataFrame({"sample_id": ["A", "B", "C"], "dim_1": [1, 2, 3], "dim_2": [4, 5, 6]})
+        select_by_geosketch(pca, 2, seed=0, sketch=sketch, n_pcs=1)
+        assert captured["shape"] == (3, 1)
+
+    def test_missing_geosketch_raises_a_named_import_error(self, monkeypatch):
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "geosketch":
+                raise ImportError("no module named geosketch")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        pca = pd.DataFrame({"sample_id": ["A"], "dim_1": [1]})
+        with pytest.raises(ImportError, match="geosketch"):
+            select_by_geosketch(pca, 1, seed=0)
+
+
 def _fake_keep(bfile, keep, out, plink2):
     ids = [line.split()[1] for line in Path(keep).read_text().splitlines()]
     fam = {line.split()[1]: line for line in Path(f"{bfile}.fam").read_text().splitlines()}
@@ -130,6 +189,46 @@ class TestSubsample:
         fit = [line.split()[1] for line in open(f"{load_config(config)['fit_plink']}.fam")]
         assert fit == [f[1] for f in fam[:5]]
 
+    def test_geosketch_selects_from_the_pca_table_restricted_to_the_fam(
+        self, cohort, tmp_path, monkeypatch
+    ):
+        import sys
+
+        subsample_module = sys.modules["manifold_genetics.preprocessing.subsample"]
+
+        fam = [line.split() for line in open(tmp_path / "in/data/project_subset.fam")]
+        iids = [f[1] for f in fam]
+        pca_path = tmp_path / "pca.csv"
+        # One extra row outside the .fam must be dropped before sketching.
+        pd.DataFrame({"sample_id": iids + ["not_in_fam"], "dim_1": range(len(iids) + 1)}).to_csv(
+            pca_path, index=False
+        )
+
+        captured = {}
+
+        def fake_select(pca_df, n, seed, sketch=None, n_pcs=None):
+            captured["ids"] = set(pca_df["sample_id"])
+            captured["n_pcs"] = n_pcs
+            return list(pca_df["sample_id"])[:n]
+
+        monkeypatch.setattr(subsample_module, "select_by_geosketch", fake_select)
+        config = subsample(
+            cohort,
+            tmp_path / "out",
+            geosketch=3,
+            pca=pca_path,
+            n_pcs=1,
+            keep_runner=_fake_keep,
+        )
+        assert captured["ids"] == set(iids)
+        assert captured["n_pcs"] == 1
+        fit = [line.split()[1] for line in open(f"{load_config(config)['fit_plink']}.fam")]
+        assert len(fit) == 3
+
+    def test_geosketch_requires_pca(self, cohort, tmp_path):
+        with pytest.raises(ValueError, match="--pca"):
+            subsample(cohort, tmp_path / "out", geosketch=3, keep_runner=_fake_keep)
+
     def test_needs_exactly_one_way_of_choosing(self, cohort, tmp_path):
         with pytest.raises(ValueError, match="one of"):
             subsample(cohort, tmp_path / "out", keep_runner=_fake_keep)
@@ -139,5 +238,14 @@ class TestSubsample:
                 tmp_path / "out",
                 groups=[Group("branch", "0", 1)],
                 fit_samples=tmp_path / "x",
+                keep_runner=_fake_keep,
+            )
+        with pytest.raises(ValueError, match="one of"):
+            subsample(
+                cohort,
+                tmp_path / "out",
+                groups=[Group("branch", "0", 1)],
+                geosketch=5,
+                pca=tmp_path / "pca.csv",
                 keep_runner=_fake_keep,
             )

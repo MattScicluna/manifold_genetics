@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
+import numpy as np
 import pandas as pd
 
 from ..scaffold import _run_plink2_keep, _write_keep_file
@@ -84,6 +85,35 @@ def select_by_groups(
     return taken
 
 
+def select_by_geosketch(
+    pca: pd.DataFrame,
+    n: int,
+    seed: int,
+    sketch: Optional[Callable] = None,
+    n_pcs: Optional[int] = None,
+) -> List[str]:
+    """Geometric sketching (Hie et al. 2019) on a run's PCA coordinates.
+
+    Mirrors examples/_shared/select_samples_geosketch.py: every column but
+    ``sample_id`` is treated as a dimension, optionally truncated to the first
+    ``n_pcs`` of them, and cast to ``float32`` before sketching.
+    """
+    if sketch is None:
+        try:
+            from geosketch import gs as sketch
+        except ImportError:
+            raise ImportError(
+                "--geosketch needs the geosketch extra: "
+                "pip install 'manifold-genetics[geosketch]'"
+            )
+    dim_cols = [c for c in pca.columns if c != "sample_id"]
+    if n_pcs is not None:
+        dim_cols = dim_cols[:n_pcs]
+    X = pca[dim_cols].to_numpy().astype(np.float32)
+    index = sketch(X, n, seed=seed, replace=False)
+    return list(pca["sample_id"].iloc[index])
+
+
 def subsample(
     config: PathLike,
     out_dir: PathLike,
@@ -92,6 +122,9 @@ def subsample(
     include_rest: bool = False,
     seed: int = 42,
     fit_samples: Optional[PathLike] = None,
+    geosketch: Optional[int] = None,
+    pca: Optional[PathLike] = None,
+    n_pcs: Optional[int] = None,
     force: bool = False,
     keep_runner: Callable = _run_plink2_keep,
 ) -> Path:
@@ -101,11 +134,16 @@ def subsample(
     project), the output fits on a subset of the biobank.
 
     Raises:
-        ValueError: neither or both of ``groups`` and ``fit_samples`` given.
+        ValueError: not exactly one of ``groups``, ``fit_samples`` and
+            ``geosketch`` given, or ``geosketch`` given without ``pca``.
         FileExistsError: ``out_dir/config.yaml`` exists and ``force`` is False.
     """
-    if bool(groups) == (fit_samples is not None):
-        raise ValueError("choose fit samples by exactly one of --group or --fit-samples")
+    if sum([bool(groups), fit_samples is not None, geosketch is not None]) != 1:
+        raise ValueError(
+            "choose fit samples by exactly one of --group, --fit-samples or --geosketch"
+        )
+    if geosketch is not None and pca is None:
+        raise ValueError("--geosketch requires --pca")
     out_dir = Path(out_dir).expanduser().resolve()
     config_path = out_dir / "config.yaml"
     if config_path.exists() and not force:
@@ -119,6 +157,15 @@ def subsample(
     keep = data_dir / "fit_samples.txt"
     if fit_samples is not None:
         shutil.copy(fit_samples, keep)
+    elif geosketch is not None:
+        available = set(read_fam_ids(project.plink))
+        pca_df = pd.read_csv(pca, dtype={"sample_id": str})
+        pca_df = pca_df[pca_df["sample_id"].isin(available)].reset_index(drop=True)
+        chosen = select_by_geosketch(pca_df, geosketch, seed=seed, n_pcs=n_pcs)
+        _write_keep_file(Path(f"{project.plink}.fam"), pd.Series(chosen), keep)
+        logger.info(
+            "Selected %d of %d samples for the fit set via geosketch", len(chosen), len(available)
+        )
     else:
         labels = pd.read_csv(project.labels, dtype={"sample_id": str}, low_memory=False)
         available = set(read_fam_ids(project.plink))
@@ -158,4 +205,4 @@ def subsample(
     )
 
 
-__all__ = ["Group", "parse_group", "select_by_groups", "subsample"]
+__all__ = ["Group", "parse_group", "select_by_groups", "select_by_geosketch", "subsample"]
