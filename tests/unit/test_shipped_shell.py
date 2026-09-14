@@ -34,7 +34,7 @@ def test_the_example_copies_are_links_to_the_shipped_one(tmp_path):
     assert link.resolve() == preprocessing.SHELL_SCRIPT.resolve()
 
 
-NEW_FLAGS = ["--plink2", "--plink", "--python", "--min-common-snps"]
+NEW_FLAGS = ["--plink2", "--plink", "--python", "--min-common-snps", "--skip-geno"]
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not on PATH")

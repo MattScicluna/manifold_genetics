@@ -33,6 +33,7 @@ _BOOL_FLAGS = {
     "skip_ld_prune": "--skip-ld-prune",
     "skip_dedup": "--skip-dedup",
     "skip_maf": "--skip-maf",
+    "skip_geno": "--skip-geno",
     "skip_project_maf": "--skip-biobank-maf",
     "cleanup": "--cleanup",
     "fit_has_chr_prefix": "--reference-has-chr-prefix",
@@ -65,6 +66,7 @@ class PreprocessOptions:
     skip_ld_prune: bool = False
     skip_dedup: bool = False
     skip_maf: bool = False
+    skip_geno: bool = False
     skip_project_maf: bool = False
     fit_has_chr_prefix: bool = False
     cleanup: bool = False

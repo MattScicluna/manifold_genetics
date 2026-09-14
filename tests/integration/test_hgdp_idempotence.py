@@ -42,11 +42,12 @@ def hgdp(tmp_path_factory):
 
 
 @pytest.mark.parametrize(
-    "preset,extra",
+    "preset,extra,dirname",
     [
         pytest.param(
             "intersect-only",
             {},
+            "intersect-only",
             marks=pytest.mark.xfail(
                 strict=True,
                 reason=(
@@ -62,6 +63,7 @@ def hgdp(tmp_path_factory):
         pytest.param(
             None,
             {"skip_wrayner": True, "skip_project_maf": True},
+            "ukbb-flags",
             marks=pytest.mark.xfail(
                 strict=True,
                 reason=(
@@ -74,15 +76,20 @@ def hgdp(tmp_path_factory):
                 ),
             ),
         ),
+        pytest.param(
+            "intersect-only",
+            {"skip_geno": True},
+            "intersect-only-skip-geno",
+        ),
     ],
-    ids=["intersect-only", "ukbb-flags"],
+    ids=["intersect-only", "ukbb-flags", "intersect-only-skip-geno"],
 )
-def test_filtering_the_filtered_panel_changes_nothing(hgdp, tmp_path, preset, extra):
+def test_filtering_the_filtered_panel_changes_nothing(hgdp, tmp_path, preset, extra, dirname):
     before = load_config(hgdp)
     after = load_config(
         preprocess(
             hgdp,
-            tmp_path / (preset or "ukbb-flags"),
+            tmp_path / dirname,
             options=PreprocessOptions(
                 preset=preset,
                 threads=int(os.environ.get("SLURM_CPUS_PER_TASK", 4)),

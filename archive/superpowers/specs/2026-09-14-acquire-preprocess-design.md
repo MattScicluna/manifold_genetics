@@ -231,10 +231,17 @@ Decisions:
     and 36 project-side SNPs, and the post-filter position-overlap step drops the
     union of those. Sample IDs and chromosome names (still bare `1`, not `chr1`,
     on both sides — consistent with Task 5's synthetic-cohort finding) are
-    unaffected. Fixing this is out of scope here — it needs a `--skip-geno`
-    lever in the shell and `flags.py` — but the exact-idempotence claim above
-    should be read as "same variants modulo the panel's own missingness filter
-    recomputed on a different sample count."
+    unaffected.
+
+    **Fixed (Task 9b, 2026-09-14): `--skip-geno` / `skip_geno`.** Added to the
+    shell, `flags.py` and the CLI exactly for this gap — no preset sets it, so
+    existing presets' behaviour is unchanged. `--preset intersect-only
+    --skip-geno` on the same archive is exactly lossless: 172,152 SNPs and the
+    same samples on both sides, checked with a strict (non-`xfail`) assertion
+    in `test_hgdp_idempotence.py`. The two `xfail`s above stay as they are —
+    they exercise the *default* behaviour of `intersect-only` and the UKBB
+    flags, which still run `--geno` (and, for the UKBB flags, GIAB/HLA/MAF/LD-
+    prune) unconditionally.
   - UKBB flag set (`skip_wrayner`, `skip_project_maf`, everything else on): 70,795
     of 172,152 (41.1%) lost on both sides. Breakdown on the reference/fit side:
     GIAB+HLA region exclusion −47,714, the unconditional `--geno` filter −121,

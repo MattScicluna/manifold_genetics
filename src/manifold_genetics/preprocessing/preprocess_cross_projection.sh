@@ -75,6 +75,7 @@ SKIP_LD_PRUNE=false
 SKIP_DEDUP=false
 SKIP_MAF=false
 SKIP_BIOBANK_MAF=false
+SKIP_GENO=false
 
 # Space-saving mode
 CLEANUP=false
@@ -163,6 +164,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BIOBANK_MAF=true
             shift
             ;;
+        --skip-geno)
+            SKIP_GENO=true
+            shift
+            ;;
         --cleanup)
             CLEANUP=true
             shift
@@ -224,6 +229,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-dedup              Skip deduplication of reference"
             echo "  --skip-maf                Skip MAF filtering (both reference and biobank)"
             echo "  --skip-biobank-maf        Skip MAF filtering for biobank only (apply to reference)"
+            echo "  --skip-geno               Skip genotype-missingness filtering (both sides)"
             echo ""
             echo "Space-saving options:"
             echo "  --cleanup                 Delete intermediate files as they become unnecessary"
@@ -283,7 +289,11 @@ if [[ "$SKIP_MAF" != "true" ]] && [[ "$SKIP_BIOBANK_MAF" != "true" ]]; then
 else
     echo "  MAF threshold (biobank): (skipped)"
 fi
-echo "  Geno threshold: ${GENO_THRESHOLD}"
+if [[ "$SKIP_GENO" != "true" ]]; then
+    echo "  Geno threshold: ${GENO_THRESHOLD}"
+else
+    echo "  Geno threshold: (skipped)"
+fi
 if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
     echo "  LD pruning: ${LD_WINDOW}kb window, step ${LD_STEP}, r²=${LD_R2}"
 fi
@@ -292,6 +302,7 @@ echo "Steps enabled:"
 echo "  Filtering: yes"
 echo "  MAF filtering (reference): $([ "$SKIP_MAF" == "true" ] && echo "no" || echo "yes")"
 echo "  MAF filtering (biobank): $([ "$SKIP_MAF" == "true" ] || [ "$SKIP_BIOBANK_MAF" == "true" ] && echo "no" || echo "yes")"
+echo "  Genotype-missingness filtering: $([ "$SKIP_GENO" == "true" ] && echo "no" || echo "yes")"
 echo "  Deduplication: $([ "$SKIP_DEDUP" == "true" ] && echo "no" || echo "yes")"
 echo "  GIAB exclusion: $([ "$SKIP_GIAB" == "true" ] && echo "no" || echo "yes")"
 echo "  HLA exclusion: $([ "$SKIP_HLA" == "true" ] && echo "no" || echo "yes")"
@@ -350,8 +361,12 @@ if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
         SKIP_BIOBANK_MAF_EFFECTIVE=true
     fi
 
-    if [[ "$SKIP_BIOBANK_MAF_EFFECTIVE" == "true" ]]; then
+    if [[ "$SKIP_BIOBANK_MAF_EFFECTIVE" == "true" ]] && [[ "$SKIP_GENO" == "true" ]]; then
+        print_status "Filtering biobank (no indels, MAF and geno skipped)..."
+    elif [[ "$SKIP_BIOBANK_MAF_EFFECTIVE" == "true" ]]; then
         print_status "Filtering biobank (missing < ${GENO_THRESHOLD}, no indels, MAF skipped)..."
+    elif [[ "$SKIP_GENO" == "true" ]]; then
+        print_status "Filtering biobank (MAF > ${MAF_THRESHOLD}, no indels, geno skipped)..."
     else
         print_status "Filtering biobank (MAF > ${MAF_THRESHOLD}, missing < ${GENO_THRESHOLD}, no indels)..."
     fi
@@ -370,7 +385,9 @@ if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
     BIOBANK_FILTER_CMD=("${PLINK2}" --bfile "${BIOBANK_PLINK}")
     BIOBANK_FILTER_CMD+=("--real-ref-alleles") #added by JC 28/01/2026
     BIOBANK_FILTER_CMD+=("--extract" "${TEMP_DIR}/biobank_snps_no_indels.txt")
-    BIOBANK_FILTER_CMD+=("--geno" "${GENO_THRESHOLD}")
+    if [[ "$SKIP_GENO" != "true" ]]; then
+        BIOBANK_FILTER_CMD+=("--geno" "${GENO_THRESHOLD}")
+    fi
     if [[ "$SKIP_BIOBANK_MAF_EFFECTIVE" != "true" ]]; then
         BIOBANK_FILTER_CMD+=("--maf" "${MAF_THRESHOLD}")
     fi
@@ -533,8 +550,12 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
     # -------------------------------------------------------------------------
     # 3e. Apply MAF and missingness filters
     # -------------------------------------------------------------------------
-    if [[ "$SKIP_MAF" == "true" ]]; then
+    if [[ "$SKIP_MAF" == "true" ]] && [[ "$SKIP_GENO" == "true" ]]; then
+        print_status "[3e] Skipping MAF and geno filters..."
+    elif [[ "$SKIP_MAF" == "true" ]]; then
         print_status "[3e] Applying geno (< ${GENO_THRESHOLD}) filter (MAF skipped)..."
+    elif [[ "$SKIP_GENO" == "true" ]]; then
+        print_status "[3e] Applying MAF (>= ${MAF_THRESHOLD}) filter (geno skipped)..."
     else
         print_status "[3e] Applying MAF (>= ${MAF_THRESHOLD}) and geno (< ${GENO_THRESHOLD}) filters..."
     fi
@@ -543,7 +564,9 @@ if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
     if [[ "$SKIP_MAF" != "true" ]]; then
         REF_FILTER_CMD="$REF_FILTER_CMD --maf ${MAF_THRESHOLD}"
     fi
-    REF_FILTER_CMD="$REF_FILTER_CMD --geno ${GENO_THRESHOLD}"
+    if [[ "$SKIP_GENO" != "true" ]]; then
+        REF_FILTER_CMD="$REF_FILTER_CMD --geno ${GENO_THRESHOLD}"
+    fi
     REF_FILTER_CMD="$REF_FILTER_CMD --real-ref-alleles" #added by JC 28/01/2026
     REF_FILTER_CMD="$REF_FILTER_CMD --output-chr chrM" #this is unnecessary as it's a line that will only override chr26 to chrM if you would have it in your set.
     REF_FILTER_CMD="$REF_FILTER_CMD --make-bed"
@@ -1028,15 +1051,17 @@ echo "  fit_subset.{bed,bim,fam}     (Reference: $FIT_SAMPLES samples, $FINAL_SN
 echo "  project_subset.{bed,bim,fam} (Biobank: $PROJECT_SAMPLES samples, $FINAL_SNP_COUNT SNPs)"
 echo ""
 echo "Steps completed:"
+REF_GENO_LABEL="geno<${GENO_THRESHOLD}"
+[[ "$SKIP_GENO" == "true" ]] && REF_GENO_LABEL="geno skipped"
 if [[ "$SKIP_MAF" == "true" ]]; then
-    echo "  [✓] Reference filtering (geno<${GENO_THRESHOLD}, no indels, MAF skipped)"
+    echo "  [✓] Reference filtering (${REF_GENO_LABEL}, no indels, MAF skipped)"
 else
-    echo "  [✓] Reference filtering (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
+    echo "  [✓] Reference filtering (MAF>${MAF_THRESHOLD}, ${REF_GENO_LABEL}, no indels)"
 fi
 if [[ "$SKIP_MAF" == "true" ]] || [[ "$SKIP_BIOBANK_MAF" == "true" ]]; then
-    echo "  [✓] Biobank filtering (geno<${GENO_THRESHOLD}, no indels, MAF skipped)"
+    echo "  [✓] Biobank filtering (${REF_GENO_LABEL}, no indels, MAF skipped)"
 else
-    echo "  [✓] Biobank filtering (MAF>${MAF_THRESHOLD}, geno<${GENO_THRESHOLD}, no indels)"
+    echo "  [✓] Biobank filtering (MAF>${MAF_THRESHOLD}, ${REF_GENO_LABEL}, no indels)"
 fi
 if [[ "$SKIP_DEDUP" != "true" ]]; then
     echo "  [✓] Deduplication (remove multi-allelic positions)"

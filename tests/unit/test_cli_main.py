@@ -162,6 +162,7 @@ def test_preprocess_passes_configs_options_and_out(monkeypatch, tmp_path):
             "--preset",
             "harmonise",
             "--skip-wrayner",
+            "--skip-geno",
             "--fit-has-chr-prefix",
             "--maf",
             "0.02",
@@ -173,6 +174,7 @@ def test_preprocess_passes_configs_options_and_out(monkeypatch, tmp_path):
     assert seen["fit"] == "a.yaml" and seen["project"] == "b.yaml"
     assert seen["options"].preset == "harmonise"
     assert seen["options"].skip_wrayner and seen["options"].fit_has_chr_prefix
+    assert seen["options"].skip_geno
     assert seen["options"].maf == 0.02 and seen["options"].threads == 4
 
 

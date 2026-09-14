@@ -63,6 +63,17 @@ def test_no_preset_with_ukbb_flags_reproduces_the_ukbb_wrapper():
     assert _flags(argv) == ["--skip-wrayner", "--skip-biobank-maf"]
 
 
+def test_skip_geno_is_off_by_default_and_never_set_by_a_preset():
+    assert "--skip-geno" not in _flags(_argv(PreprocessOptions()))
+    for name in PRESET_FLAGS:
+        assert "skip_geno" not in PRESET_FLAGS[name], name
+
+
+def test_skip_geno_emits_the_shell_flag():
+    argv = _argv(PreprocessOptions(preset="intersect-only", skip_geno=True))
+    assert "--skip-geno" in _flags(argv)
+
+
 def test_explicit_flags_add_to_a_preset():
     argv = _argv(PreprocessOptions(preset="harmonise", skip_wrayner=True))
     assert "--skip-wrayner" in _flags(argv)
