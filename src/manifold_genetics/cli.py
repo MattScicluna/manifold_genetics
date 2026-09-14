@@ -8,6 +8,7 @@ import argparse
 import inspect
 import json
 import logging
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -497,6 +498,61 @@ def cmd_init(args):
     print("\nNext:")
     print(f"  manifold-genetics run {relative} --dry-run   # print the settings")
     print(f"  manifold-genetics run {relative}             # do the work")
+    return 0
+
+
+def cmd_preprocess(args):
+    """Filter one cohort, or intersect two, into a new cohort directory."""
+    setup_logging(args.verbose)
+
+    from . import preprocessing
+    from .preprocessing.flags import PreprocessOptions
+
+    options = PreprocessOptions(
+        preset=args.preset,
+        maf=args.maf,
+        geno=args.geno,
+        ld_window=args.ld_window,
+        ld_step=args.ld_step,
+        ld_r2=args.ld_r2,
+        skip_wrayner=args.skip_wrayner,
+        skip_giab=args.skip_giab,
+        skip_hla=args.skip_hla,
+        skip_ld_prune=args.skip_ld_prune,
+        skip_dedup=args.skip_dedup,
+        skip_maf=args.skip_maf,
+        skip_project_maf=args.skip_project_maf,
+        fit_has_chr_prefix=args.fit_has_chr_prefix,
+        cleanup=args.cleanup,
+        threads=args.threads,
+        memory=args.memory,
+        temp_dir=Path(args.temp_dir) if args.temp_dir else None,
+        tools_dir=Path(args.tools_dir) if args.tools_dir else None,
+        min_common_snps=args.min_common_snps,
+    )
+    try:
+        config = preprocessing.preprocess(
+            args.fit_config,
+            args.out,
+            project_config=args.project_config,
+            options=options,
+            force=args.force,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"Error: the filtering script exited with status {exc.returncode}; "
+            "see its output above.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"\nWrote {config}")
+    print("\nNext:")
+    print(f"  manifold-genetics run {config} --dry-run")
+    print(f"  manifold-genetics run {config}")
     return 0
 
 
@@ -1360,6 +1416,71 @@ def main(argv: Optional[List[str]] = None):
     )
     init_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     init_parser.set_defaults(func=cmd_init)
+
+    pre_parser = subparsers.add_parser(
+        "preprocess",
+        help="Filter SNPs of one cohort, or intersect two, into a new cohort directory",
+        description=(
+            "Optional. Reads a cohort directory (what `acquire` writes), filters its\n"
+            "SNPs with the shell that produced the published figures, and writes a new\n"
+            "cohort directory in the same layout -- so its output can go to `run`, to\n"
+            "`subsample`, or to another `preprocess`. Samples are never removed here.\n\n"
+            "  preprocess cohort/config.yaml --out filtered/\n"
+            "      one cohort: its own fit and project sets are the two sides\n"
+            "  preprocess ref/config.yaml biobank/config.yaml --out proj/\n"
+            "      two cohorts: intersect them; the output is a projection\n\n"
+            "Presets bundle the skip flags:\n"
+            "  intersect-only   no external tools: indels, missingness, intersection\n"
+            "  harmonise        everything on, including WRayner/TOPMed checks\n"
+            "                   (downloads references: run `setup --preprocessing` first)\n"
+            "  (none)           defaults; add --skip-* flags as needed\n\n"
+            "Needs bash, plink2 and plink v1.9 (fetched by `setup`)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pre_parser.add_argument("fit_config", help="Config of the cohort to fit on")
+    pre_parser.add_argument(
+        "project_config", nargs="?", help="Config of the cohort to project (optional)"
+    )
+    pre_parser.add_argument("--out", required=True, help="Directory to write the new cohort into")
+    pre_parser.add_argument("--preset", choices=["intersect-only", "harmonise"])
+    pre_parser.add_argument("--maf", type=float, help="MAF threshold (shell default 0.01)")
+    pre_parser.add_argument("--geno", type=float, help="Missingness threshold (shell default 0.05)")
+    pre_parser.add_argument(
+        "--ld-window", type=int, help="LD pruning window, kb (shell default 150)"
+    )
+    pre_parser.add_argument("--ld-step", type=int, help="LD pruning step (shell default 1)")
+    pre_parser.add_argument("--ld-r2", type=float, help="LD pruning r² (shell default 0.05)")
+    for flag, text in [
+        ("skip-wrayner", "Skip WRayner/TOPMed harmonisation"),
+        ("skip-giab", "Skip GIAB difficult-region exclusion"),
+        ("skip-hla", "Skip HLA/MHC exclusion"),
+        ("skip-ld-prune", "Skip LD pruning"),
+        ("skip-dedup", "Skip reference deduplication"),
+        ("skip-maf", "Skip MAF filtering on both sides"),
+        ("skip-project-maf", "Skip MAF filtering on the project side only"),
+        ("fit-has-chr-prefix", "The fit set's chromosomes already carry a 'chr' prefix"),
+        ("cleanup", "Delete intermediates as they are consumed (large cohorts)"),
+    ]:
+        pre_parser.add_argument(f"--{flag}", action="store_true", help=text)
+    pre_parser.add_argument(
+        "--threads", type=int, help="Threads (default: SLURM_CPUS_PER_TASK or 4)"
+    )
+    pre_parser.add_argument(
+        "--memory", type=int, help="plink memory limit, MB (shell default 100000)"
+    )
+    pre_parser.add_argument("--temp-dir", help="Scratch directory (default: OUT/data/temp)")
+    pre_parser.add_argument(
+        "--tools-dir", help="Where harmonisation references live (default: tool cache)"
+    )
+    pre_parser.add_argument(
+        "--min-common-snps", type=int, help="Abort below this many shared SNPs (50000)"
+    )
+    pre_parser.add_argument(
+        "--force", action="store_true", help="Overwrite an existing config.yaml"
+    )
+    pre_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    pre_parser.set_defaults(func=cmd_preprocess)
 
     setup_parser = subparsers.add_parser(
         "setup",

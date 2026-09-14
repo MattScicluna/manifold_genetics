@@ -125,6 +125,17 @@ manifold-genetics embed --method phate --fit-input out/project_pca.csv \
 external binary). They agree to 1.5e-7 and write the same artefacts, so a model fitted by
 either is readable by the other.
 
+## preprocess
+
+```bash
+manifold-genetics preprocess fit/config.yaml --out filtered/
+manifold-genetics preprocess fit/config.yaml project/config.yaml --out filtered/ --preset harmonise
+```
+
+Filter SNPs of one cohort, or intersect two, into a new cohort directory in the
+same layout, so the result can go to `run`, `pipeline`, or another `preprocess`.
+Samples are never removed here. See [Preprocessing](preprocessing.md).
+
 ## Setup
 
 ```bash

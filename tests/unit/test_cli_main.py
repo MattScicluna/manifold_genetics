@@ -32,6 +32,7 @@ SUBCOMMANDS = [
     "metrics-geographic",
     "metrics-admixture",
     "pipeline",
+    "preprocess",
 ]
 
 _VALIDATORS = [
@@ -138,6 +139,40 @@ def test_command_exception_with_verbose_prints_traceback(monkeypatch, capsys):
     assert mg_cli.main(["setup", "--verbose"]) == 1
     err = capsys.readouterr().err
     assert "Traceback" in err
+
+
+def test_preprocess_passes_configs_options_and_out(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(fit_config, out_dir, *, project_config=None, options=None, force=False):
+        seen.update(
+            fit=fit_config, project=project_config, out=out_dir, options=options, force=force
+        )
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.preprocess", fake)
+    rc = mg_cli.main(
+        [
+            "preprocess",
+            "a.yaml",
+            "b.yaml",
+            "--out",
+            str(tmp_path),
+            "--preset",
+            "harmonise",
+            "--skip-wrayner",
+            "--fit-has-chr-prefix",
+            "--maf",
+            "0.02",
+            "--threads",
+            "4",
+        ]
+    )
+    assert rc == 0
+    assert seen["fit"] == "a.yaml" and seen["project"] == "b.yaml"
+    assert seen["options"].preset == "harmonise"
+    assert seen["options"].skip_wrayner and seen["options"].fit_has_chr_prefix
+    assert seen["options"].maf == 0.02 and seen["options"].threads == 4
 
 
 # ---------------------------------------------------------------------------
