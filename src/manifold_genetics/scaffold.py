@@ -19,6 +19,7 @@ Two targets, because they answer different questions:
 import logging
 import os
 import shutil
+import subprocess
 import tarfile
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -504,8 +505,82 @@ def _download_hgdp_archive(destination: Path) -> Path:
     return archive
 
 
+# The two HGDP+1KGP archives `acquire hgdp` knows how to unpack. They are not
+# the same panel: the public one is filtered and LD-pruned and carries QC and
+# relatedness flags in metadata.csv; the workbench one is unfiltered and carries
+# nothing but the population, in the FID.
+_PUBLIC_PREFIX = "full_dataset"
+_WORKBENCH_PREFIX = "extractedChrAllUnpruned"
+_WORKBENCH_FID_PREFIX = "forReference"
+
+
+def _detect_hgdp_layout(raw_dir: Path) -> str:
+    """Which HGDP+1KGP archive was unpacked here.
+
+    "public" is the Dropbox archive `acquire hgdp` fetches: ``full_dataset.*``,
+    already filtered and LD-pruned, with a ``metadata.csv``. "workbench" is the
+    archive kept beside All of Us: ``extractedChrAllUnpruned.*``, unfiltered,
+    chromosomes without a ``chr`` prefix, and the population carried in the FID
+    as ``forReference<Population>``. They are not the same panel and the log
+    line says which one this is.
+
+    The workbench check comes first, and accepts the ``.bim`` as well as the
+    ``.bed``: normalising a workbench archive renames its ``.bed`` to the public
+    name but leaves the original ``.bim`` and ``.fam`` in place, so a directory
+    that has been normalised -- or is being re-run -- still says where its data
+    came from. Without that, every re-run would look public and go looking for
+    QC columns the workbench metadata does not have.
+    """
+    if any((raw_dir / f"{_WORKBENCH_PREFIX}{ext}").exists() for ext in (".bed", ".bim")):
+        return "workbench"
+    if (raw_dir / f"{_PUBLIC_PREFIX}.bed").exists():
+        return "public"
+    raise FileNotFoundError(
+        f"{raw_dir} holds neither {_PUBLIC_PREFIX}.bed (the public archive) nor "
+        f"{_WORKBENCH_PREFIX}.bed (the workbench archive)."
+    )
+
+
+def _normalise_workbench_layout(raw_dir: Path) -> None:
+    """Rewrite the workbench archive into the public layout.
+
+    What ``examples/aou/hgdp_1kgp_proj/prepare_data.sh`` did in steps 3 and 14:
+    ``chr`` on every chromosome, and the population out of the FID and into a
+    ``metadata.csv``. The ``.bed`` is renamed, never read -- it is the same
+    genotypes under the other name.
+    """
+    src = raw_dir / _WORKBENCH_PREFIX
+    dst = raw_dir / _PUBLIC_PREFIX
+
+    bim = pd.read_csv(f"{src}.bim", sep=r"\s+", header=None, dtype=str)
+    bim[0] = bim[0].where(bim[0].str.startswith("chr"), "chr" + bim[0])
+    bim.to_csv(f"{dst}.bim", sep="\t", header=False, index=False)
+
+    fam = pd.read_csv(f"{src}.fam", sep=r"\s+", header=None, dtype=str)
+    population = fam[0].str.replace(f"^{_WORKBENCH_FID_PREFIX}", "", regex=True)
+    fam[0] = population
+    fam.to_csv(f"{dst}.fam", sep="\t", header=False, index=False)
+
+    Path(f"{src}.bed").rename(f"{dst}.bed")
+    pd.DataFrame({"project_meta.sample_id": fam[1], "Population": population}).to_csv(
+        raw_dir / "metadata.csv", index=False
+    )
+    logger.warning(
+        "Workbench HGDP+1KGP archive: unfiltered, %d samples. Not the public panel; "
+        "run `preprocess --preset harmonise --fit-has-chr-prefix` before fitting on it.",
+        len(fam),
+    )
+
+
 def _extract_hgdp_archive(archive: Path, raw_dir: Path) -> None:
-    if (raw_dir / "full_dataset.bed").exists():
+    """Unpack the archive into ``raw_dir`` in the public layout.
+
+    The tar is flattened by basename -- the workbench archive nests its files
+    under a ``1KGPHGDP/`` directory, the public one does not -- and a workbench
+    archive is then normalised, so what follows sees ``full_dataset.*`` and a
+    ``metadata.csv`` either way. Already-extracted data is left alone.
+    """
+    if (raw_dir / f"{_PUBLIC_PREFIX}.bed").exists():
         logger.info("Raw data already extracted in %s", raw_dir)
         return
 
@@ -521,6 +596,11 @@ def _extract_hgdp_archive(archive: Path, raw_dir: Path) -> None:
             if extracted is None:
                 continue
             (raw_dir / name).write_bytes(extracted.read())
+
+    layout = _detect_hgdp_layout(raw_dir)
+    logger.info("Unpacked the %s HGDP+1KGP archive", layout)
+    if layout == "workbench":
+        _normalise_workbench_layout(raw_dir)
 
 
 _HGDP_CONFIG = """\
@@ -577,7 +657,10 @@ def acquire_hgdp(
             extracts one that is already present.
         plink2: Path to plink2; resolved automatically when None.
         archive: An already-downloaded ``hgdp_1kgp_full.tar.gz`` to use instead
-            of fetching. For proxied networks and offline machines.
+            of fetching, for proxied networks and offline machines -- or a
+            ``gs://`` URL, fetched with gsutil into ``data/`` once. Either the
+            public archive or the workbench's ``1KGPHGDP.tar.gz``; the layout
+            is detected and the workbench one normalised.
 
     Returns:
         The path of the config file written.
@@ -594,11 +677,28 @@ def acquire_hgdp(
         # caller named, one left in place by an earlier run, then downloading.
         # `download=False` means "do not fetch", not "do not unpack" -- someone
         # who obtained the archive another way still needs it extracted.
-        local = Path(archive) if archive else data_dir / "hgdp_1kgp_full.tar.gz"
-        if local.exists():
+        if archive and str(archive).startswith("gs://"):
+            # The workbench keeps its copy in a bucket; gsutil is the only way in.
+            fetched = data_dir / Path(str(archive)).name
+            if not fetched.exists():
+                data_dir.mkdir(parents=True, exist_ok=True)
+                logger.info("Fetching %s with gsutil", archive)
+                subprocess.run(["gsutil", "cp", str(archive), str(fetched)], check=True)
+            archive = fetched
+        if archive:
+            # A named archive is the one to use. Falling back to the public
+            # download when it is missing would silently swap in a different
+            # panel, which is worse than stopping.
+            local = Path(archive)
+            if not local.exists():
+                raise FileNotFoundError(f"The archive named, {local}, does not exist.")
             _extract_hgdp_archive(local, raw_dir)
-        elif download:
-            _extract_hgdp_archive(_download_hgdp_archive(data_dir), raw_dir)
+        else:
+            local = data_dir / "hgdp_1kgp_full.tar.gz"
+            if local.exists():
+                _extract_hgdp_archive(local, raw_dir)
+            elif download:
+                _extract_hgdp_archive(_download_hgdp_archive(data_dir), raw_dir)
 
     if not (raw_dir / "full_dataset.bed").exists():
         raise FileNotFoundError(
@@ -607,45 +707,76 @@ def acquire_hgdp(
             "drop --no-download to fetch it."
         )
 
+    layout = _detect_hgdp_layout(raw_dir)
     metadata = pd.read_csv(raw_dir / "metadata.csv")
-    fit_ids, project_ids = hgdp_subsets(metadata)
+    if layout == "public":
+        fit_ids, project_ids = hgdp_subsets(metadata)
+    else:
+        # The workbench panel carries no relatedness or QC columns, so there is
+        # no unrelated subset to pick; the old AoU flow fitted on every sample,
+        # and so does this.
+        fit_ids = project_ids = metadata["project_meta.sample_id"]
     logger.info("Selected %d fit and %d project samples", len(fit_ids), len(project_ids))
 
     for name, ids in (("fit", fit_ids), ("project", project_ids)):
         keep = data_dir / f"{name}_indices.txt"
-        keep.write_text("".join(f"{i}\t{i}\n" for i in ids))
-        _run_plink2_keep(raw_dir / "full_dataset", keep, data_dir / f"{name}_subset", plink2)
+        _write_keep_file(raw_dir / "full_dataset.fam", ids, keep)
+        _run_plink2_keep(
+            raw_dir / "full_dataset",
+            keep,
+            data_dir / f"{name}_subset",
+            plink2,
+            keep_chr_prefix=layout == "workbench",
+        )
 
-    _write_hgdp_labels(metadata, project_ids, data_dir / "labels.csv", out_dir / "colormap.json")
+    if layout == "public":
+        _write_hgdp_labels(
+            metadata, project_ids, data_dir / "labels.csv", out_dir / "colormap.json"
+        )
+    else:
+        labels = metadata.rename(columns={"project_meta.sample_id": "sample_id"})
+        labels.to_csv(data_dir / "labels.csv", index=False)
+        _write_generated_colormap(labels, out_dir / "colormap.json")
     config_path.write_text(_HGDP_CONFIG)
 
     logger.info("Wrote HGDP+1KGP and a config to %s", out_dir)
     return config_path
 
 
-def _run_plink2_keep(bfile: Path, keep: Path, out: Path, plink2: Optional[str]) -> None:
-    import subprocess
+def _write_keep_file(fam_path: Path, ids: pd.Series, keep_path: Path) -> None:
+    """A ``plink2 --keep`` file for the samples named, as ``FID<tab>IID`` lines.
 
+    Read from the ``.fam`` rather than written as ``id<tab>id``: ``--keep``
+    matches both columns, and only the public archive has FID equal to IID. The
+    workbench archive carries the population in the FID, so a keep file that
+    repeated the sample ID would select nobody.
+    """
+    fam = pd.read_csv(fam_path, sep=r"\s+", header=None, dtype=str, usecols=[0, 1])
+    keep = fam[fam[1].isin(set(ids.astype(str)))]
+    keep.to_csv(keep_path, sep="\t", header=False, index=False)
+
+
+def _run_plink2_keep(
+    bfile: Path, keep: Path, out: Path, plink2: Optional[str], keep_chr_prefix: bool = False
+) -> None:
+    """``plink2 --keep --make-bed``.
+
+    ``keep_chr_prefix`` matters for the workbench panel: plink2 writes ``chr1``
+    back out as ``1`` unless told ``--output-chr chrM``, which would silently
+    undo the prefix the normalisation added and that ``preprocess
+    --fit-has-chr-prefix`` is then promised.
+    """
     if plink2 is None:
         from .utils.tools import ToolResolver
 
         plink2 = ToolResolver().resolve_plink2()
 
+    argv = [plink2, "--bfile", str(bfile), "--keep", str(keep)]
+    if keep_chr_prefix:
+        argv += ["--output-chr", "chrM"]
+    argv += ["--make-bed", "--out", str(out), "--silent"]
     logger.info("Creating %s with plink2", out.name)
-    subprocess.run(
-        [
-            plink2,
-            "--bfile",
-            str(bfile),
-            "--keep",
-            str(keep),
-            "--make-bed",
-            "--out",
-            str(out),
-            "--silent",
-        ],
-        check=True,
-    )
+    subprocess.run(argv, check=True)
 
 
 # The metadata column naming each sample's genetic region, and the colours the

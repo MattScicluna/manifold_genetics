@@ -100,7 +100,7 @@ class TestSyntheticScaffold:
             "colormap.json",
             "dla_tree_ground_truth.png",
         ):
-            assert (tmp_path / name).exists(), f"init did not write {name}"
+            assert (tmp_path / name).exists(), f"acquire did not write {name}"
         assert written == tmp_path / "config.yaml"
 
     def test_the_config_it_writes_is_accepted_by_the_loader(self, tmp_path):
@@ -279,6 +279,225 @@ class TestHgdpWithoutWorkingNetwork:
         message = str(excinfo.value)
         assert "--archive" in message, "the error must name the way to supply the file"
         assert "hgdp_1kgp_full.tar.gz" in message, "the error must name what to download"
+
+
+class TestHgdpLayouts:
+    """The workbench ships a different HGDP+1KGP archive from the public one.
+
+    The public Dropbox archive unpacks to `full_dataset.*` plus a `metadata.csv`
+    with QC and relatedness flags. The archive kept beside All of Us unpacks to
+    `extractedChrAllUnpruned.*`: no metadata, chromosomes without a `chr` prefix,
+    and the population carried in the FID as `forReference<Population>`.
+    `examples/aou/hgdp_1kgp_proj/prepare_data.sh` fixed both by hand; `acquire
+    hgdp` has to recognise which one it unpacked and do the same.
+    """
+
+    def _workbench_archive(self, tmp_path, subdir=None):
+        import tarfile
+
+        raw = tmp_path / "src"
+        raw.mkdir()
+        (raw / "extractedChrAllUnpruned.bim").write_text(
+            "1\trs1\t0\t100\tA\tG\n22\trs2\t0\t200\tC\tT\n"
+        )
+        (raw / "extractedChrAllUnpruned.fam").write_text(
+            "forReferenceYoruba\tS1\t0\t0\t0\t-9\nforReferenceFrench\tS2\t0\t0\t0\t-9\n"
+        )
+        (raw / "extractedChrAllUnpruned.bed").write_bytes(b"\x6c\x1b\x01\x00\x00")
+        archive = tmp_path / "1KGPHGDP.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for f in raw.iterdir():
+                tar.add(f, arcname=f"{subdir}/{f.name}" if subdir else f.name)
+        return archive
+
+    def test_detects_the_public_layout(self, tmp_path):
+        from manifold_genetics.scaffold import _detect_hgdp_layout
+
+        (tmp_path / "full_dataset.bed").write_bytes(b"")
+        assert _detect_hgdp_layout(tmp_path) == "public"
+
+    def test_detects_the_workbench_layout(self, tmp_path):
+        from manifold_genetics.scaffold import _detect_hgdp_layout
+
+        (tmp_path / "extractedChrAllUnpruned.bed").write_bytes(b"")
+        assert _detect_hgdp_layout(tmp_path) == "workbench"
+
+    def test_an_unknown_layout_names_both_it_looked_for(self, tmp_path):
+        from manifold_genetics.scaffold import _detect_hgdp_layout
+
+        with pytest.raises(FileNotFoundError, match="full_dataset.*extractedChrAllUnpruned"):
+            _detect_hgdp_layout(tmp_path)
+
+    def test_the_workbench_archive_is_normalised_to_the_public_layout(self, tmp_path):
+        from manifold_genetics.scaffold import _extract_hgdp_archive
+
+        raw = tmp_path / "raw"
+        _extract_hgdp_archive(self._workbench_archive(tmp_path), raw)
+        bim = (raw / "full_dataset.bim").read_text().splitlines()
+        assert bim[0].startswith("chr1\t") and bim[1].startswith("chr22\t")
+        fam = (raw / "full_dataset.fam").read_text().splitlines()
+        assert fam[0].startswith("Yoruba\t"), "forReference prefix stripped"
+        metadata = pd.read_csv(raw / "metadata.csv")
+        assert list(metadata["project_meta.sample_id"]) == ["S1", "S2"]
+        assert list(metadata["Population"]) == ["Yoruba", "French"]
+
+    def test_the_bed_is_renamed_not_rewritten(self, tmp_path):
+        """A 5-byte fake .bed: nothing may parse it, only move it."""
+        from manifold_genetics.scaffold import _extract_hgdp_archive
+
+        raw = tmp_path / "raw"
+        _extract_hgdp_archive(self._workbench_archive(tmp_path), raw)
+        assert (raw / "full_dataset.bed").read_bytes() == b"\x6c\x1b\x01\x00\x00"
+        assert not (raw / "extractedChrAllUnpruned.bed").exists()
+
+    def test_a_tar_with_a_top_level_directory_still_lands_in_raw(self, tmp_path):
+        """The real archive unpacks to 1KGPHGDP/ (prepare_data.sh's REF_DIR)."""
+        from manifold_genetics.scaffold import _extract_hgdp_archive
+
+        raw = tmp_path / "raw"
+        _extract_hgdp_archive(self._workbench_archive(tmp_path, subdir="1KGPHGDP"), raw)
+        assert (raw / "full_dataset.bed").exists()
+        assert not (raw / "1KGPHGDP").exists()
+
+    def test_the_log_names_the_layout(self, tmp_path, caplog):
+        """So nobody mistakes the unfiltered workbench panel for the public one."""
+        import logging
+
+        from manifold_genetics.scaffold import _extract_hgdp_archive
+
+        with caplog.at_level(logging.WARNING, logger="manifold_genetics.scaffold"):
+            _extract_hgdp_archive(self._workbench_archive(tmp_path), tmp_path / "raw")
+        assert any("orkbench" in r.getMessage() for r in caplog.records)
+
+    def test_a_workbench_archive_fits_on_every_sample(self, tmp_path, monkeypatch):
+        """No relatedness metadata, so there is no unrelated subset to pick."""
+        from manifold_genetics import scaffold
+
+        keeps, prefixed = {}, {}
+
+        def _fake_keep(bfile, keep, out, plink2, keep_chr_prefix=False):
+            keeps[out.name] = keep.read_text()
+            prefixed[out.name] = keep_chr_prefix
+
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", _fake_keep)
+        out = tmp_path / "out"
+        scaffold.acquire_hgdp(out, archive=self._workbench_archive(tmp_path))
+
+        # plink2 --keep matches FID and IID, and the workbench .fam's FID is the
+        # population: a keep file of `S1 S1` would select nobody.
+        assert keeps["fit_subset"] == keeps["project_subset"] == "Yoruba\tS1\nFrench\tS2\n"
+        # And plink2 --make-bed writes chr1 back as 1 unless told otherwise, which
+        # would undo the prefix `preprocess --fit-has-chr-prefix` is promised.
+        assert prefixed == {"fit_subset": True, "project_subset": True}
+        labels = pd.read_csv(out / "data" / "labels.csv")
+        assert list(labels.columns) == ["sample_id", "Population"]
+        assert list(labels["sample_id"]) == ["S1", "S2"]
+        colormap = json.loads((out / "colormap.json").read_text())
+        assert set(colormap["Population"]) == {"Yoruba", "French"}
+        assert (out / "config.yaml").exists()
+
+    def test_the_public_layout_keeps_numeric_chromosomes(self, tmp_path, monkeypatch):
+        """The public .bim is `1`, not `chr1`; nothing must add a prefix there."""
+        import shutil
+        import tarfile
+
+        from manifold_genetics import scaffold
+
+        src = tmp_path / "public"
+        src.mkdir()
+        (src / "full_dataset.bed").write_bytes(b"\x6c\x1b\x01\x00\x00")
+        (src / "full_dataset.bim").write_text("1\trs1\t0\t100\tA\tG\n22\trs2\t0\t200\tC\tT\n")
+        (src / "full_dataset.fam").write_text("S1\tS1\t0\t0\t0\t-9\nS2\tS2\t0\t0\t0\t-9\n")
+        (src / "metadata.csv").write_text(
+            "project_meta.sample_id,Genetic_region_merged,filter_pca_outlier,"
+            "hard_filtered,filter_king_related,filter_contaminated\n"
+            "S1,Africa,False,False,False,False\nS2,Europe,False,False,True,False\n"
+        )
+        archive = tmp_path / "hgdp_1kgp_full.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for f in src.iterdir():
+                tar.add(f, arcname=f.name)
+        shutil.rmtree(src)
+
+        keeps, prefixed = {}, {}
+
+        def _fake_keep(bfile, keep, out, plink2, keep_chr_prefix=False):
+            keeps[out.name] = keep.read_text()
+            prefixed[out.name] = keep_chr_prefix
+
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", _fake_keep)
+        scaffold.acquire_hgdp(tmp_path / "out", archive=archive)
+
+        assert keeps["fit_subset"] == "S1\tS1\n", "S2 is related"
+        assert keeps["project_subset"] == "S1\tS1\nS2\tS2\n"
+        assert prefixed == {"fit_subset": False, "project_subset": False}
+
+    def test_plink2_is_told_to_keep_the_chr_prefix_only_when_asked(self, tmp_path, monkeypatch):
+        from manifold_genetics import scaffold
+
+        calls = []
+        monkeypatch.setattr(scaffold.subprocess, "run", lambda argv, **kw: calls.append(argv))
+        keep = tmp_path / "keep.txt"
+        keep.write_text("")
+        scaffold._run_plink2_keep(tmp_path / "in", keep, tmp_path / "out", "plink2")
+        scaffold._run_plink2_keep(
+            tmp_path / "in", keep, tmp_path / "out", "plink2", keep_chr_prefix=True
+        )
+        assert "--output-chr" not in calls[0]
+        assert calls[1][calls[1].index("--output-chr") + 1] == "chrM"
+
+    def test_a_rerun_still_knows_the_data_is_the_workbench_panel(self, tmp_path, monkeypatch):
+        """Normalising leaves full_dataset.* on disk, which looks public. A second
+        run must not therefore go looking for QC columns the metadata lacks."""
+        from manifold_genetics import scaffold
+
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
+        out = tmp_path / "out"
+        archive = self._workbench_archive(tmp_path)
+        scaffold.acquire_hgdp(out, archive=archive)
+        assert scaffold._detect_hgdp_layout(out / "data" / "raw") == "workbench"
+
+        scaffold.acquire_hgdp(out, archive=archive, force=True)  # no KeyError
+        assert list(pd.read_csv(out / "data" / "labels.csv").columns) == ["sample_id", "Population"]
+
+    def test_a_named_archive_that_is_missing_is_an_error_not_a_download(
+        self, tmp_path, monkeypatch
+    ):
+        """Silently fetching the public panel instead would swap the cohort."""
+        from manifold_genetics import scaffold
+
+        def _must_not_download(destination):
+            raise AssertionError("fell back to downloading the public archive")
+
+        monkeypatch.setattr(scaffold, "_download_hgdp_archive", _must_not_download)
+        with pytest.raises(FileNotFoundError, match="nope.tar.gz"):
+            scaffold.acquire_hgdp(tmp_path / "out", archive=tmp_path / "nope.tar.gz")
+
+    def test_a_gs_url_is_fetched_with_gsutil(self, tmp_path, monkeypatch):
+        from manifold_genetics import scaffold
+
+        calls = []
+        monkeypatch.setattr(scaffold.subprocess, "run", lambda argv, **kw: calls.append(argv))
+        monkeypatch.setattr(scaffold, "_extract_hgdp_archive", lambda a, r: None)
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
+        with pytest.raises(FileNotFoundError):  # nothing was really extracted
+            scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
+        assert calls and calls[0][:2] == ["gsutil", "cp"]
+        assert calls[0][2] == "gs://bucket/1KGPHGDP.tar.gz"
+        assert calls[0][3] == str(tmp_path / "data" / "1KGPHGDP.tar.gz")
+
+    def test_a_gs_url_already_fetched_is_not_fetched_again(self, tmp_path, monkeypatch):
+        from manifold_genetics import scaffold
+
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "1KGPHGDP.tar.gz").write_bytes(b"")
+        calls = []
+        monkeypatch.setattr(scaffold.subprocess, "run", lambda argv, **kw: calls.append(argv))
+        monkeypatch.setattr(scaffold, "_extract_hgdp_archive", lambda a, r: None)
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
+        with pytest.raises(FileNotFoundError):
+            scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
+        assert calls == []
 
 
 class TestDownloadFallsBackToSystemTools:

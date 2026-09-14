@@ -233,6 +233,15 @@ Decisions:
 sample of `extractedChrAllUnpruned`. The unrelated subset is the defensible
 choice. The AoU docs say so.
 
+**Amendment (Task 8, 2026-09-14): the accepted difference applies to the
+public archive only.** Picking the unrelated subset needs the
+`filter_king_related` and QC columns of the public `metadata.csv`, and the
+workbench archive carries no metadata at all -- only the population, in the
+FID. So for the workbench layout `acquire hgdp` fits on every sample, exactly
+as the old script did, and writes labels with `sample_id, Population` and a
+generated colormap. If a relatedness list for the workbench panel ever turns
+up, it is a `subsample` or `preprocess` concern, not a change to `acquire`.
+
 ### 3. Labels move before filtering — verified possible
 
 Every wrapper today builds labels *after* intersection and filters them to the

@@ -1418,7 +1418,10 @@ def main(argv: Optional[List[str]] = None):
     )
     acquire_parser.add_argument(
         "--archive",
-        help="hgdp only: path to an already-downloaded hgdp_1kgp_full.tar.gz",
+        help=(
+            "hgdp only: an already-downloaded hgdp_1kgp_full.tar.gz, or a gs:// URL "
+            "(the workbench's 1KGPHGDP.tar.gz, fetched with gsutil)"
+        ),
     )
     acquire_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     acquire_parser.set_defaults(func=cmd_acquire)
