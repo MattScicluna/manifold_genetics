@@ -603,13 +603,25 @@ def _extract_hgdp_archive(archive: Path, raw_dir: Path) -> None:
         _normalise_workbench_layout(raw_dir)
 
 
-_HGDP_CONFIG = """\
+# The comment block at the top of the config says what the data beside it is,
+# which differs by archive; the settings below it do not.
+_HGDP_PUBLIC_HEADER = """\
 # Written by `manifold-genetics acquire hgdp`.
 #
 # HGDP+1KGP: 4,094 QC-passing samples across seven genetic regions, with the
 # model fitted on the 3,400 that are also unrelated. This is the cohort the
 # published figures were made from.
 #
+"""
+_HGDP_WORKBENCH_HEADER = """\
+# Written by `manifold-genetics acquire hgdp`, from the workbench archive.
+#
+# HGDP+1KGP as kept beside All of Us: every sample, unfiltered, labelled by
+# population. Not the public panel the published figures were made from. Run
+# `preprocess --preset harmonise --fit-has-chr-prefix` before fitting on it.
+#
+"""
+_HGDP_CONFIG_BODY = """\
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
 #
@@ -634,6 +646,12 @@ embedding:
 skip:
   admixture: true
 """
+_HGDP_CONFIG = _HGDP_PUBLIC_HEADER + _HGDP_CONFIG_BODY
+
+
+def _hgdp_config(layout: str) -> str:
+    header = _HGDP_PUBLIC_HEADER if layout == "public" else _HGDP_WORKBENCH_HEADER
+    return header + _HGDP_CONFIG_BODY
 
 
 def acquire_hgdp(
@@ -737,7 +755,7 @@ def acquire_hgdp(
         labels = metadata.rename(columns={"project_meta.sample_id": "sample_id"})
         labels.to_csv(data_dir / "labels.csv", index=False)
         _write_generated_colormap(labels, out_dir / "colormap.json")
-    config_path.write_text(_HGDP_CONFIG)
+    config_path.write_text(_hgdp_config(layout))
 
     logger.info("Wrote HGDP+1KGP and a config to %s", out_dir)
     return config_path

@@ -446,6 +446,19 @@ class TestHgdpLayouts:
         assert "--output-chr" not in calls[0]
         assert calls[1][calls[1].index("--output-chr") + 1] == "chrM"
 
+    def test_the_config_header_describes_the_panel_it_was_written_for(self, tmp_path, monkeypatch):
+        """The public header's "3,400 unrelated" would be a lie above the workbench panel."""
+        from manifold_genetics import scaffold
+
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
+        out = tmp_path / "out"
+        header = scaffold.acquire_hgdp(out, archive=self._workbench_archive(tmp_path)).read_text()
+
+        assert "3,400" not in header
+        assert "preprocess --preset harmonise --fit-has-chr-prefix" in header
+        assert "fit_plink: data/fit_subset" in header, "only the comment block changes"
+        assert "3,400" in scaffold._HGDP_CONFIG, "the public text is unchanged"
+
     def test_a_rerun_still_knows_the_data_is_the_workbench_panel(self, tmp_path, monkeypatch):
         """Normalising leaves full_dataset.* on disk, which looks public. A second
         run must not therefore go looking for QC columns the metadata lacks."""
