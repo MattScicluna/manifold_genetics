@@ -11,4 +11,7 @@ from pathlib import Path
 
 SHELL_SCRIPT = Path(__file__).resolve().parent / "preprocess_cross_projection.sh"
 
-__all__ = ["SHELL_SCRIPT"]
+from .flags import PreprocessOptions  # noqa: E402
+from .runner import preprocess  # noqa: E402
+
+__all__ = ["SHELL_SCRIPT", "PreprocessOptions", "preprocess"]
