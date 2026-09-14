@@ -96,8 +96,16 @@ def select_by_geosketch(
 
     Mirrors examples/_shared/select_samples_geosketch.py: every column but
     ``sample_id`` is treated as a dimension, optionally truncated to the first
-    ``n_pcs`` of them, and cast to ``float32`` before sketching.
+    ``n_pcs`` of them, and cast to ``float32`` before sketching. As in that
+    script, ``n`` is clamped to the number of rows available (with a warning)
+    rather than passed straight to ``gs``, which requires ``n <= len(X)``.
+
+    Raises:
+        ValueError: ``pca`` has no rows (nothing survived the ``.fam`` filter).
+        ImportError: ``sketch`` was not given and ``geosketch`` is not installed.
     """
+    if len(pca) == 0:
+        raise ValueError("no PCA rows match the cohort's .fam")
     if sketch is None:
         try:
             from geosketch import gs as sketch
@@ -105,12 +113,17 @@ def select_by_geosketch(
             raise ImportError(
                 "--geosketch needs the geosketch extra: "
                 "pip install 'manifold-genetics[geosketch]'"
-            )
+            ) from None
+    if n > len(pca):
+        logger.warning(
+            "geosketch: requested %d samples but only %d available; using %d", n, len(pca), len(pca)
+        )
+        n = len(pca)
     dim_cols = [c for c in pca.columns if c != "sample_id"]
     if n_pcs is not None:
         dim_cols = dim_cols[:n_pcs]
     X = pca[dim_cols].to_numpy().astype(np.float32)
-    index = sketch(X, n, seed=seed, replace=False)
+    index = np.sort(np.asarray(sketch(X, n, seed=seed, replace=False)))
     return list(pca["sample_id"].iloc[index])
 
 

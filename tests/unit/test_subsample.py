@@ -1,6 +1,7 @@
 """Choosing the fit samples of a cohort by label counts, a list, or geosketch."""
 
 import builtins
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -142,6 +143,25 @@ class TestSelectByGeosketch:
         pca = pd.DataFrame({"sample_id": ["A"], "dim_1": [1]})
         with pytest.raises(ImportError, match="geosketch"):
             select_by_geosketch(pca, 1, seed=0)
+
+    def test_n_larger_than_available_rows_is_clamped_with_a_warning(self, caplog):
+        pca = pd.DataFrame({"sample_id": ["A", "B", "C"], "dim_1": [1, 2, 3]})
+        with caplog.at_level(logging.WARNING):
+            chosen = select_by_geosketch(pca, 10, seed=0, sketch=lambda X, n, **kw: list(range(n)))
+        assert chosen == ["A", "B", "C"]
+        assert any(
+            "3" in record.getMessage() and "10" in record.getMessage() for record in caplog.records
+        )
+
+    def test_no_rows_raises_a_named_value_error(self):
+        pca = pd.DataFrame({"sample_id": [], "dim_1": []})
+        with pytest.raises(ValueError, match="no PCA rows"):
+            select_by_geosketch(pca, 5, seed=0, sketch=lambda X, n, **kw: list(range(n)))
+
+    def test_sketch_indices_are_sorted_before_selecting(self):
+        pca = pd.DataFrame({"sample_id": ["A", "B", "C", "D"], "dim_1": [1, 2, 3, 4]})
+        chosen = select_by_geosketch(pca, 3, seed=0, sketch=lambda X, n, **kw: [3, 0, 1])
+        assert chosen == ["A", "B", "D"]
 
 
 def _fake_keep(bfile, keep, out, plink2):
