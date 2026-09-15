@@ -89,6 +89,36 @@ class PreprocessOptions:
         return flags
 
 
+_SIGNATURE_VALUE_FIELDS = ("maf", "geno", "ld_window", "ld_step", "ld_r2")
+# Every boolean that changes what the shell filters, i.e. `_BOOL_FLAGS` minus
+# `cleanup` (which only changes whether intermediates are deleted afterwards).
+_SIGNATURE_BOOL_FIELDS = tuple(name for name in _BOOL_FLAGS if name != "cleanup")
+
+
+def intermediate_signature(
+    fit_plink: Path, project_plink: Path, options: PreprocessOptions
+) -> Dict[str, object]:
+    """What `OUT/data/temp`'s intermediates were computed from.
+
+    Two inputs that would make the shell filter differently must disagree here:
+    the resolved genotype prefixes plus every option that changes the filtering
+    result. Booleans go through `effective_flags()` so a preset and the
+    equivalent explicit skips resolve to the same signature; `threads`,
+    `memory`, `temp_dir`, `tools_dir`, `cleanup` and `min_common_snps` change
+    only how the run proceeds, not what it computes, so they are excluded.
+    """
+    effective = options.effective_flags()
+    signature: Dict[str, object] = {
+        "fit_plink": str(Path(fit_plink).expanduser().resolve()),
+        "project_plink": str(Path(project_plink).expanduser().resolve()),
+    }
+    for name in _SIGNATURE_VALUE_FIELDS:
+        signature[name] = getattr(options, name)
+    for name in _SIGNATURE_BOOL_FIELDS:
+        signature[name] = effective.get(name, False)
+    return signature
+
+
 def shell_argv(
     fit_plink: Path,
     project_plink: Path,
@@ -127,4 +157,4 @@ def shell_argv(
     return argv
 
 
-__all__ = ["PRESET_FLAGS", "PreprocessOptions", "shell_argv"]
+__all__ = ["PRESET_FLAGS", "PreprocessOptions", "intermediate_signature", "shell_argv"]

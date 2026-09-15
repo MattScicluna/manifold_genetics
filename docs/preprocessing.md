@@ -143,10 +143,14 @@ they are consumed, which matters for a biobank-sized `.bed`.
 `preprocess` resumes: a step whose output already exists and is complete is
 skipped. After an out-of-memory kill, a truncated `.bed` under
 `OUT/data/temp/` is not mistaken for a finished output — an incomplete
-intermediate is detected and redone on the next run. `--force` still only
-rewrites the config and labels: to recompute with different flags, use a new
-`--out` or delete `OUT/data/temp`, because the shell otherwise reuses every
-complete intermediate that exists.
+intermediate is detected and redone on the next run. Every run also checks
+`OUT/data/temp/preprocess-inputs.json`, a sentinel recording the genotype
+prefixes and every flag that changes what gets filtered (`--preset`, `--maf`,
+`--geno`, the LD settings, the `--skip-*` flags, `--fit-has-chr-prefix`); if it
+disagrees with this run, `preprocess` refuses rather than mix intermediates
+made under different settings — `--force` does not override this, since it
+only rewrites the config and labels. Use a new `--out`, or delete
+`OUT/data/temp`, and rerun.
 
 If the two cohorts share fewer than 50,000 SNPs the run aborts rather than
 producing a projection nobody should trust; `--min-common-snps` changes the
