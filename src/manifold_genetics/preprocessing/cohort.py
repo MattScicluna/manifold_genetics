@@ -54,9 +54,13 @@ def read_cohort(config_path: PathLike) -> CohortConfig:
         colormap = resolved.get(f"{name}_colormap") or resolved.get("colormap")
         if labels is None or colormap is None:
             raise ValueError(f"{path} names no labels or colormap for the {name} side")
-        return Side(
-            plink=Path(resolved[f"{name}_plink"]), labels=Path(labels), colormap=Path(colormap)
-        )
+        plink_key = f"{name}_plink"
+        if plink_key not in resolved:
+            raise ValueError(
+                f"{path} has no data.{plink_key}; a cohort config names both "
+                "fit_plink and project_plink"
+            )
+        return Side(plink=Path(resolved[plink_key]), labels=Path(labels), colormap=Path(colormap))
 
     geographic_coords = resolved.get("geographic_coords")
 

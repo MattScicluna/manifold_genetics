@@ -586,6 +586,15 @@ def cmd_subsample(args):
     except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"Error: plink2 exited with status {exc.returncode}; see its output above.",
+            file=sys.stderr,
+        )
+        return 1
+    except ImportError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     print(f"\nWrote {config}")
     print("\nNext:")
     print(f"  manifold-genetics run {config} --dry-run")

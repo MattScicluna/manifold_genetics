@@ -34,7 +34,7 @@ import pandas as pd
 from .aou import _AOU_CONFIG  # noqa: F401
 from .aou import _AOU_REQUIRED_ENV  # noqa: F401
 from .aou import _AOU_REQUIRED_TOOLS  # noqa: F401
-from .aou import acquire_aou, aou_environment_problems  # noqa: F401
+from .aou import _run_gsutil, acquire_aou, aou_environment_problems  # noqa: F401
 from .preprocessing.cohort import MIN_LABEL_COVERAGE
 from .utils.tools import fetch_url
 
@@ -710,7 +710,7 @@ def acquire_hgdp(
             if not fetched.exists():
                 data_dir.mkdir(parents=True, exist_ok=True)
                 logger.info("Fetching %s with gsutil", archive)
-                subprocess.run(["gsutil", "cp", str(archive), str(fetched)], check=True)
+                _run_gsutil(["gsutil", "cp", str(archive), str(fetched)])
             archive = fetched
         if archive:
             # A named archive is the one to use. Falling back to the public

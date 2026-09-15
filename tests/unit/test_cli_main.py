@@ -272,6 +272,28 @@ def test_subsample_passes_geosketch_pca_and_n_pcs(monkeypatch, tmp_path):
     assert seen["n_pcs"] == 10
 
 
+def test_subsample_reports_a_plink2_failure(monkeypatch, tmp_path, capsys):
+    import subprocess
+
+    def fake(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["plink2"])
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(["subsample", "a.yaml", "--out", str(tmp_path), "--group", "col=x:1"])
+    assert rc == 1
+    assert "plink2" in capsys.readouterr().err
+
+
+def test_subsample_reports_a_missing_geosketch_extra(monkeypatch, tmp_path, capsys):
+    def fake(*args, **kwargs):
+        raise ImportError("needs geosketch extra")
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(["subsample", "a.yaml", "--out", str(tmp_path), "--group", "col=x:1"])
+    assert rc == 1
+    assert "needs geosketch extra" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------------------
 # setup_logging / _resolve_k_values helpers
 # ---------------------------------------------------------------------------

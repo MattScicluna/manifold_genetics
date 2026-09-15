@@ -192,12 +192,19 @@ def subsample(
 
     keep = data_dir / "fit_samples.txt"
     if fit_samples is not None:
+        lines = [line for line in Path(fit_samples).read_text().splitlines() if line.strip()]
+        if not lines:
+            raise ValueError("no samples were selected; the --fit-samples file is empty")
         shutil.copy(fit_samples, keep)
     elif geosketch is not None:
         available = set(read_fam_ids(project.plink))
         pca_df = pd.read_csv(pca, dtype={"sample_id": str})
         pca_df = pca_df[pca_df["sample_id"].isin(available)].reset_index(drop=True)
         chosen = select_by_geosketch(pca_df, geosketch, seed=seed, n_pcs=n_pcs)
+        if len(chosen) == 0:
+            raise ValueError(
+                "no samples were selected; check --group patterns against the label values"
+            )
         _write_keep_file(Path(f"{project.plink}.fam"), pd.Series(chosen), keep)
         logger.info(
             "Selected %d of %d samples for the fit set via geosketch", len(chosen), len(available)
@@ -207,6 +214,10 @@ def subsample(
         available = set(read_fam_ids(project.plink))
         labels = labels[labels["sample_id"].isin(available)]
         chosen = select_by_groups(labels, groups, include_rest=include_rest, seed=seed)
+        if len(chosen) == 0:
+            raise ValueError(
+                "no samples were selected; check --group patterns against the label values"
+            )
         _write_keep_file(Path(f"{project.plink}.fam"), pd.Series(chosen), keep)
         logger.info("Selected %d of %d samples for the fit set", len(chosen), len(available))
 
