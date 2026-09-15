@@ -52,6 +52,34 @@ def test_a_projection_config_keeps_the_sides_apart(tmp_path):
     assert cohort.fit.colormap.name == "a.json" and cohort.project.colormap.name == "b.json"
 
 
+def test_a_config_missing_fit_plink_is_a_friendly_error(tmp_path):
+    (tmp_path / "data").mkdir()
+    for ext in ("bed", "bim", "fam"):
+        (tmp_path / "data" / f"b.{ext}").write_text("")
+    (tmp_path / "data" / "labels.csv").write_text("sample_id,x\n")
+    (tmp_path / "colormap.json").write_text("{}")
+    (tmp_path / "config.yaml").write_text(
+        "preset: projection\ndata:\n  project_plink: data/b\n"
+        "  labels: data/labels.csv\n  colormap: colormap.json\n  output_dir: outputs\n"
+    )
+    with pytest.raises(ValueError, match="fit_plink"):
+        read_cohort(tmp_path / "config.yaml")
+
+
+def test_a_config_missing_project_plink_is_a_friendly_error(tmp_path):
+    (tmp_path / "data").mkdir()
+    for ext in ("bed", "bim", "fam"):
+        (tmp_path / "data" / f"a.{ext}").write_text("")
+    (tmp_path / "data" / "labels.csv").write_text("sample_id,x\n")
+    (tmp_path / "colormap.json").write_text("{}")
+    (tmp_path / "config.yaml").write_text(
+        "preset: projection\ndata:\n  fit_plink: data/a\n"
+        "  labels: data/labels.csv\n  colormap: colormap.json\n  output_dir: outputs\n"
+    )
+    with pytest.raises(ValueError, match="project_plink"):
+        read_cohort(tmp_path / "config.yaml")
+
+
 def test_shared_labels_is_false_when_only_one_side_overrides_it(tmp_path):
     (tmp_path / "data").mkdir()
     for name in ("a", "b"):

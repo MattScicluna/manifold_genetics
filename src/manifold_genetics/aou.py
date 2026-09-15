@@ -25,7 +25,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Callable, Union
+from typing import Callable, Optional, Union
 
 import pandas as pd
 
@@ -123,6 +123,29 @@ def _read_gbq(sql: str) -> pd.DataFrame:
     return pandas_gbq.read_gbq(sql, dialect="standard")
 
 
+def _run_gsutil(argv: list, runner: Optional[Callable] = None) -> None:
+    """Run a ``gsutil`` command through ``runner``, translating a missing binary.
+
+    Shared by ``_fetch_plink`` here and ``scaffold.acquire_hgdp``'s ``gs://``
+    archive fetch, both of which shell out to ``gsutil cp``. ``runner``
+    defaults to ``subprocess.run``, looked up at call time (not bound as a
+    default argument) so tests can monkeypatch ``subprocess.run`` directly.
+
+    Raises:
+        RuntimeError: ``gsutil`` is not on PATH.
+    """
+    if runner is None:
+        runner = subprocess.run
+    try:
+        runner(argv, check=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "gsutil is not on PATH; it comes with the Google Cloud SDK, which the "
+            "All of Us workbench provides. Obtain the files another way; "
+            "acquire hgdp accepts a local path via --archive."
+        ) from exc
+
+
 # =============================================================================
 # STEP 1: All of Us Genotype Download (V8)
 # =============================================================================
@@ -141,7 +164,7 @@ def _fetch_plink(bucket_root: str, project: str, raw_dir: Path, runner: Callable
             logger.info("  %s file already exists", ext)
             continue
         logger.info("Downloading %s file...", ext)
-        runner(["gsutil", "-u", project, "cp", src, str(dest)], check=True)
+        _run_gsutil(["gsutil", "-u", project, "cp", src, str(dest)], runner)
     return raw_dir / _LOCAL_PREFIX
 
 

@@ -513,6 +513,16 @@ class TestHgdpLayouts:
             scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
         assert calls == []
 
+    def test_a_missing_gsutil_binary_is_a_friendly_error(self, tmp_path, monkeypatch):
+        from manifold_genetics import scaffold
+
+        def _no_gsutil(argv, **kw):
+            raise FileNotFoundError(2, "No such file or directory", "gsutil")
+
+        monkeypatch.setattr(scaffold.subprocess, "run", _no_gsutil)
+        with pytest.raises(RuntimeError, match="gsutil"):
+            scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
+
 
 class TestDownloadFallsBackToSystemTools:
     """urllib and curl do not trust the same certificates.

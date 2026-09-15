@@ -25,6 +25,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `OUT/data/temp` now records what they were made from, and a mismatch is
   refused with the differing settings named, instead of returning the old
   result under a new config header.
+- Friendlier errors for three cases that used to surface a raw traceback or a
+  bare exception string: a cohort config missing `fit_plink`/`project_plink`,
+  a missing `gsutil` binary during `acquire hgdp`/`acquire aou`, and
+  `subsample` failing in plink2 or on an empty `--group` selection or a
+  missing `geosketch` extra.
 
 ## [0.3.0] - 2026-09-14
 

@@ -172,6 +172,14 @@ class TestDownload:
             aou.acquire_aou(tmp_path, runner=runner, query=_query_factory([]))
         assert not (tmp_path / "config.yaml").exists()
 
+    def test_a_missing_gsutil_binary_is_a_friendly_error(self, tmp_path, workbench):
+        def runner(argv, **kw):
+            raise FileNotFoundError(2, "No such file or directory", "gsutil")
+
+        with pytest.raises(RuntimeError, match="gsutil"):
+            aou.acquire_aou(tmp_path, runner=runner, query=_query_factory([]))
+        assert not (tmp_path / "config.yaml").exists()
+
 
 class TestFamFix:
     """download_aou_data.sh L134-144: `awk '{print "AOU\\t"$2"\\t"$3"\\t"$4"\\t"$5"\\t-9"}'`

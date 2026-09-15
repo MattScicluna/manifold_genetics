@@ -209,6 +209,19 @@ class TestSubsample:
         fit = [line.split()[1] for line in open(f"{load_config(config)['fit_plink']}.fam")]
         assert fit == [f[1] for f in fam[:5]]
 
+    def test_an_empty_fit_samples_file_is_a_named_error_before_plink_runs(self, cohort, tmp_path):
+        keep = tmp_path / "keep.txt"
+        keep.write_text("\n\n")
+        calls = []
+
+        def keep_runner(*args):
+            calls.append(args)
+            _fake_keep(*args)
+
+        with pytest.raises(ValueError, match="empty"):
+            subsample(cohort, tmp_path / "out", fit_samples=keep, keep_runner=keep_runner)
+        assert calls == [], "plink must not have been started"
+
     def test_geosketch_selects_from_the_pca_table_restricted_to_the_fam(
         self, cohort, tmp_path, monkeypatch
     ):
@@ -245,6 +258,40 @@ class TestSubsample:
         fit = [line.split()[1] for line in open(f"{load_config(config)['fit_plink']}.fam")]
         assert len(fit) == 3
 
+    def test_geosketch_selecting_nothing_is_a_named_error_before_plink_runs(
+        self, cohort, tmp_path, monkeypatch
+    ):
+        """A fake ``sketch`` that returns no indices must fail before plink runs,
+        the same way an empty --group selection does."""
+        import sys
+
+        subsample_module = sys.modules["manifold_genetics.preprocessing.subsample"]
+
+        fam = [line.split() for line in open(tmp_path / "in/data/project_subset.fam")]
+        iids = [f[1] for f in fam]
+        pca_path = tmp_path / "pca.csv"
+        pd.DataFrame({"sample_id": iids, "dim_1": range(len(iids))}).to_csv(pca_path, index=False)
+
+        def fake_select(pca_df, n, seed, sketch=None, n_pcs=None):
+            return []
+
+        monkeypatch.setattr(subsample_module, "select_by_geosketch", fake_select)
+        calls = []
+
+        def keep_runner(*args):
+            calls.append(args)
+            _fake_keep(*args)
+
+        with pytest.raises(ValueError, match="no samples"):
+            subsample(
+                cohort,
+                tmp_path / "out",
+                geosketch=3,
+                pca=pca_path,
+                keep_runner=keep_runner,
+            )
+        assert calls == [], "plink must not have been started"
+
     def test_geosketch_requires_pca(self, cohort, tmp_path):
         with pytest.raises(ValueError, match="--pca"):
             subsample(cohort, tmp_path / "out", geosketch=3, keep_runner=_fake_keep)
@@ -269,6 +316,22 @@ class TestSubsample:
                 pca=tmp_path / "pca.csv",
                 keep_runner=_fake_keep,
             )
+
+    def test_a_group_matching_nothing_is_a_named_error_before_plink_runs(self, cohort, tmp_path):
+        calls = []
+
+        def keep_runner(*args):
+            calls.append(args)
+            _fake_keep(*args)
+
+        with pytest.raises(ValueError, match="no samples"):
+            subsample(
+                cohort,
+                tmp_path / "out",
+                groups=[Group("branch", "^NoSuchBranch$", 3)],
+                keep_runner=keep_runner,
+            )
+        assert calls == [], "plink must not have been started"
 
     def test_labels_below_half_coverage_fail_before_plink_runs(self, cohort, tmp_path):
         """The fit set is drawn from the project .fam, so its label coverage can
