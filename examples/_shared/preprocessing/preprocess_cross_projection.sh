@@ -1,1 +1,0 @@
-../../../src/manifold_genetics/preprocessing/preprocess_cross_projection.sh

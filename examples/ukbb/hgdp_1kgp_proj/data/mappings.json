@@ -1,6 +1,0 @@
-{
-  "ukbb_plink": "/path/to/your/ukbb_data",
-  "hgdp_plink": "/path/to/your/hgdp_data",
-  "fit_labels": "examples/hgdp_1kgp/data/raw/metadata.csv",
-  "project_labels": "/path/to/your/ukbb_labels.csv"
-}

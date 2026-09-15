@@ -1883,8 +1883,8 @@ def main(argv: Optional[List[str]] = None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Example:\n"
-            "  manifold-genetics run examples/hgdp_1kgp/config.yaml --dry-run\n"
-            "  manifold-genetics run examples/hgdp_1kgp/config.yaml\n"
+            "  manifold-genetics run config.yaml --dry-run\n"
+            "  manifold-genetics run config.yaml\n"
         ),
     )
     run_parser.add_argument("config", help="Path to the YAML config file")

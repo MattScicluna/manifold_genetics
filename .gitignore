@@ -194,3 +194,9 @@ examples/ukbb/60k_random/outputs/
 # output. Neither is part of the package; kept out of git rather than deleted.
 deprecated/
 admixture_outputs/
+
+# Local reference material, no longer tracked (2026-09-15): the old example
+# pipelines and the design specs/plans that produced 0.3.0. Kept on disk, not in
+# the repository -- the package ships nothing from either.
+examples/
+archive/

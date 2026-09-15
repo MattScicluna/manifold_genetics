@@ -20,25 +20,6 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class TestRegistry:
-    def test_every_shipped_config_has_a_cohort_entry(self):
-        """A new example must come with a statement of how it is tested.
-
-        Otherwise an example can be added, look supported, and never be exercised
-        against real data.
-        """
-        shipped = {str(p.relative_to(REPO)) for p in REPO.glob("examples/**/config.yaml")}
-        registered = {c.config for c in COHORTS.values()}
-        # Templates are placeholders, not runnable cohorts.
-        shipped -= {
-            "examples/generic/subset/config.yaml",
-            "examples/generic/hgdp_1kgp_proj/config.yaml",
-        }
-
-        assert shipped == registered, (
-            f"configs without a cohort entry: {sorted(shipped - registered)}\n"
-            f"cohort entries without a config: {sorted(registered - shipped)}"
-        )
-
     def test_public_cohort_is_marked_public(self):
         assert COHORTS["hgdp"].public is True
 

@@ -8,14 +8,6 @@
 #
 # (Empty: nothing in the repository currently needs an exception.)
 
-# The page documenting this check quotes the header of the private script that
-# prompted it, and names the /lustre path pattern in its rules table. Both are
-# the subject matter, not a leak. Scoped to those two rules so that anything
-# else appearing in that file is still caught.
-# Reviewed 2026-09-12.
-archive/working-with-agents.md:private-marker
-archive/working-with-agents.md:cluster-path
-
 # The check's own specification. It has to contain the things it detects: a
 # fixture script with a private header, and a fake cluster path. Scoped to those
 # two rules.
