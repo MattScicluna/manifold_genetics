@@ -630,6 +630,9 @@ _HGDP_WORKBENCH_HEADER = """\
 # `preprocess --preset harmonise --fit-has-chr-prefix` before fitting on it.
 #
 """
+# ``{geographic_line}`` is either empty or a ``geographic_coords:`` line under
+# ``data:`` -- present when a geographic.csv was written, which the workbench
+# archive's metadata (no coordinates) never gets. See _write_hgdp_geographic.
 _HGDP_CONFIG_BODY = """\
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
@@ -643,24 +646,35 @@ data:
   project_plink: data/project_subset
   labels: data/labels.csv
   colormap: colormap.json
-  output_dir: outputs
+{geographic_line}  output_dir: outputs
 
 pca:
   n_pcs: 20
 
+admixture:
+  k_min: 2
+  k_max: 10
+
 embedding:
   method: phate
 
-# Admixture needs the `admixture` extra (torch), so it is off by default here.
+visualization:
+  admix_group_column: Genetic_region_merged
+
+# The settings above are those of the published run. Admixture needs the
+# `admixture` extra (torch) and is slow without a GPU: delete this `skip` line
+# (or set it to false) once `pip install 'manifold-genetics[admixture]'` is
+# done and you are on a GPU node.
 skip:
   admixture: true
 """
-_HGDP_CONFIG = _HGDP_PUBLIC_HEADER + _HGDP_CONFIG_BODY
+_HGDP_CONFIG = _HGDP_PUBLIC_HEADER + _HGDP_CONFIG_BODY.format(geographic_line="")
 
 
-def _hgdp_config(layout: str) -> str:
+def _hgdp_config(layout: str, geographic: bool = False) -> str:
     header = _HGDP_PUBLIC_HEADER if layout == "public" else _HGDP_WORKBENCH_HEADER
-    return header + _HGDP_CONFIG_BODY
+    geographic_line = "  geographic_coords: data/geographic.csv\n" if geographic else ""
+    return header + _HGDP_CONFIG_BODY.format(geographic_line=geographic_line)
 
 
 def acquire_hgdp(
@@ -764,7 +778,8 @@ def acquire_hgdp(
         labels = metadata.rename(columns={"project_meta.sample_id": "sample_id"})
         labels.to_csv(data_dir / "labels.csv", index=False)
         _write_generated_colormap(labels, out_dir / "colormap.json")
-    config_path.write_text(_hgdp_config(layout))
+    wrote_geographic = _write_hgdp_geographic(metadata, project_ids, data_dir / "geographic.csv")
+    config_path.write_text(_hgdp_config(layout, geographic=wrote_geographic))
 
     logger.info("Wrote HGDP+1KGP and a config to %s", out_dir)
     return config_path
@@ -946,6 +961,50 @@ def _write_hgdp_labels(
         colormap[column] = {v: published.get(v, "#999999") for v in sorted(set(values))}
 
     colormap_path.write_text(json.dumps(colormap, indent=2) + "\n")
+
+
+# Populations that do not preserve geography well -- African-American and
+# Afro-Caribbean populations, and Utah residents with European ancestry, all
+# admixed enough that a geographic embedding metric would be meaningless for
+# them -- excluded the same way examples/hgdp_1kgp/prepare_data.sh step 9 did.
+_HGDP_GEOGRAPHY_EXCLUDED_POPULATIONS = frozenset({"ACB", "ASW", "CEU"})
+
+
+def _write_hgdp_geographic(metadata: pd.DataFrame, project_ids: pd.Series, path: Path) -> bool:
+    """Write ``sample_id, latitude, longitude`` for the project set, less the
+    samples whose geography is not expected to be preserved.
+
+    Excludes ``Genetic_region_merged == "America"`` and
+    :data:`_HGDP_GEOGRAPHY_EXCLUDED_POPULATIONS`, exactly as
+    ``examples/hgdp_1kgp/prepare_data.sh`` step 9 did. The workbench archive's
+    metadata carries no coordinates at all, so this writes nothing for it --
+    returning False rather than raising, since geographic metrics are optional
+    and the rest of the run does not depend on them.
+
+    Returns:
+        Whether the file was written.
+    """
+    if "latitude" not in metadata.columns or "longitude" not in metadata.columns:
+        logger.warning(
+            "No latitude/longitude columns in the cohort metadata; skipping "
+            "geographic coordinates (geographic_coords will not appear in the config)."
+        )
+        return False
+
+    keep = metadata[metadata["project_meta.sample_id"].isin(set(project_ids))]
+    excluded = pd.Series(False, index=keep.index)
+    if _HGDP_REGION_COLUMN in keep.columns:
+        excluded |= keep[_HGDP_REGION_COLUMN] == "America"
+    if _HGDP_POPULATION_COLUMN in keep.columns:
+        excluded |= keep[_HGDP_POPULATION_COLUMN].isin(_HGDP_GEOGRAPHY_EXCLUDED_POPULATIONS)
+
+    geo = (
+        keep.loc[~excluded, ["project_meta.sample_id", "latitude", "longitude"]]
+        .rename(columns={"project_meta.sample_id": "sample_id"})
+        .dropna(subset=["latitude", "longitude"])
+    )
+    geo.to_csv(path, index=False)
+    return True
 
 
 def clean(out_dir: PathLike) -> None:

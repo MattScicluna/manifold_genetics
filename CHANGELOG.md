@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- `acquire hgdp` writes `data/geographic.csv` (sample_id, latitude, longitude)
+  for the project set, excluding `Genetic_region_merged == "America"` and the
+  populations ACB, ASW and CEU, as `examples/hgdp_1kgp/prepare_data.sh` step 9
+  did -- and wires `geographic_coords` into the config when it does. The
+  config also gains the published run's `admixture: k_min`/`k_max` and
+  `visualization.admix_group_column`, still behind `skip: admixture: true`
+  until the `admixture` extra is installed and a GPU is available.
+
 ### Fixed
 
 - `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships
