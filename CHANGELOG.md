@@ -51,6 +51,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `subsample` failing in plink2 or on an empty `--group` selection or a
   missing `geosketch` extra.
 
+### Changed
+
+- Internal: HGDP acquisition moved to `hgdp.py`; `scaffold` re-exports every
+  name, so existing imports are unchanged.
+
 ## [0.3.0] - 2026-09-14
 
 The release that takes a cohort from raw biobank PLINK files to a figure

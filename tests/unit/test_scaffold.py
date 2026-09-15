@@ -365,7 +365,7 @@ class TestHgdpLayouts:
 
         from manifold_genetics.scaffold import _extract_hgdp_archive
 
-        with caplog.at_level(logging.WARNING, logger="manifold_genetics.scaffold"):
+        with caplog.at_level(logging.WARNING, logger="manifold_genetics.hgdp"):
             _extract_hgdp_archive(self._workbench_archive(tmp_path), tmp_path / "raw")
         assert any("orkbench" in r.getMessage() for r in caplog.records)
 
@@ -515,21 +515,22 @@ class TestHgdpLayouts:
         self, tmp_path, monkeypatch
     ):
         """Silently fetching the public panel instead would swap the cohort."""
-        from manifold_genetics import scaffold
+        from manifold_genetics import hgdp, scaffold
 
         def _must_not_download(destination):
             raise AssertionError("fell back to downloading the public archive")
 
-        monkeypatch.setattr(scaffold, "_download_hgdp_archive", _must_not_download)
+        # Patched where acquire_hgdp looks it up: scaffold only re-exports it.
+        monkeypatch.setattr(hgdp, "_download_hgdp_archive", _must_not_download)
         with pytest.raises(FileNotFoundError, match="nope.tar.gz"):
             scaffold.acquire_hgdp(tmp_path / "out", archive=tmp_path / "nope.tar.gz")
 
     def test_a_gs_url_is_fetched_with_gsutil(self, tmp_path, monkeypatch):
-        from manifold_genetics import scaffold
+        from manifold_genetics import hgdp, scaffold
 
         calls = []
         monkeypatch.setattr(scaffold.subprocess, "run", lambda argv, **kw: calls.append(argv))
-        monkeypatch.setattr(scaffold, "_extract_hgdp_archive", lambda a, r: None)
+        monkeypatch.setattr(hgdp, "_extract_hgdp_archive", lambda a, r: None)
         monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
         with pytest.raises(FileNotFoundError):  # nothing was really extracted
             scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
@@ -538,13 +539,13 @@ class TestHgdpLayouts:
         assert calls[0][3] == str(tmp_path / "data" / "1KGPHGDP.tar.gz")
 
     def test_a_gs_url_already_fetched_is_not_fetched_again(self, tmp_path, monkeypatch):
-        from manifold_genetics import scaffold
+        from manifold_genetics import hgdp, scaffold
 
         (tmp_path / "data").mkdir()
         (tmp_path / "data" / "1KGPHGDP.tar.gz").write_bytes(b"")
         calls = []
         monkeypatch.setattr(scaffold.subprocess, "run", lambda argv, **kw: calls.append(argv))
-        monkeypatch.setattr(scaffold, "_extract_hgdp_archive", lambda a, r: None)
+        monkeypatch.setattr(hgdp, "_extract_hgdp_archive", lambda a, r: None)
         monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
         with pytest.raises(FileNotFoundError):
             scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
@@ -559,6 +560,28 @@ class TestHgdpLayouts:
         monkeypatch.setattr(scaffold.subprocess, "run", _no_gsutil)
         with pytest.raises(RuntimeError, match="gsutil"):
             scaffold.acquire_hgdp(tmp_path, archive="gs://bucket/1KGPHGDP.tar.gz")
+
+
+class TestHgdpModule:
+    """`acquire hgdp` lives in `hgdp.py`; `scaffold` re-exports it.
+
+    scaffold.py had grown to 1,157 lines with three cohorts in it. The HGDP
+    port moved out the way the All of Us one already had, and the re-exports
+    keep every existing import working.
+    """
+
+    def test_the_scaffold_name_is_the_same_function(self):
+        from manifold_genetics import hgdp, scaffold
+
+        assert scaffold.acquire_hgdp is hgdp.acquire_hgdp
+        assert scaffold.hgdp_subsets is hgdp.hgdp_subsets
+        assert scaffold._write_hgdp_labels is hgdp._write_hgdp_labels
+
+    def test_scaffold_has_not_grown_back(self):
+        from manifold_genetics import scaffold
+
+        lines = len(Path(scaffold.__file__).read_text().splitlines())
+        assert lines < 750, f"scaffold.py is {lines} lines; a new cohort belongs in its own module"
 
 
 class TestDownloadFallsBackToSystemTools:
@@ -603,10 +626,10 @@ class TestDownloadFallsBackToSystemTools:
 
     def test_certificate_verification_is_never_disabled(self):
         """A download that skips verification is worse than one that fails."""
-        from manifold_genetics import scaffold
+        from manifold_genetics import hgdp, scaffold
         from manifold_genetics.utils import tools
 
-        source = Path(scaffold.__file__).read_text() + Path(tools.__file__).read_text()
+        source = "".join(Path(m.__file__).read_text() for m in (scaffold, hgdp, tools))
 
         for forbidden in ("--insecure", "-k ", "verify=False", "_create_unverified_context"):
             assert forbidden not in source, f"{forbidden!r} disables certificate checking"
