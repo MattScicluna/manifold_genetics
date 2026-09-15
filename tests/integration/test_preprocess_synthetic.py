@@ -120,3 +120,39 @@ def test_preprocess_then_subsample_then_dry_run(tmp_path, tools):
     )
     config = subsample(filtered, tmp_path / "sub", groups=[Group("branch", ".", 20)])
     assert main(["run", str(config), "--dry-run"]) == 0
+
+
+def test_rerun_with_different_flags_is_refused_but_a_fresh_out_succeeds(tmp_path, tools):
+    """--force after changing flags must not silently reuse intermediates computed
+    under the old ones (issue #134): the same --out is refused, a new one works."""
+    acquire_synthetic(tmp_path / "in")
+    preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "out",
+        options=PreprocessOptions(
+            preset="intersect-only", min_common_snps=100, memory=2000, threads=2
+        ),
+    )
+
+    with pytest.raises(ValueError, match="skip_geno"):
+        preprocess(
+            tmp_path / "in/config.yaml",
+            tmp_path / "out",
+            options=PreprocessOptions(
+                preset="intersect-only",
+                skip_geno=True,
+                min_common_snps=100,
+                memory=2000,
+                threads=2,
+            ),
+            force=True,
+        )
+
+    config = preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "fresh-out",
+        options=PreprocessOptions(
+            preset="intersect-only", skip_geno=True, min_common_snps=100, memory=2000, threads=2
+        ),
+    )
+    assert config.exists()

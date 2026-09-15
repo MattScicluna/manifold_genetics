@@ -1,12 +1,13 @@
 """`preprocess`: one cohort directory in, one out, SNPs filtered in between."""
 
 import dataclasses
+import json
 import logging
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ..utils.tools import ToolResolver
 from .cohort import (
@@ -21,15 +22,60 @@ from .cohort import (
     read_fam_ids,
     write_cohort_config,
 )
-from .flags import PreprocessOptions, shell_argv
+from .flags import PreprocessOptions, intermediate_signature, shell_argv
 from .references import default_tools_dir
 
 logger = logging.getLogger(__name__)
+
+SENTINEL_NAME = "preprocess-inputs.json"
 
 
 def _run(argv: List[str]) -> None:
     logger.info("Running: %s", " ".join(argv))
     subprocess.run(argv, check=True)
+
+
+def _check_intermediate_signature(temp_dir: Path, signature: Dict[str, object]) -> None:
+    """Guard ``temp_dir``'s intermediates against a signature mismatch.
+
+    Writes ``temp_dir/preprocess-inputs.json`` before the shell runs, so the
+    *next* run can tell whether these intermediates were made from the same
+    inputs and flags. A pre-existing, matching sentinel means resume as usual;
+    a differing one means the caller changed something that changes what the
+    shell filters, and `--force` does not paper over that (it only means
+    "rewrite the config and labels"). A temp dir with intermediates but no
+    sentinel predates this check (the first release): its provenance is unknown, so we
+    warn and proceed rather than break existing resumes.
+    """
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    sentinel_path = temp_dir / SENTINEL_NAME
+    if sentinel_path.exists():
+        previous = json.loads(sentinel_path.read_text())
+        # A key absent from one side (e.g. an old sentinel predating a newly
+        # added signature field) reads as None on that side, same as `.get()`
+        # below -- so the two never disagree about whether something changed.
+        keys = sorted(set(previous) | set(signature))
+        diffs = [
+            (key, previous.get(key), signature.get(key))
+            for key in keys
+            if previous.get(key) != signature.get(key)
+        ]
+        if diffs:
+            diff_text = "\n".join(f"  {key}: {old!r} -> {new!r}" for key, old, new in diffs)
+            raise ValueError(
+                f"The intermediates in {temp_dir} were computed from different inputs or "
+                f"flags than this run:\n{diff_text}\n"
+                "--force only rewrites the config and labels; it does not override this. "
+                f"Use a new --out, or delete {temp_dir}, and rerun."
+            )
+    elif any(temp_dir.iterdir()):
+        logger.warning(
+            "%s has intermediates but no %s (made before this check existed); its "
+            "provenance is unknown, proceeding as if it matched.",
+            temp_dir,
+            SENTINEL_NAME,
+        )
+    sentinel_path.write_text(json.dumps(signature, indent=2, sort_keys=True) + "\n")
 
 
 def _first_colormap_column(colormap: Path) -> Optional[str]:
@@ -88,6 +134,13 @@ def preprocess(
 
     if options.tools_dir is None:
         options = dataclasses.replace(options, tools_dir=default_tools_dir())
+
+    temp_dir = (
+        Path(options.temp_dir).expanduser().resolve() if options.temp_dir else data_dir / "temp"
+    )
+    _check_intermediate_signature(
+        temp_dir, intermediate_signature(fit.plink, project.plink, options)
+    )
 
     resolver = ToolResolver()
     runner(

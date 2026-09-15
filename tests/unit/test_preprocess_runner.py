@@ -2,6 +2,7 @@
 that writes the two outputs the real one writes."""
 
 import dataclasses
+import json
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import pytest
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing import PreprocessOptions, preprocess  # noqa: F401
 from manifold_genetics.preprocessing.references import default_tools_dir
+from manifold_genetics.preprocessing.runner import SENTINEL_NAME
 from manifold_genetics.scaffold import acquire_synthetic
 
 
@@ -266,3 +268,115 @@ def test_no_geographic_coords_in_the_input_means_none_in_the_output(tmp_path, to
     acquire_synthetic(tmp_path / "in")
     config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
     assert "geographic_coords" not in load_config(config)
+
+
+def _sentinel(out_dir):
+    return json.loads((out_dir / "data/temp" / SENTINEL_NAME).read_text())
+
+
+def test_rerun_with_the_same_flags_and_force_proceeds_with_the_sentinel_unchanged(tmp_path, tools):
+    acquire_synthetic(tmp_path / "in")
+    options = PreprocessOptions(preset="intersect-only")
+    calls = []
+
+    def shell(argv):
+        calls.append(argv)
+        _fake_shell(argv)
+
+    preprocess(tmp_path / "in/config.yaml", tmp_path / "out", options=options, runner=shell)
+    first = _sentinel(tmp_path / "out")
+
+    preprocess(
+        tmp_path / "in/config.yaml", tmp_path / "out", options=options, force=True, runner=shell
+    )
+    second = _sentinel(tmp_path / "out")
+
+    assert len(calls) == 2, "both runs must have invoked the shell"
+    assert first == second
+
+
+def test_rerun_with_different_flags_and_force_is_refused(tmp_path, tools):
+    acquire_synthetic(tmp_path / "in")
+    calls = []
+
+    def shell(argv):
+        calls.append(argv)
+        _fake_shell(argv)
+
+    preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "out",
+        options=PreprocessOptions(preset="intersect-only"),
+        runner=shell,
+    )
+    assert len(calls) == 1
+
+    with pytest.raises(ValueError, match="skip_geno") as excinfo:
+        preprocess(
+            tmp_path / "in/config.yaml",
+            tmp_path / "out",
+            options=PreprocessOptions(preset="intersect-only", skip_geno=True),
+            force=True,
+            runner=shell,
+        )
+    assert str(tmp_path / "out/data/temp") in str(excinfo.value)
+    assert len(calls) == 1, "the shell must not have been invoked a second time"
+
+
+def test_rerun_pointing_a_different_cohort_at_the_same_out_is_refused(tmp_path, tools):
+    acquire_synthetic(tmp_path / "in")
+    acquire_synthetic(tmp_path / "in2", seed=2)
+    calls = []
+
+    def shell(argv):
+        calls.append(argv)
+        _fake_shell(argv)
+
+    preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=shell)
+    assert len(calls) == 1
+
+    with pytest.raises(ValueError, match="fit_plink"):
+        preprocess(tmp_path / "in2/config.yaml", tmp_path / "out", force=True, runner=shell)
+    assert len(calls) == 1, "the shell must not have been invoked a second time"
+
+
+def test_a_temp_dir_with_intermediates_but_no_sentinel_warns_and_proceeds(tmp_path, tools, caplog):
+    acquire_synthetic(tmp_path / "in")
+    temp_dir = tmp_path / "out/data/temp"
+    temp_dir.mkdir(parents=True)
+    (temp_dir / "reference_filtered.bed").write_bytes(b"\x00")
+
+    with caplog.at_level("WARNING"):
+        config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
+
+    assert config.exists()
+    assert any("no " + SENTINEL_NAME in r.getMessage() for r in caplog.records)
+    assert (temp_dir / SENTINEL_NAME).exists(), "a sentinel is written for the next run"
+
+
+def test_a_sentinel_missing_a_key_whose_current_value_is_none_proceeds(tmp_path, tools):
+    """A key absent from an older sentinel (e.g. one written before a new
+    signature field existed) must read the same as an explicit None, not as a
+    mismatch -- otherwise every such sentinel would be refused with an empty
+    diff."""
+    acquire_synthetic(tmp_path / "in")
+    options = PreprocessOptions(preset="intersect-only")
+    calls = []
+
+    def shell(argv):
+        calls.append(argv)
+        _fake_shell(argv)
+
+    preprocess(tmp_path / "in/config.yaml", tmp_path / "out", options=options, runner=shell)
+    sentinel_path = tmp_path / "out/data/temp" / SENTINEL_NAME
+    sentinel = json.loads(sentinel_path.read_text())
+    assert sentinel["maf"] is None
+    del sentinel["maf"]
+    sentinel_path.write_text(json.dumps(sentinel, indent=2, sort_keys=True) + "\n")
+
+    preprocess(
+        tmp_path / "in/config.yaml", tmp_path / "out", options=options, force=True, runner=shell
+    )
+
+    assert len(calls) == 2, "the second run must have proceeded, not been refused"
+    assert json.loads(sentinel_path.read_text())["maf"] is None
