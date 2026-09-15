@@ -84,7 +84,7 @@ Note that the public panel is **not** a drop-in reference for a harmonised
 cross-projection: the UK Biobank flag set on it removes 41% of its SNPs
 (GIAB and HLA exclusion, then LD re-pruning of what is left). The published UK
 Biobank and All of Us runs each used a different HGDP+1KGP file — the
-gnomAD-derived panel on Narval and the workbench's own archive respectively —
+a private gnomAD-derived panel and the workbench's own archive respectively —
 and a reproduction has to start from the same one.
 
 ### What needs internet
