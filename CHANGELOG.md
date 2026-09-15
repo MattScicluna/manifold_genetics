@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `ToolResolver` no longer tries `module load` itself. It ran in a child shell
+  and could never affect the running process's `PATH`, so the step never found
+  anything on any cluster; the site-specific module names it carried are gone
+  with it. Load the module before running, or set `PLINK_PATH` /
+  `FLASHPCA_PATH`. The three downloadable binaries now share one resolution
+  chain: download directory, then the tool's environment variable, then
+  `PATH`, then download.
+
 ### Fixed
 
 - `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships

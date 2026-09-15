@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 import yaml
 
+from ..pca.plink import read_fam_ids  # re-exported: one .fam reader for the package
 from ..pipeline.configfile import PRESET_OWNED_EMBEDDING_KEYS, load_config
 
 logger = logging.getLogger(__name__)
@@ -75,11 +76,6 @@ def read_cohort(config_path: PathLike) -> CohortConfig:
         and "project_labels" not in resolved,
         geographic_coords=Path(geographic_coords) if geographic_coords is not None else None,
     )
-
-
-def read_fam_ids(prefix: PathLike) -> List[str]:
-    fam = pd.read_csv(f"{prefix}.fam", sep=r"\s+", header=None, dtype=str, usecols=[0, 1])
-    return list(fam[1])
 
 
 def _count_lines(path: PathLike) -> int:
