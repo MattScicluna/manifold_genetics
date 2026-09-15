@@ -14,6 +14,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `preprocess` no longer resumes from a truncated `.bed` left by an OOM-killed
   run; checkpoints now verify PLINK 1 file size, not just existence, and
   redo an incomplete step instead of reusing it.
+- `preprocess --force` no longer silently reuses intermediates computed under
+  different flags or different input genotypes: a sentinel in
+  `OUT/data/temp` now records what they were made from, and a mismatch is
+  refused with the differing settings named, instead of returning the old
+  result under a new config header.
 
 ## [0.3.0] - 2026-09-14
 

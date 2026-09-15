@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from manifold_genetics.preprocessing import SHELL_SCRIPT
-from manifold_genetics.preprocessing.flags import PRESET_FLAGS, PreprocessOptions, shell_argv
+from manifold_genetics.preprocessing.flags import (
+    PRESET_FLAGS,
+    PreprocessOptions,
+    intermediate_signature,
+    shell_argv,
+)
 
 TOOLS = dict(plink2="/t/plink2", plink="/t/plink", python="/t/python")
 
@@ -115,3 +120,54 @@ def test_the_preset_table_only_names_real_options():
     fields = set(PreprocessOptions.__dataclass_fields__)
     for name, flags in PRESET_FLAGS.items():
         assert set(flags) <= fields, name
+
+
+def _sig(options, fit=Path("/d/ref"), project=Path("/d/bio")):
+    return intermediate_signature(fit, project, options)
+
+
+def test_signature_excludes_options_that_do_not_change_filtering():
+    base = _sig(PreprocessOptions())
+    varied = _sig(
+        PreprocessOptions(
+            threads=8,
+            memory=4000,
+            temp_dir=Path("/somewhere/else"),
+            tools_dir=Path("/other/tools"),
+            cleanup=True,
+            min_common_snps=999,
+        )
+    )
+    assert base == varied
+
+
+def test_signature_treats_a_preset_and_its_equivalent_explicit_skips_as_equal():
+    from_preset = _sig(PreprocessOptions(preset="intersect-only"))
+    explicit = _sig(
+        PreprocessOptions(
+            skip_wrayner=True,
+            skip_giab=True,
+            skip_hla=True,
+            skip_ld_prune=True,
+            skip_dedup=True,
+            skip_maf=True,
+        )
+    )
+    assert from_preset == explicit
+
+
+def test_signature_changes_with_maf():
+    assert _sig(PreprocessOptions(maf=0.01)) != _sig(PreprocessOptions(maf=0.05))
+
+
+def test_signature_changes_with_the_genotype_prefixes():
+    a = _sig(PreprocessOptions(), fit=Path("/d/ref"))
+    b = _sig(PreprocessOptions(), fit=Path("/d/other-ref"))
+    assert a != b
+
+
+def test_signature_resolves_relative_prefixes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "ref").mkdir()
+    resolved = intermediate_signature(Path("ref"), Path("ref"), PreprocessOptions())
+    assert resolved["fit_plink"] == str(tmp_path / "ref")
