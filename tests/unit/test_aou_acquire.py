@@ -279,7 +279,10 @@ class TestLabels:
         _acquire(tmp_path)
 
         labels = pd.read_csv(tmp_path / "data/labels.csv", dtype=str)
-        assert list(labels.columns) == ["sample_id", "race", "ethnicity", "race_ethnicity"]
+        assert list(labels.columns) == ["sample_id", "race_ethnicity", "race", "ethnicity"], (
+            "race_ethnicity first: it becomes the first colormap key, which "
+            "preprocess picks as the projection's plot column"
+        )
         assert sorted(labels["sample_id"]) == ["1000001", "1000002", "1000003"]
         assert "1000004" not in set(labels["sample_id"]), "not in the .fam"
 
@@ -287,7 +290,7 @@ class TestLabels:
         _acquire(tmp_path)
 
         colormap = json.loads((tmp_path / "colormap.json").read_text())
-        assert set(colormap) == {"race", "ethnicity", "race_ethnicity"}
+        assert list(colormap) == ["race_ethnicity", "race", "ethnicity"]
         assert set(colormap["race_ethnicity"]) == {"White", "Asian", "Hispanic or Latino"}
 
     def test_labels_are_rewritten_every_run(self, tmp_path, workbench):

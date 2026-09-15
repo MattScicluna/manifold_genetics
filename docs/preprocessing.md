@@ -32,10 +32,13 @@ What `acquire` writes and what `preprocess`, `subsample` and `run` read:
 
 `config.yaml` is the entry point, which is why `preprocess` and `subsample`
 take configs rather than PLINK prefixes: the config says where the labels and
-colormaps are. A label file must cover the `.fam` it is paired with (every
-sample has a row); extra rows are fine. Each command rewrites the labels in its
-output directory from its input, so they always describe the genotypes beside
-them.
+colormaps are. A label file must cover at least half of the `.fam` it is
+paired with — the rule `acquire` applies — and samples without a row are
+warned about and drawn grey; extra rows are fine. Both commands check this
+before doing any work, so a label file that describes the wrong cohort fails
+in seconds, not after the shell has run. Each command rewrites the labels in
+its output directory from its input, so they always describe the genotypes
+beside them.
 
 ## preprocess — filter SNPs
 
@@ -99,12 +102,12 @@ manifold-genetics setup --preprocessing
 
 **The WRayner download currently fails, everywhere.** Its upstream URL
 (`https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip`)
-returns 404 as of this release. `setup --preprocessing` fetches the references
-in order — GIAB, then WRayner, then TOPMed — and stops at the first failure,
-so today it places GIAB, fails on WRayner, and never reaches TOPMed. The shell
-itself fetches the same URL when it finds no checker, so `--preset harmonise`
-dies at its WRayner step on any machine, internet or not, until the file is in
-place. Until upstream is back:
+returns 404 as of this release. `setup --preprocessing` attempts all three
+references regardless, so today it places GIAB and TOPMed, then exits non-zero
+with a message naming the WRayner URL and the exact path where a hand-placed
+checker goes. The shell itself fetches the same URL when it finds no checker,
+so `--preset harmonise` dies at its WRayner step on any machine, internet or
+not, until the file is in place. Until upstream is back:
 
 1. Place a copy of `HRC-1000G-check-bim.pl` (MIT-licensed; it circulates in
    many imputation pipelines) at `<tools-dir>/wrayner/HRC-1000G-check-bim.pl`,
@@ -119,7 +122,8 @@ place. Until upstream is back:
     the fetcher does, so it does not write a VCF nobody reads.
 
 2. Re-run `manifold-genetics setup --preprocessing`. It is idempotent: it
-   leaves GIAB and the hand-placed checker alone and fetches TOPMed.
+   leaves GIAB, TOPMed and the hand-placed checker alone and fetches only
+   what is still missing.
 
 Or pass `--tools-dir DIR` to `preprocess` with a directory laid out the same
 way. `--skip-wrayner` sidesteps the whole step, which is what the UK Biobank
@@ -139,7 +143,10 @@ they are consumed, which matters for a biobank-sized `.bed`.
 `preprocess` resumes: a step whose output already exists is skipped. It checks
 that intermediates *exist*, not that they are complete — so after an
 out-of-memory kill, delete the partial files under `OUT/data/temp/` before
-re-running, or a truncated `.bed` will be picked up as finished.
+re-running, or a truncated `.bed` will be picked up as finished. For the same
+reason `--force` only rewrites the config and labels: to recompute with
+different flags, use a new `--out` or delete `OUT/data/temp`, because the
+shell reuses every intermediate that exists.
 
 If the two cohorts share fewer than 50,000 SNPs the run aborts rather than
 producing a projection nobody should trust; `--min-common-snps` changes the

@@ -54,10 +54,13 @@ What `acquire` writes and `preprocess` both reads and writes. It is exactly what
 `project_plink`, the label and colormap paths. `preprocess` takes configs, not
 PLINK prefixes, so that it always knows where the labels and colormaps are.
 
-Label rule: a label file must **cover** the `.fam` it is paired with (every
-sample in the `.fam` has a row). Extra rows are allowed. This is the rule
-`init custom` enforces through `_checked_labels` and that `labels_match_fam`
-enforces in shell; nothing here loosens it.
+Label rule: a label file must cover **at least half** of the `.fam` it is
+paired with -- the rule `acquire custom` enforces through `_checked_labels`
+and `acquire aou` applies to the CDR metadata, kept in one place as
+`preprocessing.cohort.MIN_LABEL_COVERAGE`. Samples without a row are warned
+about and drawn grey by `run`; extra rows are allowed. Below half is an error,
+and `preprocess` and `subsample` check it **before** any long computation
+(neither removes samples, so the input's coverage is the output's).
 
 ## `acquire`
 

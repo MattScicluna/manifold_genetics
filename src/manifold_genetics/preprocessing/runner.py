@@ -11,6 +11,7 @@ from typing import Callable, List, Optional
 from ..utils.tools import ToolResolver
 from .cohort import (
     PathLike,
+    check_label_coverage,
     filter_labels_to_fam,
     filter_labels_to_ids,
     read_cohort,
@@ -59,6 +60,9 @@ def preprocess(
 
     Raises:
         FileExistsError: ``out_dir/config.yaml`` exists and ``force`` is False.
+        ValueError: a label file covers less than half its ``.fam``. Checked
+            before the shell runs: it removes no samples, so the input's
+            coverage is the output's.
         subprocess.CalledProcessError: the shell failed; its own output says why.
     """
     out_dir = Path(out_dir).expanduser().resolve()
@@ -70,6 +74,11 @@ def preprocess(
     project_cohort = read_cohort(project_config) if project_config else fit_cohort
     fit, project = fit_cohort.fit, project_cohort.project
     two_sided = project_config is not None or not fit_cohort.shared_labels
+
+    # Pre-flight, before the hours-long shell: the labels that will be filtered
+    # afterwards must already cover their genotypes.
+    for labels, plink in dict.fromkeys([(fit.labels, fit.plink), (project.labels, project.plink)]):
+        check_label_coverage(labels, plink)
 
     data_dir = out_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)

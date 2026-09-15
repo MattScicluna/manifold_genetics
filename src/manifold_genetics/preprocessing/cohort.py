@@ -74,29 +74,75 @@ def read_fam_ids(prefix: PathLike) -> List[str]:
     return list(fam[1])
 
 
-def filter_labels_to_ids(labels: PathLike, ids: List[str], out: PathLike) -> int:
-    """Write the rows of ``labels`` for ``ids``, in that order.
+# The one label-coverage rule. `acquire custom` and `acquire aou` accept a label
+# file that describes at least this fraction of the .fam and `run` draws the
+# rest grey; `preprocess` and `subsample` apply the same rule, and check it
+# before any long computation, so a cohort that `acquire` accepted is never
+# rejected hours later.
+MIN_LABEL_COVERAGE = 0.5
 
-    Raises:
-        ValueError: ``labels`` has no ``sample_id`` column, or an id has no label
-            row. A label file must cover its genotypes; a filtered copy that
-            silently dropped samples would produce a figure with grey points and
-            no error.
-    """
+
+def _read_labels(labels: PathLike) -> pd.DataFrame:
     frame = pd.read_csv(labels, dtype={"sample_id": str}, low_memory=False)
     if "sample_id" not in frame.columns:
         raise ValueError(f"{labels} has no sample_id column")
-    missing = set(ids) - set(frame["sample_id"])
-    if missing:
-        example = ", ".join(sorted(missing)[:5])
+    return frame
+
+
+def _coverage(labels: PathLike, frame: pd.DataFrame, ids: List[str]) -> float:
+    """The fraction of ``ids`` with a row in ``frame``; raises below the rule."""
+    known = set(frame["sample_id"])
+    missing = [i for i in dict.fromkeys(ids) if i not in known]
+    n_ids = len(set(ids))
+    coverage = (n_ids - len(missing)) / max(n_ids, 1)
+    if coverage < MIN_LABEL_COVERAGE:
+        example = ", ".join(missing[:5])
         raise ValueError(
-            f"{len(missing)} of {len(ids)} samples are not in {labels} "
-            f"(e.g. {example}). Labels must cover the genotypes they describe."
+            f"{len(missing)} of {n_ids} samples ({1 - coverage:.1%}) are not in {labels} "
+            f"(e.g. {example}). A label file must cover at least {MIN_LABEL_COVERAGE:.0%} of "
+            f"the genotypes it describes; this one covers {coverage:.1%}."
         )
+    if missing:
+        logger.warning(
+            "%d of %d samples (%.1f%%) have no row in %s (e.g. %s); they will be drawn grey.",
+            len(missing),
+            n_ids,
+            100 * (1 - coverage),
+            labels,
+            ", ".join(missing[:5]),
+        )
+    return coverage
+
+
+def check_label_coverage(labels: PathLike, prefix: PathLike) -> float:
+    """The fraction of ``prefix``.fam that ``labels`` describes.
+
+    Raises:
+        ValueError: ``labels`` has no ``sample_id`` column, or covers less than
+            ``MIN_LABEL_COVERAGE`` of the ``.fam``. Between that and full
+            coverage a warning names the uncovered samples.
+    """
+    return _coverage(labels, _read_labels(labels), read_fam_ids(prefix))
+
+
+def filter_labels_to_ids(labels: PathLike, ids: List[str], out: PathLike) -> int:
+    """Write the rows of ``labels`` for ``ids``, in that order.
+
+    Ids without a row are skipped with a warning; ``run`` draws them grey, as it
+    would had the labels been handed to it directly.
+
+    Raises:
+        ValueError: ``labels`` has no ``sample_id`` column, or fewer than
+            ``MIN_LABEL_COVERAGE`` of ``ids`` have a row -- the rule
+            ``acquire custom`` applies to a label file it is handed.
+    """
+    frame = _read_labels(labels)
+    _coverage(labels, frame, ids)
     # Drop duplicate sample_ids *before* indexing by the requested order, so a
     # label file with repeated ids does not expand `.loc[ids]` into extra rows.
-    frame = frame.drop_duplicates("sample_id")
-    kept = frame.set_index("sample_id").loc[ids].reset_index()
+    frame = frame.drop_duplicates("sample_id").set_index("sample_id")
+    covered = [i for i in ids if i in frame.index]
+    kept = frame.loc[covered].reset_index()
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     kept.to_csv(out, index=False)
     return len(kept)
@@ -106,9 +152,7 @@ def filter_labels_to_fam(labels: PathLike, prefix: PathLike, out: PathLike) -> i
     """Write the rows of ``labels`` for the samples in ``prefix``.fam, in .fam order.
 
     Raises:
-        ValueError: a sample in the .fam has no label row. A label file must
-            cover its genotypes; a filtered copy that silently dropped samples
-            would produce a figure with grey points and no error.
+        ValueError: fewer than ``MIN_LABEL_COVERAGE`` of the .fam has a label row.
     """
     return filter_labels_to_ids(labels, read_fam_ids(prefix), out)
 
@@ -153,8 +197,10 @@ def write_cohort_config(
 
 
 __all__ = [
+    "MIN_LABEL_COVERAGE",
     "CohortConfig",
     "Side",
+    "check_label_coverage",
     "filter_labels_to_fam",
     "filter_labels_to_ids",
     "read_cohort",

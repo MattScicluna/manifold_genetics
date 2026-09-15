@@ -9,11 +9,27 @@ from typing import Callable, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from ..scaffold import _run_plink2_keep, _write_keep_file
 from ..utils.tools import ToolResolver
-from .cohort import PathLike, filter_labels_to_fam, read_cohort, read_fam_ids, write_cohort_config
+from .cohort import (
+    PathLike,
+    check_label_coverage,
+    filter_labels_to_fam,
+    read_cohort,
+    read_fam_ids,
+    write_cohort_config,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _plink2_keep(bfile: Path, keep: Path, out: Path, plink2: str) -> None:
+    """``scaffold._run_plink2_keep``, looked up at call time: scaffold imports
+    this package for the label-coverage rule, so a module-level import here
+    would be circular."""
+    from .. import scaffold
+
+    scaffold._run_plink2_keep(bfile, keep, out, plink2)
+
 
 _GROUP_FORMAT = "COLUMN=PATTERN:COUNT, e.g. race_ethnicity=White|European:10000"
 
@@ -139,7 +155,7 @@ def subsample(
     pca: Optional[PathLike] = None,
     n_pcs: Optional[int] = None,
     force: bool = False,
-    keep_runner: Callable = _run_plink2_keep,
+    keep_runner: Callable = _plink2_keep,
 ) -> Path:
     """Write a cohort directory whose fit set is a chosen subset of the project set.
 
@@ -148,7 +164,10 @@ def subsample(
 
     Raises:
         ValueError: not exactly one of ``groups``, ``fit_samples`` and
-            ``geosketch`` given, or ``geosketch`` given without ``pca``.
+            ``geosketch`` given, or ``geosketch`` given without ``pca``; or the
+            project labels cover less than half the project ``.fam`` (checked
+            before plink runs -- the fit set is drawn from that ``.fam``, so
+            its coverage can only be what the input's is).
         FileExistsError: ``out_dir/config.yaml`` exists and ``force`` is False.
     """
     if sum([bool(groups), fit_samples is not None, geosketch is not None]) != 1:
@@ -164,8 +183,11 @@ def subsample(
 
     cohort = read_cohort(config)
     project = cohort.project
+    check_label_coverage(project.labels, project.plink)
     data_dir = out_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+
+    from ..scaffold import _write_keep_file
 
     keep = data_dir / "fit_samples.txt"
     if fit_samples is not None:

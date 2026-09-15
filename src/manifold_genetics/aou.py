@@ -29,6 +29,8 @@ from typing import Callable, Union
 
 import pandas as pd
 
+from .preprocessing.cohort import MIN_LABEL_COVERAGE
+
 logger = logging.getLogger(__name__)
 
 PathLike = Union[str, Path]
@@ -270,9 +272,11 @@ def _derive_race_ethnicity(df_person: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 # prepare_data.sh step 14: project labels
 # =============================================================================
-_LABEL_COLUMNS = ("race", "ethnicity", "race_ethnicity")
+# race_ethnicity first: `preprocess` colours a projection by the first colormap
+# key, and the published All of Us config plots race_ethnicity.
+_LABEL_COLUMNS = ("race_ethnicity", "race", "ethnicity")
 # The same threshold `acquire custom` applies to a label file it is handed.
-_MIN_LABEL_OVERLAP = 0.5
+_MIN_LABEL_OVERLAP = MIN_LABEL_COVERAGE
 
 
 def _write_labels(demographics: Path, prefix: Path, labels_path: Path) -> pd.DataFrame:

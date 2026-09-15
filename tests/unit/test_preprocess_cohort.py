@@ -6,6 +6,8 @@ import pytest
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing.cohort import (
+    MIN_LABEL_COVERAGE,
+    check_label_coverage,
     filter_labels_to_fam,
     read_cohort,
     read_fam_ids,
@@ -78,11 +80,73 @@ def test_labels_are_filtered_to_the_fam_and_keep_their_columns(cohort, tmp_path)
     assert list(written.columns) == list(pd.read_csv(cohort.project.labels, nrows=0).columns)
 
 
+def _labels_covering(cohort, fraction, path):
+    """The cohort's label file cut to the first ``fraction`` of the .fam."""
+    ids = read_fam_ids(cohort.fit.plink)
+    keep = set(ids[: int(len(ids) * fraction)])
+    labels = pd.read_csv(cohort.project.labels, dtype=str)
+    labels[labels["sample_id"].isin(keep)].to_csv(path, index=False)
+    return path
+
+
+def test_full_coverage_writes_every_fam_row_without_a_warning(cohort, tmp_path, caplog):
+    out = tmp_path / "filtered.csv"
+    with caplog.at_level("WARNING"):
+        n = filter_labels_to_fam(cohort.project.labels, cohort.fit.plink, out)
+    assert n == len(read_fam_ids(cohort.fit.plink))
+    assert not [r for r in caplog.records if "drawn grey" in r.getMessage()]
+
+
+def test_partial_coverage_above_half_warns_and_writes_only_the_covered_rows(
+    cohort, tmp_path, caplog
+):
+    """`acquire custom` accepts a label file describing half the .fam and `run`
+    draws the rest grey; filtering must not turn that into an error hours later."""
+    ids = read_fam_ids(cohort.fit.plink)
+    partial = _labels_covering(cohort, 0.6, tmp_path / "partial.csv")
+    out = tmp_path / "out.csv"
+    with caplog.at_level("WARNING"):
+        n = filter_labels_to_fam(partial, cohort.fit.plink, out)
+
+    covered = ids[: int(len(ids) * 0.6)]
+    written = pd.read_csv(out, dtype=str)
+    assert n == len(covered)
+    assert list(written["sample_id"]) == covered, "the covered rows, in .fam order"
+    warnings = [r.getMessage() for r in caplog.records if "drawn grey" in r.getMessage()]
+    assert len(warnings) == 1
+    assert f"{len(ids) - len(covered)} of {len(ids)}" in warnings[0]
+    assert ids[-1] in warnings[0] or ids[len(covered)] in warnings[0], "names uncovered ids"
+
+
 def test_labels_that_do_not_cover_the_fam_are_an_error(cohort, tmp_path):
-    partial = tmp_path / "partial.csv"
-    pd.read_csv(cohort.project.labels).iloc[:5].to_csv(partial, index=False)
-    with pytest.raises(ValueError, match="not in"):
+    """Below MIN_LABEL_COVERAGE the file does not describe this cohort."""
+    partial = _labels_covering(cohort, 0.3, tmp_path / "partial.csv")
+    with pytest.raises(ValueError, match="not in") as excinfo:
         filter_labels_to_fam(partial, cohort.fit.plink, tmp_path / "out.csv")
+    assert "30.0%" in str(excinfo.value)
+    assert f"{MIN_LABEL_COVERAGE:.0%}" in str(excinfo.value)
+    assert not (tmp_path / "out.csv").exists()
+
+
+def test_check_label_coverage_reports_the_fraction_and_applies_the_same_rule(cohort, tmp_path):
+    assert check_label_coverage(cohort.project.labels, cohort.fit.plink) == 1.0
+    partial = _labels_covering(cohort, 0.6, tmp_path / "partial.csv")
+    assert check_label_coverage(partial, cohort.fit.plink) == pytest.approx(0.6, abs=0.01)
+    too_few = _labels_covering(cohort, 0.3, tmp_path / "too_few.csv")
+    with pytest.raises(ValueError, match="30.0%"):
+        check_label_coverage(too_few, cohort.fit.plink)
+
+
+def test_the_threshold_is_shared_with_acquire(cohort):
+    """One rule: what `acquire custom` and `acquire aou` accept, `preprocess`
+    and `subsample` accept too."""
+    import inspect
+
+    from manifold_genetics import aou, scaffold
+
+    assert aou._MIN_LABEL_OVERLAP is MIN_LABEL_COVERAGE
+    default = inspect.signature(scaffold.acquire_custom).parameters["min_overlap"].default
+    assert default is MIN_LABEL_COVERAGE
 
 
 def test_labels_with_a_duplicate_sample_id_do_not_expand_the_output(cohort, tmp_path):

@@ -153,3 +153,41 @@ def test_missing_shell_output_raises_runtime_error(tmp_path, tools):
     acquire_synthetic(tmp_path / "in")
     with pytest.raises(RuntimeError, match="fit_subset"):
         preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=lambda argv: None)
+
+
+def _cut_labels_to(fraction, config_dir):
+    """Rewrite the cohort's labels.csv to cover only ``fraction`` of the .fam."""
+    fam = pd.read_csv(config_dir / "data/project_subset.fam", sep=r"\s+", header=None, dtype=str)
+    keep = set(fam[1].iloc[: int(len(fam) * fraction)])
+    labels_path = config_dir / "data/labels.csv"
+    labels = pd.read_csv(labels_path, dtype=str)
+    labels[labels["sample_id"].isin(keep)].to_csv(labels_path, index=False)
+
+
+def test_labels_below_half_coverage_fail_before_the_shell_runs(tmp_path, tools):
+    """The shell takes hours and removes no samples, so the input's coverage is
+    the output's: check it first."""
+    acquire_synthetic(tmp_path / "in")
+    _cut_labels_to(0.3, tmp_path / "in")
+    calls = []
+
+    def shell(argv):
+        calls.append(argv)
+        _fake_shell(argv)
+
+    with pytest.raises(ValueError, match="30.0%"):
+        preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=shell)
+    assert calls == [], "the shell must not have been started"
+    assert not (tmp_path / "out/config.yaml").exists()
+
+
+def test_labels_above_half_coverage_run_and_keep_the_covered_rows(tmp_path, tools, caplog):
+    acquire_synthetic(tmp_path / "in")
+    _cut_labels_to(0.6, tmp_path / "in")
+    with caplog.at_level("WARNING"):
+        config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
+    fam = pd.read_csv(tmp_path / "out/data/project_subset.fam", sep=r"\s+", header=None, dtype=str)
+    labels = pd.read_csv(load_config(config)["labels"], dtype=str)
+    assert len(labels) == int(len(fam) * 0.6)
+    assert set(labels["sample_id"]) <= set(fam[1])
+    assert any("drawn grey" in r.getMessage() for r in caplog.records)

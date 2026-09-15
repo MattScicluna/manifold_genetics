@@ -34,6 +34,7 @@ from .aou import _AOU_CONFIG  # noqa: F401
 from .aou import _AOU_REQUIRED_ENV  # noqa: F401
 from .aou import _AOU_REQUIRED_TOOLS  # noqa: F401
 from .aou import acquire_aou, aou_environment_problems  # noqa: F401
+from .preprocessing.cohort import MIN_LABEL_COVERAGE
 from .utils.tools import fetch_url
 
 logger = logging.getLogger(__name__)
@@ -936,8 +937,8 @@ def _checked_labels(labels: Path, plink: Path, min_overlap: float) -> pd.DataFra
     if overlap < min_overlap:
         raise ValueError(
             f"{labels} describes {overlap:.1%} of the samples in {plink}.fam. "
-            "Below 50% these are treated as different datasets: a label file that "
-            "half-matches produces figures that colour half the points and look "
+            f"Below {min_overlap:.0%} these are treated as different datasets: a label file "
+            "that half-matches produces figures that colour half the points and look "
             "finished. Check the two describe the same cohort."
         )
     if overlap < 1.0:
@@ -959,7 +960,7 @@ def acquire_custom(
     preset: str = "whole_cohort",
     n_pcs: int = 20,
     force: bool = False,
-    min_overlap: float = 0.5,
+    min_overlap: float = MIN_LABEL_COVERAGE,
 ) -> Path:
     """Write a config and colormap for genotypes you already have.
 
@@ -984,7 +985,8 @@ def acquire_custom(
         n_pcs: Components to compute.
         force: Overwrite an existing ``config.yaml``.
         min_overlap: Refuse if fewer than this fraction of genotyped samples
-            appear in the label file.
+            appear in the label file. The default is the rule every command
+            applies (``preprocessing.cohort.MIN_LABEL_COVERAGE``).
 
     Returns:
         The path of the config file written.

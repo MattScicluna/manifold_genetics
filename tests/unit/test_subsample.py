@@ -269,3 +269,26 @@ class TestSubsample:
                 pca=tmp_path / "pca.csv",
                 keep_runner=_fake_keep,
             )
+
+    def test_labels_below_half_coverage_fail_before_plink_runs(self, cohort, tmp_path):
+        """The fit set is drawn from the project .fam, so its label coverage can
+        only be the input's: check that before plink2 --keep is started."""
+        fam = [line.split() for line in open(tmp_path / "in/data/project_subset.fam")]
+        keep_ids = {f[1] for f in fam[: int(len(fam) * 0.3)]}
+        labels_path = tmp_path / "in/data/labels.csv"
+        labels = pd.read_csv(labels_path, dtype=str)
+        labels[labels["sample_id"].isin(keep_ids)].to_csv(labels_path, index=False)
+        calls = []
+
+        def keep_runner(*args):
+            calls.append(args)
+            _fake_keep(*args)
+
+        with pytest.raises(ValueError, match="30.0%"):
+            subsample(
+                cohort,
+                tmp_path / "out",
+                fit_samples=tmp_path / "in/data/project_subset.fam",
+                keep_runner=keep_runner,
+            )
+        assert calls == [], "plink must not have been started"
