@@ -149,8 +149,8 @@ produced the published figures, shipped inside the package, and needs `bash`,
 | preset | what runs |
 |---|---|
 | `--preset intersect-only` | indels, missingness, intersection — no external references |
-| `--preset harmonise` | everything: WRayner/TOPMed, GIAB, HLA, dedup, MAF, LD pruning, `--cleanup` |
-| *(none)* | the shell defaults; add `--skip-*` flags |
+| `--preset harmonise` | WRayner/TOPMed, GIAB, HLA, dedup, MAF on the reference side only (`--skip-project-maf`), LD pruning, `--cleanup` |
+| *(none)* | the shell defaults: every step on, MAF on both sides; add `--skip-*` flags |
 
 - `--skip-wrayner`, `--skip-giab`, `--skip-hla`, `--skip-ld-prune`,
   `--skip-dedup`, `--skip-maf`, `--skip-geno`, `--skip-project-maf` turn off
@@ -210,10 +210,12 @@ have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
 
 `--preprocessing` also fetches the GIAB, WRayner and TOPMed references that
-`preprocess --preset harmonise` needs (about 1 GB), into the cache's
-`preprocessing/` subdirectory. The WRayner URL currently returns 404 upstream,
-so that one fails; [Preprocessing](preprocessing.md#what-needs-internet) says
-where to place the file by hand.
+`preprocess --preset harmonise` needs (about 2 GB, most of it TOPMed), in that
+order, into the cache's `preprocessing/` subdirectory. The WRayner URL
+currently returns 404 upstream, so today it places GIAB, fails on WRayner and
+does not reach TOPMed; [Preprocessing](preprocessing.md#what-needs-internet)
+says where to place the file by hand, after which re-running it fetches the
+rest.
 
 ## Exit codes and logging
 

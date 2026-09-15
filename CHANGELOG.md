@@ -59,8 +59,8 @@ chooses the fit samples. Each reads a cohort directory and writes one.
   the published figures — orchestrated from Python: it takes one or two cohort
   configs, resolves `plink2` and `plink` through the tool resolver, runs the
   shell, re-filters the labels and writes a new cohort directory. Presets
-  `intersect-only` (no external references) and `harmonise` (everything,
-  including WRayner/TOPMed) reproduce the `examples/generic` and All of Us
+  `intersect-only` (no external references) and `harmonise` (every step,
+  including WRayner/TOPMed, with MAF on the reference side only) reproduce the `examples/generic` and All of Us
   wrappers; the UK Biobank flow is `--skip-wrayner --skip-project-maf`.
   Verified against the real data: the UK Biobank projection is reproduced from
   the raw inputs (3,340 × 120,849 fit, 486,748 × 120,849 project, identical to
@@ -78,10 +78,12 @@ chooses the fit samples. Each reads a cohort directory and writes one.
   `examples/aou/shared/select_samples.py` to any cohort directory, with the
   label column named rather than guessed.
 - **`setup --preprocessing`**: prefetch the GIAB, WRayner and TOPMed references
-  the `harmonise` preset needs (about 1 GB), for compute nodes without
-  internet. The WRayner upstream URL returns 404 at the time of this release,
-  so that one fails; the Preprocessing page says where to place the file by
-  hand, or pass `--tools-dir`.
+  the `harmonise` preset needs (about 2 GB, most of it TOPMed), for compute
+  nodes without internet. The WRayner upstream URL returns 404 at the time of
+  this release, so it stops there — GIAB placed, TOPMed not reached — and the
+  shell's own download of the same URL fails too; the Preprocessing page says
+  where to place the file by hand (after which a re-run fetches TOPMed), or
+  pass `--tools-dir`.
 - **A Preprocessing page** in the documentation, with the cohort directory
   layout, the presets, and the UK Biobank and All of Us flows as commands.
 - **`acquire synthetic` draws the tree the cohort lies along**, as
@@ -294,6 +296,7 @@ not yet been verified end to end -- so expect further breaking changes before
 - `examples/_shared/run_pipeline.sh`, `examples/_shared/detect_cluster.sh` and
   the nine per-example `run_pipeline.sh` wrappers, superseded by config files.
 
-[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.1
 [0.2.0]: https://pypi.org/project/manifold-genetics/0.2.0/

@@ -60,8 +60,8 @@ that produced the published figures, shipped inside the package. It needs
 | preset | what runs | reproduces |
 |---|---|---|
 | `--preset intersect-only` | indel removal, missingness (`--geno`), position intersection | the `examples/generic` flows |
-| `--preset harmonise` | everything: WRayner/TOPMed allele checks, GIAB difficult regions, HLA, deduplication, MAF, LD pruning, intersection; `--cleanup` | the All of Us flow |
-| *(none)* | the shell's defaults; add `--skip-*` flags | the UK Biobank flow is `--skip-wrayner --skip-project-maf` |
+| `--preset harmonise` | WRayner/TOPMed allele checks, GIAB difficult regions, HLA, deduplication, MAF on the reference side only (`--skip-project-maf`), LD pruning, intersection; `--cleanup` | the All of Us flow |
+| *(none)* | the shell's defaults: every step on, MAF on both sides; add `--skip-*` flags | the UK Biobank flow is `--skip-wrayner --skip-project-maf` — `harmonise` minus WRayner, without `--cleanup` |
 
 Every step has a `--skip-*` flag (`--skip-wrayner`, `--skip-giab`,
 `--skip-hla`, `--skip-ld-prune`, `--skip-dedup`, `--skip-maf`, `--skip-geno`,
@@ -86,27 +86,40 @@ and a reproduction has to start from the same one.
 
 ### What needs internet
 
-`intersect-only` needs nothing beyond `plink2`. `harmonise` downloads three
-references on first use — the GIAB difficult-regions bed, the WRayner
-`HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 1 GB
-together) — into the tool cache. On a cluster whose compute nodes have no
-internet, prefetch them on a login node:
+`intersect-only` needs nothing beyond `plink2`. `harmonise` needs three
+references — the GIAB difficult-regions bed, the WRayner
+`HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 2 GB
+together, most of it TOPMed) — which the shell downloads into the tool cache
+when they are missing. On a cluster whose compute nodes have no internet,
+prefetch them on a login node:
 
 ```bash
 manifold-genetics setup --preprocessing
 ```
 
-**The WRayner download currently fails.** Its upstream URL
+**The WRayner download currently fails, everywhere.** Its upstream URL
 (`https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip`)
-returns 404 as of this release, so `setup --preprocessing` fetches GIAB and
-TOPMed and then fails on WRayner. Until upstream is back, place a copy of
-`HRC-1000G-check-bim.pl` (MIT-licensed; it circulates in many imputation
-pipelines) at `<tools-dir>/wrayner/HRC-1000G-check-bim.pl` by hand, where
-`<tools-dir>` is the tool cache's `preprocessing/` subdirectory:
+returns 404 as of this release. `setup --preprocessing` fetches the references
+in order — GIAB, then WRayner, then TOPMed — and stops at the first failure,
+so today it places GIAB, fails on WRayner, and never reaches TOPMed. The shell
+itself fetches the same URL when it finds no checker, so `--preset harmonise`
+dies at its WRayner step on any machine, internet or not, until the file is in
+place. Until upstream is back:
 
-```bash
-python -c "from manifold_genetics.preprocessing.references import default_tools_dir; print(default_tools_dir())"
-```
+1. Place a copy of `HRC-1000G-check-bim.pl` (MIT-licensed; it circulates in
+   many imputation pipelines) at `<tools-dir>/wrayner/HRC-1000G-check-bim.pl`,
+   where `<tools-dir>` is the tool cache's `preprocessing/` subdirectory:
+
+    ```bash
+    python -c "from manifold_genetics.preprocessing.references import default_tools_dir; print(default_tools_dir())"
+    ```
+
+    Comment out its `--recode vcf` line — the one beginning
+    `print SH "$plink --bfile $newfile --real-ref-alleles --recode vcf` — as
+    the fetcher does, so it does not write a VCF nobody reads.
+
+2. Re-run `manifold-genetics setup --preprocessing`. It is idempotent: it
+   leaves GIAB and the hand-placed checker alone and fetches TOPMed.
 
 Or pass `--tools-dir DIR` to `preprocess` with a directory laid out the same
 way. `--skip-wrayner` sidesteps the whole step, which is what the UK Biobank
@@ -137,8 +150,8 @@ threshold, and usually the right fix is upstream (different builds, or a
 
 ```bash
 manifold-genetics subsample proj/config.yaml --out 10k/ \
-    --group "ethnic_background=British:10000" \
-    --group "ethnic_background=Irish:5000"
+    --group "self_described_ancestry=^British$:10000" \
+    --group "self_described_ancestry=^Irish$:5000"
 ```
 
 Reads a cohort directory and writes one whose fit set is a chosen subset of its
@@ -151,9 +164,10 @@ of the biobank.
 Choose the samples by exactly one of:
 
 - `--group COLUMN=PATTERN:COUNT`, repeatable. `PATTERN` is a case-insensitive
-  regex matched against `COLUMN` of the label file; `COUNT` samples are drawn
-  from the matches with `--seed` (default 42), or all of them if there are
-  fewer. A sample is taken at most once across groups. `--include-rest` appends
+  regex *searched for* in `COLUMN` of the label file — a substring match, so
+  `British` also takes `Black or Black British`; anchor it (`^British$`) to
+  mean the whole value. `COUNT` samples are drawn from the matches with
+  `--seed` (default 42), or all of them if there are fewer. A sample is taken at most once across groups. `--include-rest` appends
   every sample no group matched. For All of Us:
 
     ```bash
@@ -185,7 +199,9 @@ Choose the samples by exactly one of:
 ### UK Biobank projected onto HGDP+1KGP
 
 UK Biobank is `acquire custom` with your own paths — there is nothing for the
-package to fetch and no label schema to derive. Then intersect the two, skipping
+package to fetch and no label schema to derive; the label CSV needs a
+`sample_id` column plus one column per grouping (see
+[Formats](formats.md#inputs)). Then intersect the two, skipping
 WRayner (no internet on the compute node) and MAF filtering on the biobank side:
 
 ```bash
@@ -202,8 +218,11 @@ on the fit side and 486,748 × 120,849 on the project side. Peak memory was
 ### All of Us, in the Researcher Workbench
 
 Four commands, each resumable, in a terminal or a notebook cell prefixed with
-`!`. The workbench has internet, so `harmonise` fetches its references as it
-goes. `acquire hgdp` writes the workbench's HGDP+1KGP panel with `chr`-prefixed
+`!`. The workbench has internet, so `harmonise` can fetch GIAB and TOPMed as it
+goes — but not WRayner, whose upstream URL is down (see
+[What needs internet](#what-needs-internet)): place `HRC-1000G-check-bim.pl`
+by hand or pass `--tools-dir` before running `preprocess`, or the run dies at
+that step. `acquire hgdp` writes the workbench's HGDP+1KGP panel with `chr`-prefixed
 chromosome names, as the published flow did, hence `--fit-has-chr-prefix`.
 
 ```bash
@@ -228,7 +247,7 @@ Subsetting comes after preprocessing, so every filter sees the whole cohort:
 ```bash
 manifold-genetics preprocess ref/config.yaml ukbb/config.yaml --skip-wrayner --skip-project-maf --out proj/
 manifold-genetics subsample proj/config.yaml --out 10k/ \
-    --group "ethnic_background=British:10000" \
-    --group "ethnic_background=Irish:5000"
+    --group "self_described_ancestry=^British$:10000" \
+    --group "self_described_ancestry=^Irish$:5000"
 manifold-genetics run 10k/config.yaml
 ```
