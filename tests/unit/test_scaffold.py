@@ -220,9 +220,9 @@ class TestHgdpWithoutWorkingNetwork:
         (raw / "full_dataset.bim").write_text("1 rs0 0 1 A G\n")
         (raw / "full_dataset.fam").write_text("s1 s1 0 0 0 -9\n")
         (raw / "metadata.csv").write_text(
-            "project_meta.sample_id,Genetic_region_merged,filter_pca_outlier,"
+            "project_meta.sample_id,Population,Genetic_region_merged,filter_pca_outlier,"
             "hard_filtered,filter_king_related,filter_contaminated\n"
-            "s1,Africa,False,False,False,False\n"
+            "s1,Yoruba,Africa,False,False,False,False\n"
         )
         path = tmp_path / "hgdp_1kgp_full.tar.gz"
         with tarfile.open(path, "w:gz") as tar:
@@ -409,9 +409,10 @@ class TestHgdpLayouts:
         (src / "full_dataset.bim").write_text("1\trs1\t0\t100\tA\tG\n22\trs2\t0\t200\tC\tT\n")
         (src / "full_dataset.fam").write_text("S1\tS1\t0\t0\t0\t-9\nS2\tS2\t0\t0\t0\t-9\n")
         (src / "metadata.csv").write_text(
-            "project_meta.sample_id,Genetic_region_merged,filter_pca_outlier,"
+            "project_meta.sample_id,Population,Genetic_region_merged,filter_pca_outlier,"
             "hard_filtered,filter_king_related,filter_contaminated\n"
-            "S1,Africa,False,False,False,False\nS2,Europe,False,False,True,False\n"
+            "S1,Yoruba,Africa,False,False,False,False\n"
+            "S2,French,Europe,False,False,True,False\n"
         )
         archive = tmp_path / "hgdp_1kgp_full.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
@@ -583,6 +584,7 @@ class TestHgdpLabels:
         return pd.DataFrame(
             {
                 "project_meta.sample_id": ["a", "b", "c"],
+                "Population": ["Yoruba", "French", "Han"],
                 "Genetic_region_merged": ["Africa", "Europe", "East_Asia"],
                 "filter_pca_outlier": [False] * 3,
                 "hard_filtered": [False] * 3,
@@ -602,8 +604,23 @@ class TestHgdpLabels:
         )
 
         labels = pd.read_csv(tmp_path / "labels.csv")
-        assert sorted(labels.iloc[:, 1]) == ["Africa", "East_Asia", "Europe"]
-        assert "Unknown" not in set(labels.iloc[:, 1])
+        assert sorted(labels["Genetic_region_merged"]) == ["Africa", "East_Asia", "Europe"]
+        assert "Unknown" not in set(labels["Genetic_region_merged"])
+
+    def test_labels_carry_the_population(self, tmp_path, metadata):
+        """The published run's labels.csv is `sample_id, Population, Genetic_region_merged`."""
+        from manifold_genetics.scaffold import _write_hgdp_labels
+
+        _write_hgdp_labels(
+            metadata,
+            metadata["project_meta.sample_id"],
+            tmp_path / "labels.csv",
+            tmp_path / "colormap.json",
+        )
+
+        labels = pd.read_csv(tmp_path / "labels.csv")
+        assert list(labels.columns) == ["sample_id", "Population", "Genetic_region_merged"]
+        assert sorted(labels["Population"]) == ["French", "Han", "Yoruba"]
 
     def test_the_colormap_uses_the_published_colours(self, tmp_path, metadata):
         """So a figure from `acquire hgdp` is comparable with the shipped example's."""
@@ -617,9 +634,23 @@ class TestHgdpLabels:
         )
 
         colours = json.loads((tmp_path / "colormap.json").read_text())
-        column = next(iter(colours))
-        assert colours[column]["Africa"] == "#008000"
-        assert colours[column]["East_Asia"] == "#0000FF"
+        assert set(colours) == {"Population", "Genetic_region_merged"}
+        assert colours["Genetic_region_merged"]["Africa"] == "#008000"
+        assert colours["Genetic_region_merged"]["East_Asia"] == "#0000FF"
+        assert colours["Population"]["Yoruba"] == "#008000"
+        assert colours["Population"]["French"] == "#800080"
+
+    def test_the_colormap_has_a_published_colour_for_every_population(self):
+        """So a figure from `acquire hgdp` colours every population as the published one did."""
+        from manifold_genetics.scaffold import _HGDP_POPULATION_COLOURS
+
+        example = Path(__file__).resolve().parents[2] / "examples" / "colormaps" / "hgdp_1kgp.json"
+        if not example.exists():
+            pytest.skip(f"{example} not present")
+
+        published = json.loads(example.read_text())["Population"]
+        assert len(_HGDP_POPULATION_COLOURS) == 78
+        assert _HGDP_POPULATION_COLOURS == published
 
     def test_a_missing_region_column_is_an_error_not_a_placeholder(self, tmp_path, metadata):
         from manifold_genetics.scaffold import _write_hgdp_labels

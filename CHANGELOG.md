@@ -7,6 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships
+  the published colours for both, as the `examples/hgdp_1kgp` run did.
+
 ## [0.3.0] - 2026-09-14
 
 The release that takes a cohort from raw biobank PLINK files to a figure

@@ -33,6 +33,10 @@ and the 3,400 of those that are also unrelated, using the flags in the archive's
 filtering, because the archive arrives with that already done. It needs
 internet, so on a cluster run it on a login node.
 
+Labels carry both `Population` and `Genetic_region_merged`, and the colormap
+ships the published colours for each — 78 population colours plus the 7 region
+ones — so a figure from `acquire hgdp` is comparable with the published ones.
+
 You can also point `acquire` at archived data:
 
 ```bash
