@@ -354,7 +354,10 @@ print_header "Filtering Biobank Data"
 
 BIOBANK_FILTERED="${TEMP_DIR}/biobank_filtered"
 
-if [[ ! -f "${BIOBANK_FILTERED}.bed" ]]; then
+if ! bed_is_complete "${BIOBANK_FILTERED}"; then
+    if [[ -f "${BIOBANK_FILTERED}.bed" ]]; then
+        print_warning "${BIOBANK_FILTERED}.bed is incomplete; redoing this step"
+    fi
     # Determine if MAF should be skipped for biobank (either --skip-maf or --skip-biobank-maf)
     SKIP_BIOBANK_MAF_EFFECTIVE=false
     if [[ "$SKIP_MAF" == "true" ]] || [[ "$SKIP_BIOBANK_MAF" == "true" ]]; then
@@ -414,7 +417,10 @@ print_header "Filtering Reference Data"
 REFERENCE_FILTERED="${TEMP_DIR}/reference_filtered"
 REFERENCE_INPUT="$REFERENCE_PLINK"
 
-if [[ ! -f "${REFERENCE_FILTERED}.bed" ]]; then
+if ! bed_is_complete "${REFERENCE_FILTERED}"; then
+    if [[ -f "${REFERENCE_FILTERED}.bed" ]]; then
+        print_warning "${REFERENCE_FILTERED}.bed is incomplete; redoing this step"
+    fi
     INITIAL_REF_SNPS=$(get_snp_count "$REFERENCE_INPUT")
     echo "  Initial reference SNPs: $INITIAL_REF_SNPS"
 
@@ -653,7 +659,10 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
     BIOBANK_WRAYNER_DIR="${TEMP_DIR}/biobank_wrayner"
     mkdir -p "${BIOBANK_WRAYNER_DIR}"
 
-    if [[ ! -f "${BIOBANK_HARMONIZED}.bed" ]]; then
+    if ! bed_is_complete "${BIOBANK_HARMONIZED}"; then
+        if [[ -f "${BIOBANK_HARMONIZED}.bed" ]]; then
+            print_warning "${BIOBANK_HARMONIZED}.bed is incomplete; redoing this step"
+        fi
         # Create temporary PLINK files without "chr" prefix (WRayner expects numeric chromosomes)
         echo "    Creating temporary PLINK files without chr prefix for WRayner..."
         sed 's/^chr//' "${BIOBANK_FILTERED}.bim" > "${BIOBANK_WRAYNER_DIR}/biobank_nochr.bim"
@@ -751,7 +760,10 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
 
     # Standardize reference SNP IDs to match biobank format
     REFERENCE_STANDARDIZED="${TEMP_DIR}/reference_standardized"
-    if [[ ! -f "${REFERENCE_STANDARDIZED}.bed" ]]; then
+    if ! bed_is_complete "${REFERENCE_STANDARDIZED}"; then
+        if [[ -f "${REFERENCE_STANDARDIZED}.bed" ]]; then
+            print_warning "${REFERENCE_STANDARDIZED}.bed is incomplete; redoing this step"
+        fi
         print_status "[5d] Standardizing reference SNP IDs..."
         cp "${REFERENCE_FILTERED}.bim" "${TEMP_DIR}/reference_filtered.bim.bkp"
         awk '{chr=$1; if(substr(chr,1,3)!="chr") chr="chr"chr; print $1"\t"chr":"$4":"$6":"$5"\t"$3"\t"$4"\t"$5"\t"$6}' \
@@ -784,14 +796,20 @@ print_status "Standardizing SNP IDs to chr:pos:ref:alt format..."
 REF_STD_IDS="${TEMP_DIR}/reference_standardized_ids"
 BIO_STD_IDS="${TEMP_DIR}/biobank_standardized_ids"
 
-if [[ ! -f "${REF_STD_IDS}.bed" ]]; then
+if ! bed_is_complete "${REF_STD_IDS}"; then
+    if [[ -f "${REF_STD_IDS}.bed" ]]; then
+        print_warning "${REF_STD_IDS}.bed is incomplete; redoing this step"
+    fi
     ${PLINK2} --bfile "${REFERENCE_STANDARDIZED}" \
         --set-all-var-ids '@:#:$r:$a' \
         --new-id-max-allele-len 100 \
         --make-bed --out "${REF_STD_IDS}"
 fi
 
-if [[ ! -f "${BIO_STD_IDS}.bed" ]]; then
+if ! bed_is_complete "${BIO_STD_IDS}"; then
+    if [[ -f "${BIO_STD_IDS}.bed" ]]; then
+        print_warning "${BIO_STD_IDS}.bed is incomplete; redoing this step"
+    fi
     ${PLINK2} --bfile "${BIOBANK_STANDARDIZED}" \
         --set-all-var-ids '@:#:$r:$a' \
         --new-id-max-allele-len 100 \
@@ -912,7 +930,10 @@ fi
 REFERENCE_INTERSECTED_PRE="${TEMP_DIR}/reference_intersected_pre_prune"
 BIOBANK_INTERSECTED_PRE="${TEMP_DIR}/biobank_intersected_pre_prune"
 
-if [[ ! -f "${REFERENCE_INTERSECTED_PRE}.bed" ]]; then
+if ! bed_is_complete "${REFERENCE_INTERSECTED_PRE}"; then
+    if [[ -f "${REFERENCE_INTERSECTED_PRE}.bed" ]]; then
+        print_warning "${REFERENCE_INTERSECTED_PRE}.bed is incomplete; redoing this step"
+    fi
     print_status "Creating reference intersected dataset..."
     REFERENCE_CMD="${PLINK2} --bfile ${REFERENCE_STANDARDIZED} --extract ${TEMP_DIR}/final_common_snps.txt"
     if [[ $FLIP_COUNT -gt 0 ]]; then
@@ -922,7 +943,10 @@ if [[ ! -f "${REFERENCE_INTERSECTED_PRE}.bed" ]]; then
     eval $REFERENCE_CMD
 fi
 
-if [[ ! -f "${BIOBANK_INTERSECTED_PRE}.bed" ]]; then
+if ! bed_is_complete "${BIOBANK_INTERSECTED_PRE}"; then
+    if [[ -f "${BIOBANK_INTERSECTED_PRE}.bed" ]]; then
+        print_warning "${BIOBANK_INTERSECTED_PRE}.bed is incomplete; redoing this step"
+    fi
     print_status "Creating biobank intersected dataset..."
     ${PLINK2} --bfile ${BIOBANK_STANDARDIZED} \
         --extract ${TEMP_DIR}/final_common_snps.txt \
@@ -965,7 +989,10 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
     PRUNE_IN_COUNT=$(wc -l < "${REFERENCE_PRUNE_PREFIX}.prune.in")
     print_success "SNPs retained after LD pruning: ${PRUNE_IN_COUNT}"
     #modified by JC 28/01/2026
-    if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+    if ! bed_is_complete "${TEMP_DIR}/reference_intersected"; then
+        if [[ -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+            print_warning "${TEMP_DIR}/reference_intersected.bed is incomplete; redoing this step"
+        fi
         print_status "Applying prune list to reference..."
         ${PLINK2} --bfile ${REFERENCE_INTERSECTED_PRE} \
             --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
@@ -974,7 +1001,10 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
             --out ${TEMP_DIR}/reference_intersected
     fi
     #modified by JC 28/01/2026
-    if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+    if ! bed_is_complete "${TEMP_DIR}/biobank_intersected"; then
+        if [[ -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+            print_warning "${TEMP_DIR}/biobank_intersected.bed is incomplete; redoing this step"
+        fi
         print_status "Applying prune list to biobank..."
         ${PLINK2} --bfile ${BIOBANK_INTERSECTED_PRE} \
             --extract ${REFERENCE_PRUNE_PREFIX}.prune.in \
@@ -993,12 +1023,18 @@ if [[ "$SKIP_LD_PRUNE" != "true" ]]; then
 else
     print_header "Skipping LD Pruning"
     # Copy pre-prune files as final intersected files
-    if [[ ! -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+    if ! bed_is_complete "${TEMP_DIR}/reference_intersected"; then
+        if [[ -f "${TEMP_DIR}/reference_intersected.bed" ]]; then
+            print_warning "${TEMP_DIR}/reference_intersected.bed is incomplete; redoing this step"
+        fi
         cp ${REFERENCE_INTERSECTED_PRE}.bed ${TEMP_DIR}/reference_intersected.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
         cp ${REFERENCE_INTERSECTED_PRE}.bim ${TEMP_DIR}/reference_intersected.bim
         cp ${REFERENCE_INTERSECTED_PRE}.fam ${TEMP_DIR}/reference_intersected.fam
     fi
-    if [[ ! -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+    if ! bed_is_complete "${TEMP_DIR}/biobank_intersected"; then
+        if [[ -f "${TEMP_DIR}/biobank_intersected.bed" ]]; then
+            print_warning "${TEMP_DIR}/biobank_intersected.bed is incomplete; redoing this step"
+        fi
         cp ${BIOBANK_INTERSECTED_PRE}.bed ${TEMP_DIR}/biobank_intersected.bed #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
         cp ${BIOBANK_INTERSECTED_PRE}.bim ${TEMP_DIR}/biobank_intersected.bim
         cp ${BIOBANK_INTERSECTED_PRE}.fam ${TEMP_DIR}/biobank_intersected.fam
@@ -1013,7 +1049,10 @@ print_header "Creating Final Datasets"
 print_status "Creating final processed subsets..."
 
 # Create fit_subset (reference)
-if [[ ! -f "${OUTPUT_DIR}/fit_subset.bed" ]]; then
+if ! bed_is_complete "${OUTPUT_DIR}/fit_subset"; then
+    if [[ -f "${OUTPUT_DIR}/fit_subset.bed" ]]; then
+        print_warning "${OUTPUT_DIR}/fit_subset.bed is incomplete; redoing this step"
+    fi
     cp "${TEMP_DIR}/reference_intersected.bed" "${OUTPUT_DIR}/fit_subset.bed" #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
     cp "${TEMP_DIR}/reference_intersected.bim" "${OUTPUT_DIR}/fit_subset.bim"
     cp "${TEMP_DIR}/reference_intersected.fam" "${OUTPUT_DIR}/fit_subset.fam"
@@ -1022,7 +1061,10 @@ else
 fi
 
 # Create project_subset (biobank)
-if [[ ! -f "${OUTPUT_DIR}/project_subset.bed" ]]; then
+if ! bed_is_complete "${OUTPUT_DIR}/project_subset"; then
+    if [[ -f "${OUTPUT_DIR}/project_subset.bed" ]]; then
+        print_warning "${OUTPUT_DIR}/project_subset.bed is incomplete; redoing this step"
+    fi
     cp "${TEMP_DIR}/biobank_intersected.bed" "${OUTPUT_DIR}/project_subset.bed" #this could be big, make sure you remove the older file or could be a symlink if the other copy is kept
     cp "${TEMP_DIR}/biobank_intersected.bim" "${OUTPUT_DIR}/project_subset.bim"
     cp "${TEMP_DIR}/biobank_intersected.fam" "${OUTPUT_DIR}/project_subset.fam"

@@ -140,13 +140,13 @@ they are consumed, which matters for a biobank-sized `.bed`.
 
 ### Troubleshooting
 
-`preprocess` resumes: a step whose output already exists is skipped. It checks
-that intermediates *exist*, not that they are complete — so after an
-out-of-memory kill, delete the partial files under `OUT/data/temp/` before
-re-running, or a truncated `.bed` will be picked up as finished. For the same
-reason `--force` only rewrites the config and labels: to recompute with
-different flags, use a new `--out` or delete `OUT/data/temp`, because the
-shell reuses every intermediate that exists.
+`preprocess` resumes: a step whose output already exists and is complete is
+skipped. After an out-of-memory kill, a truncated `.bed` under
+`OUT/data/temp/` is not mistaken for a finished output — an incomplete
+intermediate is detected and redone on the next run. `--force` still only
+rewrites the config and labels: to recompute with different flags, use a new
+`--out` or delete `OUT/data/temp`, because the shell otherwise reuses every
+complete intermediate that exists.
 
 If the two cohorts share fewer than 50,000 SNPs the run aborts rather than
 producing a projection nobody should trust; `--min-common-snps` changes the

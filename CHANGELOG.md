@@ -11,6 +11,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships
   the published colours for both, as the `examples/hgdp_1kgp` run did.
+- `preprocess` no longer resumes from a truncated `.bed` left by an OOM-killed
+  run; checkpoints now verify PLINK 1 file size, not just existence, and
+  redo an incomplete step instead of reusing it.
 
 ## [0.3.0] - 2026-09-14
 

@@ -74,6 +74,40 @@ def read_fam_ids(prefix: PathLike) -> List[str]:
     return list(fam[1])
 
 
+def _count_lines(path: PathLike) -> int:
+    # Not pandas: this only needs a line count, and pandas' startup and dtype
+    # inference cost is wasted on a check that runs on every preprocess call.
+    count = 0
+    with open(path, "rb") as fh:
+        for _ in fh:
+            count += 1
+    return count
+
+
+def bed_expected_size(prefix: PathLike) -> int:
+    """Bytes a complete PLINK 1 SNP-major ``.bed`` must have for ``prefix``.
+
+    A 3-byte magic header plus one packed byte-column per variant, each column
+    ``ceil(n_samples / 4)`` bytes (four 2-bit genotypes per byte).
+    """
+    n_variants = _count_lines(f"{prefix}.bim")
+    n_samples = _count_lines(f"{prefix}.fam")
+    return 3 + n_variants * ((n_samples + 3) // 4)
+
+
+def bed_is_complete(prefix: PathLike) -> bool:
+    """Whether ``prefix.bed`` is the full file rather than a truncated write.
+
+    Python counterpart of ``preprocessing/common.sh``'s ``bed_is_complete``: an
+    OOM-killed preprocessing run once left a partial ``.bed`` on disk, and an
+    existence-only check treated it as a finished output on the next run.
+    """
+    bed, bim, fam = Path(f"{prefix}.bed"), Path(f"{prefix}.bim"), Path(f"{prefix}.fam")
+    if not (bed.exists() and bim.exists() and fam.exists()):
+        return False
+    return bed.stat().st_size == bed_expected_size(prefix)
+
+
 # The one label-coverage rule. `acquire custom` and `acquire aou` accept a label
 # file that describes at least this fraction of the .fam and `run` draws the
 # rest grey; `preprocess` and `subsample` apply the same rule, and check it
@@ -200,6 +234,8 @@ __all__ = [
     "MIN_LABEL_COVERAGE",
     "CohortConfig",
     "Side",
+    "bed_expected_size",
+    "bed_is_complete",
     "check_label_coverage",
     "filter_labels_to_fam",
     "filter_labels_to_ids",

@@ -207,6 +207,42 @@ verify_plink_files() {
     return 0
 }
 
+# Check whether a PLINK 1 .bed file is complete (not truncated), so that
+# checkpoints don't reuse a partial write.
+#
+# An OOM-killed run once left a 7.9-of-18.7GB .bed in place; the next run's
+# "does the output exist" checkpoint reused it as if finished, and plink2 only
+# caught the corruption two steps later ("Unexpected PLINK 1 .bed file size").
+#
+# Args:
+#   $1 - PLINK prefix (without extension)
+# Returns:
+#   0 if PREFIX.bed/.bim/.fam all exist and PREFIX.bed is exactly
+#   3 + n_variants * ceil(n_samples / 4) bytes (PLINK 1 SNP-major layout: a
+#   3-byte magic header followed by one packed byte-column per variant),
+#   1 otherwise
+bed_is_complete() {
+    local prefix="$1"
+
+    if [[ ! -f "${prefix}.bed" ]] || [[ ! -f "${prefix}.bim" ]] || [[ ! -f "${prefix}.fam" ]]; then
+        return 1
+    fi
+
+    local n_variants n_samples actual_size expected_size bytes_per_variant
+    n_variants=$(wc -l < "${prefix}.bim")
+    n_samples=$(wc -l < "${prefix}.fam")
+    actual_size=$(stat -c %s "${prefix}.bed" 2>/dev/null || stat -f %z "${prefix}.bed" 2>/dev/null)
+
+    if [[ -z "$actual_size" ]]; then
+        return 1
+    fi
+
+    bytes_per_variant=$(( (n_samples + 3) / 4 ))
+    expected_size=$(( 3 + n_variants * bytes_per_variant ))
+
+    [[ "$actual_size" -eq "$expected_size" ]]
+}
+
 # ============================================================================
 # Statistics Helpers
 # ============================================================================

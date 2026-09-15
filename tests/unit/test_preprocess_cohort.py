@@ -1,12 +1,15 @@
 """Reading and writing the cohort directory -- the unit `preprocess`, `subsample`
 and `run` exchange."""
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing.cohort import (
     MIN_LABEL_COVERAGE,
+    bed_is_complete,
     check_label_coverage,
     filter_labels_to_fam,
     read_cohort,
@@ -158,6 +161,35 @@ def test_labels_with_a_duplicate_sample_id_do_not_expand_the_output(cohort, tmp_
     out = tmp_path / "filtered.csv"
     n = filter_labels_to_fam(dup_path, cohort.fit.plink, out)
     assert n == len(read_fam_ids(cohort.fit.plink))
+
+
+def test_bed_is_complete_is_true_for_a_real_bed(cohort):
+    assert bed_is_complete(cohort.fit.plink)
+
+
+def test_bed_is_complete_is_false_when_the_bed_is_truncated_by_one_byte(cohort, tmp_path):
+    prefix = tmp_path / "truncated"
+    for ext in ("bed", "bim", "fam"):
+        (tmp_path / f"truncated.{ext}").write_bytes(Path(f"{cohort.fit.plink}.{ext}").read_bytes())
+    data = (tmp_path / "truncated.bed").read_bytes()
+    (tmp_path / "truncated.bed").write_bytes(data[:-1])
+    assert not bed_is_complete(prefix)
+
+
+def test_bed_is_complete_is_false_when_a_byte_was_appended(cohort, tmp_path):
+    prefix = tmp_path / "padded"
+    for ext in ("bed", "bim", "fam"):
+        (tmp_path / f"padded.{ext}").write_bytes(Path(f"{cohort.fit.plink}.{ext}").read_bytes())
+    data = (tmp_path / "padded.bed").read_bytes()
+    (tmp_path / "padded.bed").write_bytes(data + b"\x00")
+    assert not bed_is_complete(prefix)
+
+
+def test_bed_is_complete_is_false_when_the_fam_is_missing(cohort, tmp_path):
+    prefix = tmp_path / "no_fam"
+    for ext in ("bed", "bim"):
+        (tmp_path / f"no_fam.{ext}").write_bytes(Path(f"{cohort.fit.plink}.{ext}").read_bytes())
+    assert not bed_is_complete(prefix)
 
 
 def test_the_written_config_is_accepted_by_the_loader_and_carries_settings(cohort, tmp_path):
