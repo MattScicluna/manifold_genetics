@@ -395,6 +395,8 @@ class TestHgdpLayouts:
         colormap = json.loads((out / "colormap.json").read_text())
         assert set(colormap["Population"]) == {"Yoruba", "French"}
         assert (out / "config.yaml").exists()
+        assert not (out / "data" / "geographic.csv").exists(), "workbench metadata has no coords"
+        assert "geographic_coords" not in (out / "config.yaml").read_text()
 
     def test_the_public_layout_keeps_numeric_chromosomes(self, tmp_path, monkeypatch):
         """The public .bim is `1`, not `chr1`; nothing must add a prefix there."""
@@ -432,6 +434,41 @@ class TestHgdpLayouts:
         assert keeps["fit_subset"] == "S1\tS1\n", "S2 is related"
         assert keeps["project_subset"] == "S1\tS1\nS2\tS2\n"
         assert prefixed == {"fit_subset": False, "project_subset": False}
+
+    def test_the_public_layout_writes_geographic_coordinates(self, tmp_path, monkeypatch):
+        """Wires latitude/longitude into geographic.csv and the config, end to end."""
+        import shutil
+        import tarfile
+
+        from manifold_genetics import scaffold
+
+        src = tmp_path / "public"
+        src.mkdir()
+        (src / "full_dataset.bed").write_bytes(b"\x6c\x1b\x01\x00\x00")
+        (src / "full_dataset.bim").write_text("1\trs1\t0\t100\tA\tG\n22\trs2\t0\t200\tC\tT\n")
+        (src / "full_dataset.fam").write_text(
+            "S1\tS1\t0\t0\t0\t-9\nS2\tS2\t0\t0\t0\t-9\nS3\tS3\t0\t0\t0\t-9\n"
+        )
+        (src / "metadata.csv").write_text(
+            "project_meta.sample_id,Population,Genetic_region_merged,latitude,longitude,"
+            "filter_pca_outlier,hard_filtered,filter_king_related,filter_contaminated\n"
+            "S1,Yoruba,Africa,10.0,20.0,False,False,False,False\n"
+            "S2,French,Europe,45.0,2.0,False,False,False,False\n"
+            "S3,ACB,Africa,13.0,-59.0,False,False,False,False\n"
+        )
+        archive = tmp_path / "hgdp_1kgp_full.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for f in src.iterdir():
+                tar.add(f, arcname=f.name)
+        shutil.rmtree(src)
+
+        monkeypatch.setattr(scaffold, "_run_plink2_keep", lambda *a, **k: None)
+        out = tmp_path / "out"
+        scaffold.acquire_hgdp(out, archive=archive)
+
+        geo = pd.read_csv(out / "data" / "geographic.csv")
+        assert sorted(geo["sample_id"]) == ["S1", "S2"], "S3 is ACB, excluded"
+        assert "geographic_coords: data/geographic.csv" in (out / "config.yaml").read_text()
 
     def test_plink2_is_told_to_keep_the_chr_prefix_only_when_asked(self, tmp_path, monkeypatch):
         from manifold_genetics import scaffold
@@ -674,6 +711,97 @@ class TestHgdpLabels:
                 tmp_path / "labels.csv",
                 tmp_path / "colormap.json",
             )
+
+
+class TestHgdpGeographic:
+    """Geographic coordinates for the project set.
+
+    `examples/hgdp_1kgp/prepare_data.sh` step 9 excluded `Genetic_region_merged
+    == "America"` and the populations ACB, ASW and CEU before writing
+    coordinates, because none of the four preserve geography well enough for a
+    geographic embedding metric to mean anything. `acquire hgdp` applies the
+    same rule, and skips writing anything at all for the workbench archive,
+    whose metadata carries no coordinates.
+    """
+
+    @pytest.fixture
+    def metadata(self):
+        return pd.DataFrame(
+            {
+                "project_meta.sample_id": [
+                    "keep1",
+                    "keep2",
+                    "america",
+                    "acb",
+                    "asw",
+                    "ceu",
+                    "nocoord",
+                ],
+                "Population": ["Yoruba", "French", "Karitiana", "ACB", "ASW", "CEU", "Han"],
+                "Genetic_region_merged": [
+                    "Africa",
+                    "Europe",
+                    "America",
+                    "Africa",
+                    "Africa",
+                    "Europe",
+                    "East_Asia",
+                ],
+                "latitude": [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, None],
+                "longitude": [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, None],
+            }
+        )
+
+    def test_excludes_america_and_the_three_populations(self, tmp_path, metadata):
+        from manifold_genetics.scaffold import _write_hgdp_geographic
+
+        wrote = _write_hgdp_geographic(
+            metadata, metadata["project_meta.sample_id"], tmp_path / "geographic.csv"
+        )
+
+        assert wrote is True
+        geo = pd.read_csv(tmp_path / "geographic.csv")
+        assert sorted(geo["sample_id"]) == ["keep1", "keep2"]
+        assert list(geo.columns) == ["sample_id", "latitude", "longitude"]
+
+    def test_missing_coordinates_is_a_skip_not_an_error(self, tmp_path):
+        from manifold_genetics.scaffold import _write_hgdp_geographic
+
+        metadata = pd.DataFrame(
+            {
+                "project_meta.sample_id": ["a"],
+                "Population": ["Yoruba"],
+                "Genetic_region_merged": ["Africa"],
+            }
+        )
+
+        wrote = _write_hgdp_geographic(
+            metadata, metadata["project_meta.sample_id"], tmp_path / "geographic.csv"
+        )
+
+        assert wrote is False
+        assert not (tmp_path / "geographic.csv").exists()
+
+    def test_the_config_names_the_geographic_file_only_when_written(self):
+        from manifold_genetics.scaffold import _hgdp_config
+
+        assert "geographic_coords: data/geographic.csv" in _hgdp_config("public", geographic=True)
+        assert "geographic_coords" not in _hgdp_config("public", geographic=False)
+
+    def test_the_config_loads_with_the_published_admixture_settings(self, tmp_path):
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import _hgdp_config
+
+        (tmp_path / "config.yaml").write_text(_hgdp_config("public", geographic=True))
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "geographic.csv").write_text("sample_id,latitude,longitude\na,1,2\n")
+
+        kwargs = load_config(tmp_path / "config.yaml")
+
+        assert kwargs["geographic_coords"] == (tmp_path / "data" / "geographic.csv").resolve()
+        assert (kwargs["k_min"], kwargs["k_max"]) == (2, 10)
+        assert kwargs["admix_group_column"] == "Genetic_region_merged"
+        assert kwargs["skip_admixture"] is True
 
 
 class TestInitCustom:
