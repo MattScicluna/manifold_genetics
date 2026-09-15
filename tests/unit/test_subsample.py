@@ -292,3 +292,59 @@ class TestSubsample:
                 keep_runner=keep_runner,
             )
         assert calls == [], "plink must not have been started"
+
+    def _add_geographic_coords(self, tmp_path, covered_ids):
+        """Append a geographic_coords entry to the fixture cohort's data
+        section, and write a CSV covering only ``covered_ids``."""
+        geo = pd.DataFrame(
+            {
+                "sample_id": covered_ids,
+                "latitude": range(len(covered_ids)),
+                "longitude": range(len(covered_ids)),
+            }
+        )
+        geo.to_csv(tmp_path / "in/data/geographic.csv", index=False)
+        config_path = tmp_path / "in/config.yaml"
+        text = config_path.read_text()
+        assert "output_dir: outputs\n" in text
+        config_path.write_text(
+            text.replace(
+                "output_dir: outputs\n",
+                "output_dir: outputs\n  geographic_coords: data/geographic.csv\n",
+            )
+        )
+
+    def test_geographic_coords_are_carried_and_filtered_to_the_project_fam(self, cohort, tmp_path):
+        fam = pd.read_csv(
+            tmp_path / "in/data/project_subset.fam", sep=r"\s+", header=None, dtype=str
+        )
+        ids = list(fam[1])
+        covered = ids[::2]
+        self._add_geographic_coords(tmp_path, covered)
+
+        config = subsample(
+            cohort,
+            tmp_path / "out",
+            groups=[Group("branch", "^Branch 1$", 3)],
+            include_rest=False,
+            keep_runner=_fake_keep,
+        )
+        loaded = load_config(config)
+        assert loaded["geographic_coords"] == (tmp_path / "out/data/geographic.csv").resolve()
+
+        out_project_fam = pd.read_csv(
+            tmp_path / "out/data/project_subset.fam", sep=r"\s+", header=None, dtype=str
+        )
+        geo = pd.read_csv(loaded["geographic_coords"], dtype=str)
+        assert set(geo["sample_id"]) <= set(out_project_fam[1])
+        assert list(geo["sample_id"]) == [i for i in covered if i in set(out_project_fam[1])]
+
+    def test_no_geographic_coords_in_the_input_means_none_in_the_output(self, cohort, tmp_path):
+        config = subsample(
+            cohort,
+            tmp_path / "out",
+            groups=[Group("branch", "^Branch 1$", 3)],
+            include_rest=False,
+            keep_runner=_fake_keep,
+        )
+        assert "geographic_coords" not in load_config(config)

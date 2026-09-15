@@ -13,6 +13,7 @@ from ..utils.tools import ToolResolver
 from .cohort import (
     PathLike,
     check_label_coverage,
+    filter_geographic_to_fam,
     filter_labels_to_fam,
     read_cohort,
     read_fam_ids,
@@ -223,19 +224,29 @@ def subsample(
     shutil.copy(project.colormap, out_dir / "colormap_fit.json")
     shutil.copy(project.colormap, out_dir / "colormap_project.json")
 
+    data = {
+        "fit_plink": "data/fit_subset",
+        "project_plink": "data/project_subset",
+        "fit_labels": "data/fit_labels.csv",
+        "project_labels": "data/project_labels.csv",
+        "fit_colormap": "colormap_fit.json",
+        "project_colormap": "colormap_project.json",
+        "output_dir": "outputs",
+    }
+    # subsample keeps the project side intact -- it only chooses the fit set --
+    # so a geographic file the input covers is still valid, filtered to the
+    # (unchanged) project .fam.
+    if cohort.geographic_coords is not None:
+        filter_geographic_to_fam(
+            cohort.geographic_coords, data_dir / "project_subset", data_dir / "geographic.csv"
+        )
+        data["geographic_coords"] = "data/geographic.csv"
+
     return write_cohort_config(
         out_dir,
         based_on=cohort,
         preset="subsample",
-        data={
-            "fit_plink": "data/fit_subset",
-            "project_plink": "data/project_subset",
-            "fit_labels": "data/fit_labels.csv",
-            "project_labels": "data/project_labels.csv",
-            "fit_colormap": "colormap_fit.json",
-            "project_colormap": "colormap_project.json",
-            "output_dir": "outputs",
-        },
+        data=data,
         written_by="manifold-genetics subsample",
     )
 

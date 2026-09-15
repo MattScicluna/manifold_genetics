@@ -14,6 +14,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `preprocess` no longer resumes from a truncated `.bed` left by an OOM-killed
   run; checkpoints now verify PLINK 1 file size, not just existence, and
   redo an incomplete step instead of reusing it.
+- `preprocess` and `subsample` no longer carry a stale `embedding.input_mode`
+  or landmarking key (`knn`, `t`, `n_landmark`, `random_landmarking`) into an
+  output whose preset differs from the input's -- each dropped key now logs a
+  warning naming the value and the preset that supersedes it -- and both now
+  carry `data.geographic_coords` through when the input has one, filtered to
+  the output's project `.fam`, instead of silently dropping it.
 
 ## [0.3.0] - 2026-09-14
 

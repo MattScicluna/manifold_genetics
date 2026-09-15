@@ -21,7 +21,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from manifold_genetics.pipeline.configfile import ConfigFileError, load_config
+from manifold_genetics.pipeline.configfile import (
+    PRESET_OWNED_EMBEDDING_KEYS,
+    PRESETS,
+    ConfigFileError,
+    load_config,
+)
 
 
 def write_config(tmp_path, config, name="config.yaml"):
@@ -281,3 +286,11 @@ class TestMemoryBudgets:
 
         with pytest.raises(ConfigFileError, match="max_fit_memory_gb"):
             load_config(write_config(tmp_path, config))
+
+
+def test_preset_owned_embedding_keys_is_the_union_of_the_presets_embedding_keys():
+    """`cohort.write_cohort_config` drops these on a preset change; derived from
+    PRESETS rather than typed out separately so the two cannot drift."""
+    expected = {key for spec in PRESETS.values() for key in spec.get("embedding", {})}
+    assert PRESET_OWNED_EMBEDDING_KEYS == expected
+    assert PRESET_OWNED_EMBEDDING_KEYS == {"knn", "t", "n_landmark", "random_landmarking"}

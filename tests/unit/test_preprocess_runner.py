@@ -219,3 +219,50 @@ def test_labels_above_half_coverage_run_and_keep_the_covered_rows(tmp_path, tool
     assert len(labels) == int(len(fam) * 0.6)
     assert set(labels["sample_id"]) <= set(fam[1])
     assert any("drawn grey" in r.getMessage() for r in caplog.records)
+
+
+def _add_geographic_coords(cohort_dir, covered_ids):
+    """Append a geographic_coords entry to a synthetic cohort's data section,
+    and write a CSV covering only ``covered_ids``."""
+    geo = pd.DataFrame(
+        {
+            "sample_id": covered_ids,
+            "latitude": range(len(covered_ids)),
+            "longitude": range(len(covered_ids)),
+        }
+    )
+    geo.to_csv(cohort_dir / "data" / "geographic.csv", index=False)
+    config_path = cohort_dir / "config.yaml"
+    text = config_path.read_text()
+    assert "output_dir: outputs\n" in text
+    config_path.write_text(
+        text.replace(
+            "output_dir: outputs\n",
+            "output_dir: outputs\n  geographic_coords: data/geographic.csv\n",
+        )
+    )
+
+
+def test_geographic_coords_are_carried_and_filtered_to_the_output_project_fam(tmp_path, tools):
+    acquire_synthetic(tmp_path / "in")
+    fam = pd.read_csv(tmp_path / "in/data/project_subset.fam", sep=r"\s+", header=None, dtype=str)
+    ids = list(fam[1])
+    covered = ids[::2]
+    _add_geographic_coords(tmp_path / "in", covered)
+
+    config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
+    loaded = load_config(config)
+    assert loaded["geographic_coords"] == (tmp_path / "out/data/geographic.csv").resolve()
+
+    out_fam = pd.read_csv(
+        tmp_path / "out/data/project_subset.fam", sep=r"\s+", header=None, dtype=str
+    )
+    geo = pd.read_csv(loaded["geographic_coords"], dtype=str)
+    assert set(geo["sample_id"]) <= set(out_fam[1])
+    assert list(geo["sample_id"]) == [i for i in covered if i in set(out_fam[1])]
+
+
+def test_no_geographic_coords_in_the_input_means_none_in_the_output(tmp_path, tools):
+    acquire_synthetic(tmp_path / "in")
+    config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
+    assert "geographic_coords" not in load_config(config)

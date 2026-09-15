@@ -1,10 +1,12 @@
 """Reading and writing the cohort directory -- the unit `preprocess`, `subsample`
 and `run` exchange."""
 
+import dataclasses
 from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing.cohort import (
@@ -221,3 +223,95 @@ def test_the_written_config_is_accepted_by_the_loader_and_carries_settings(cohor
     assert loaded["n_pcs"] == cohort.raw["pca"]["n_pcs"], "pca settings must carry forward"
     assert loaded["projection_plot_fit_column"] == "branch"
     assert "labels" not in loaded, "the old shared-label key must not survive a projection rewrite"
+
+
+_SUBSAMPLE_OUTPUT_DATA = {
+    "fit_plink": "data/fit_subset",
+    "project_plink": "data/project_subset",
+    "fit_labels": "data/fit_labels.csv",
+    "project_labels": "data/project_labels.csv",
+    "fit_colormap": "colormap_fit.json",
+    "project_colormap": "colormap_project.json",
+    "output_dir": "outputs",
+}
+
+
+def test_a_preset_change_drops_input_mode_and_landmarking_keys_with_a_warning(
+    cohort, tmp_path, caplog
+):
+    """A carried `input_mode` or `n_landmark` from the old preset must not
+    silently override what the new preset (here `subsample`) sets."""
+    based_on = dataclasses.replace(
+        cohort,
+        preset="projection",
+        raw={
+            **cohort.raw,
+            "preset": "projection",
+            "embedding": {
+                "method": "phate",
+                "embed_batch_size": 500,
+                "input_mode": "project",
+                "n_landmark": 10000,
+                "random_landmarking": True,
+            },
+        },
+    )
+    out = tmp_path / "next"
+    out.mkdir()
+    with caplog.at_level("WARNING"):
+        path = write_cohort_config(
+            out,
+            based_on=based_on,
+            preset="subsample",
+            data=_SUBSAMPLE_OUTPUT_DATA,
+            written_by="manifold-genetics subsample",
+        )
+    document = yaml.safe_load(path.read_text())
+    assert document["embedding"] == {"method": "phate", "embed_batch_size": 500}, (
+        "method and embed_batch_size are kept; input_mode and the landmarking keys "
+        "are the subsample preset's to set"
+    )
+    messages = " | ".join(r.getMessage() for r in caplog.records)
+    assert "embedding.input_mode: project" in messages and "subsample" in messages
+    assert "embedding.n_landmark: 10000" in messages and "subsample" in messages
+    assert "embedding.random_landmarking: True" in messages
+    assert "embed_batch_size" not in messages, "kept keys are not warned about"
+
+
+def test_an_unchanged_preset_carries_every_embedding_key(cohort, tmp_path, caplog):
+    based_on = dataclasses.replace(
+        cohort,
+        preset="subsample",
+        raw={
+            **cohort.raw,
+            "preset": "subsample",
+            "embedding": {
+                "method": "phate",
+                "input_mode": "fit",
+                "knn": 500,
+                "t": 50,
+                "n_landmark": 10000,
+                "random_landmarking": True,
+            },
+        },
+    )
+    out = tmp_path / "next"
+    out.mkdir()
+    with caplog.at_level("WARNING"):
+        path = write_cohort_config(
+            out,
+            based_on=based_on,
+            preset="subsample",
+            data=_SUBSAMPLE_OUTPUT_DATA,
+            written_by="manifold-genetics subsample",
+        )
+    document = yaml.safe_load(path.read_text())
+    assert document["embedding"] == {
+        "method": "phate",
+        "input_mode": "fit",
+        "knn": 500,
+        "t": 50,
+        "n_landmark": 10000,
+        "random_landmarking": True,
+    }
+    assert not [r for r in caplog.records if "dropped" in r.getMessage()]

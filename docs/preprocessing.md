@@ -30,6 +30,13 @@ What `acquire` writes and what `preprocess`, `subsample` and `run` read:
     labels.csv           whole_cohort   (or fit_labels.csv + project_labels.csv for projection)
 ```
 
+A `geographic_coords` file, when the input names one, is carried through both
+commands -- filtered to the output's project `.fam` -- since neither removes a
+project-side sample; a carried `embedding` section has its `input_mode` and
+landmarking keys (`knn`, `t`, `n_landmark`, `random_landmarking`) dropped, with
+a warning per key, whenever the output's preset differs from the input's, so
+they cannot silently override what the new preset sets.
+
 `config.yaml` is the entry point, which is why `preprocess` and `subsample`
 take configs rather than PLINK prefixes: the config says where the labels and
 colormaps are. A label file must cover at least half of the `.fam` it is
