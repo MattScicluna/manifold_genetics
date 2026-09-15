@@ -272,6 +272,59 @@ class ToolResolver:
         )
         return self._download_plink2()
 
+    def resolve_plink1(self) -> str:
+        """
+        Resolve plink v1.9 path.
+
+        Needed by the preprocessing shell for LD pruning and the WRayner checker,
+        which plink2 does not implement the same way.
+
+        Priority:
+        1. Local bin directory (pre-downloaded during setup)
+        2. PLINK1_PATH environment variable
+        3. Module system (module load plink)
+        4. PATH lookup
+        5. Auto-download to download_dir (will fail on compute nodes without internet)
+
+        Returns:
+            Path to plink (v1.9) executable
+
+        Raises:
+            ToolNotFoundError: If plink v1.9 cannot be found
+        """
+        # 1. Check local bin directory FIRST (pre-downloaded during setup)
+        local_plink = self.download_dir / "plink"
+        if local_plink.exists() and self._validate_executable(str(local_plink)):
+            logger.debug(f"Using pre-downloaded plink (v1.9): {local_plink}")
+            return str(local_plink)
+
+        # 2. Check PLINK1_PATH env var
+        if env_path := os.getenv("PLINK1_PATH"):
+            if self._validate_executable(env_path):
+                return env_path
+            else:
+                raise ToolNotFoundError(f"PLINK1_PATH points to invalid executable: {env_path}")
+
+        # 3. Check module system (Compute Canada clusters)
+        # Try multiple plink 1.9 versions
+        for version in ["plink/1.9b_6.21-x86_64", "plink/1.9", "plink"]:
+            if self._try_load_module(version):
+                # Module loaded successfully, check PATH
+                if path := shutil.which("plink"):
+                    logger.debug(f"Found plink via module {version}: {path}")
+                    return path
+
+        # 4. Check PATH
+        if path := shutil.which("plink"):
+            return path
+
+        # 5. Auto-download (will fail on compute nodes without internet!)
+        logger.warning(
+            "plink (v1.9) not found in bin/, PATH, or modules. "
+            "Attempting download (will fail on compute nodes without internet)..."
+        )
+        return self._download_plink1()
+
     def resolve_flashpca(self) -> str:
         """
         Resolve FlashPCA path.

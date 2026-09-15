@@ -8,6 +8,7 @@ import argparse
 import inspect
 import json
 import logging
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -436,23 +437,23 @@ def cmd_plot_knn_composition(args):
     return 0
 
 
-def cmd_init(args):
+def cmd_acquire(args):
     """Write a runnable config, and the data to run it on."""
     setup_logging(args.verbose)
 
-    from .scaffold import init_aou, init_custom, init_hgdp, init_synthetic
+    from .scaffold import acquire_aou, acquire_custom, acquire_hgdp, acquire_synthetic
 
     out = Path(args.out)
     try:
         if args.target == "synthetic":
-            config = init_synthetic(out, force=args.force)
+            config = acquire_synthetic(out, force=args.force)
         elif args.target == "aou":
-            config = init_aou(out, force=args.force)
+            config = acquire_aou(out, force=args.force)
         elif args.target == "custom":
             if not args.fit_plink:
-                print("Error: init custom needs --fit-plink.", file=sys.stderr)
+                print("Error: acquire custom needs --fit-plink.", file=sys.stderr)
                 return 1
-            config = init_custom(
+            config = acquire_custom(
                 out,
                 fit_plink=args.fit_plink,
                 labels=args.labels,
@@ -464,7 +465,7 @@ def cmd_init(args):
                 force=args.force,
             )
         else:
-            config = init_hgdp(
+            config = acquire_hgdp(
                 out,
                 force=args.force,
                 download=not args.no_download,
@@ -487,6 +488,12 @@ def cmd_init(args):
         # commands stay copy-pasteable.
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as exc:
+        # A gsutil copy that failed: name the command, since its own output
+        # went to the terminal above and the exit code alone says nothing.
+        command = " ".join(str(a) for a in exc.cmd) if isinstance(exc.cmd, list) else exc.cmd
+        print(f"Error: `{command}` failed with exit status {exc.returncode}.", file=sys.stderr)
+        return 1
 
     relative = config if out != Path(".") else config.name
     print(f"\nWrote {config}")
@@ -500,16 +507,114 @@ def cmd_init(args):
     return 0
 
 
+def cmd_preprocess(args):
+    """Filter one cohort, or intersect two, into a new cohort directory."""
+    setup_logging(args.verbose)
+
+    from . import preprocessing
+    from .preprocessing.flags import PreprocessOptions
+
+    options = PreprocessOptions(
+        preset=args.preset,
+        maf=args.maf,
+        geno=args.geno,
+        ld_window=args.ld_window,
+        ld_step=args.ld_step,
+        ld_r2=args.ld_r2,
+        skip_wrayner=args.skip_wrayner,
+        skip_giab=args.skip_giab,
+        skip_hla=args.skip_hla,
+        skip_ld_prune=args.skip_ld_prune,
+        skip_dedup=args.skip_dedup,
+        skip_maf=args.skip_maf,
+        skip_geno=args.skip_geno,
+        skip_project_maf=args.skip_project_maf,
+        fit_has_chr_prefix=args.fit_has_chr_prefix,
+        cleanup=args.cleanup,
+        threads=args.threads,
+        memory=args.memory,
+        temp_dir=Path(args.temp_dir) if args.temp_dir else None,
+        tools_dir=Path(args.tools_dir) if args.tools_dir else None,
+        min_common_snps=args.min_common_snps,
+    )
+    try:
+        config = preprocessing.preprocess(
+            args.fit_config,
+            args.out,
+            project_config=args.project_config,
+            options=options,
+            force=args.force,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"Error: the filtering script exited with status {exc.returncode}; "
+            "see its output above.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"\nWrote {config}")
+    print("\nNext:")
+    print(f"  manifold-genetics run {config} --dry-run")
+    print(f"  manifold-genetics run {config}")
+    return 0
+
+
+def cmd_subsample(args):
+    """Choose the fit samples of a cohort."""
+    setup_logging(args.verbose)
+
+    from . import preprocessing
+
+    try:
+        groups = [preprocessing.parse_group(g) for g in (args.group or [])]
+        config = preprocessing.subsample(
+            args.config,
+            args.out,
+            groups=groups,
+            include_rest=args.include_rest,
+            seed=args.seed,
+            fit_samples=args.fit_samples,
+            geosketch=args.geosketch,
+            pca=args.pca,
+            n_pcs=args.n_pcs,
+            force=args.force,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print(f"\nWrote {config}")
+    print("\nNext:")
+    print(f"  manifold-genetics run {config} --dry-run")
+    print(f"  manifold-genetics run {config}")
+    return 0
+
+
 def cmd_setup(args):
     """Download external tools (plink2, flashpca, optional plink v1.9)."""
     setup_logging(args.verbose)
 
     resolver = ToolResolver()
     tools = resolver.install_tools(include_plink1=not args.skip_plink1)
-
     print("External tools installed:")
     for name, path in tools.items():
         print(f"  - {name}: {path}")
+    if args.preprocessing:
+        from .preprocessing.references import install_harmonisation_references
+
+        try:
+            references = install_harmonisation_references()
+        except RuntimeError as exc:
+            # Every reference was attempted; the message says which were
+            # placed, which failed, and where to put a copy by hand.
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print("Harmonisation references installed:")
+        for name, path in references.items():
+            print(f"  - {name}: {path}")
     return 0
 
 
@@ -1289,12 +1394,12 @@ def main(argv: Optional[List[str]] = None):
     plot_proj_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_proj_parser.set_defaults(func=cmd_plot_projection)
 
-    # Setup command (download external tools)
-    init_parser = subparsers.add_parser(
-        "init",
+    # Acquire command (get a cohort into a cohort directory)
+    acquire_parser = subparsers.add_parser(
+        "acquire",
         help="Write a runnable config, and the data to run it on",
         description=(
-            "Scaffold a working pipeline in one command.\n\n"
+            "Get a cohort into a cohort directory: genotypes, labels, colormap, config.\n\n"
             "  synthetic   Simulate a small cohort and write everything beside it.\n"
             "              No network, a few seconds, and it runs end to end -- the\n"
             "              quickest way to confirm an installation works.\n\n"
@@ -1307,59 +1412,188 @@ def main(argv: Optional[List[str]] = None):
             "              have. Generates a colour for every label value, and\n"
             "              refuses if the labels do not describe the cohort --\n"
             "              the two things worth not doing by hand.\n\n"
-            "  aou         Write a config for All of Us. Checks this is a Researcher\n"
-            "              Workbench and says what is missing if not. It does NOT\n"
-            "              fetch the data: that is controlled-access and about 1,300\n"
-            "              lines of workbench-specific preparation.\n\n"
+            "  aou         Fetch All of Us (V8 arrays) from its bucket and label it\n"
+            "              from the CDR, as examples/aou/shared/download_aou_data.sh\n"
+            "              did. Only works inside a Researcher Workbench, and says\n"
+            "              what is missing if this is not one. Needs the `aou` extra.\n\n"
             "None of them overwrites an existing config.yaml unless you pass --force."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "target",
         choices=["synthetic", "hgdp", "custom", "aou"],
         help="Which cohort to scaffold",
     )
-    init_parser.add_argument("--fit-plink", help="custom only: PLINK prefix the model is fitted on")
-    init_parser.add_argument(
+    acquire_parser.add_argument(
+        "--fit-plink", help="custom only: PLINK prefix the model is fitted on"
+    )
+    acquire_parser.add_argument(
         "--project-plink",
         help="custom only: PLINK prefix to embed (default: the fit set)",
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--labels", help="custom only: CSV with sample_id and columns to colour by"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--fit-labels", help="custom only: labels for the fit set, if they differ"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--project-labels", help="custom only: labels for the project set, if they differ"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--preset",
         default="whole_cohort",
         choices=["whole_cohort", "projection", "subsample"],
         help="custom only: the shape of the run (default: whole_cohort)",
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--n-pcs", type=int, default=20, help="custom only: components to compute"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--out", default=".", help="Directory to write into (default: the current one)"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing config.yaml"
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--no-download",
         action="store_true",
         help="hgdp only: never fetch; use a local archive or already-extracted data",
     )
-    init_parser.add_argument(
+    acquire_parser.add_argument(
         "--archive",
-        help="hgdp only: path to an already-downloaded hgdp_1kgp_full.tar.gz",
+        help=(
+            "hgdp only: an already-downloaded hgdp_1kgp_full.tar.gz, or a gs:// URL "
+            "(the workbench's 1KGPHGDP.tar.gz, fetched with gsutil)"
+        ),
     )
-    init_parser.add_argument("--verbose", action="store_true", help="Verbose output")
-    init_parser.set_defaults(func=cmd_init)
+    acquire_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    acquire_parser.set_defaults(func=cmd_acquire)
+
+    pre_parser = subparsers.add_parser(
+        "preprocess",
+        help="Filter SNPs of one cohort, or intersect two, into a new cohort directory",
+        description=(
+            "Optional. Reads a cohort directory (what `acquire` writes), filters its\n"
+            "SNPs with the shell that produced the published figures, and writes a new\n"
+            "cohort directory in the same layout -- so its output can go to `run`, to\n"
+            "`subsample`, or to another `preprocess`. Samples are never removed here.\n\n"
+            "  preprocess cohort/config.yaml --out filtered/\n"
+            "      one cohort: its own fit and project sets are the two sides\n"
+            "  preprocess ref/config.yaml biobank/config.yaml --out proj/\n"
+            "      two cohorts: intersect them; the output is a projection\n\n"
+            "Presets bundle the skip flags:\n"
+            "  intersect-only   no external tools: indels, missingness, intersection\n"
+            "  harmonise        everything on, including WRayner/TOPMed checks\n"
+            "                   (downloads references: run `setup --preprocessing` first)\n"
+            "  (none)           defaults; add --skip-* flags as needed\n\n"
+            "Needs bash, plink2 and plink v1.9 (fetched by `setup`)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pre_parser.add_argument("fit_config", help="Config of the cohort to fit on")
+    pre_parser.add_argument(
+        "project_config", nargs="?", help="Config of the cohort to project (optional)"
+    )
+    pre_parser.add_argument("--out", required=True, help="Directory to write the new cohort into")
+    pre_parser.add_argument("--preset", choices=["intersect-only", "harmonise"])
+    pre_parser.add_argument("--maf", type=float, help="MAF threshold (shell default 0.01)")
+    pre_parser.add_argument("--geno", type=float, help="Missingness threshold (shell default 0.05)")
+    pre_parser.add_argument(
+        "--ld-window", type=int, help="LD pruning window, kb (shell default 150)"
+    )
+    pre_parser.add_argument("--ld-step", type=int, help="LD pruning step (shell default 1)")
+    pre_parser.add_argument("--ld-r2", type=float, help="LD pruning r² (shell default 0.05)")
+    for flag, text in [
+        ("skip-wrayner", "Skip WRayner/TOPMed harmonisation"),
+        ("skip-giab", "Skip GIAB difficult-region exclusion"),
+        ("skip-hla", "Skip HLA/MHC exclusion"),
+        ("skip-ld-prune", "Skip LD pruning"),
+        ("skip-dedup", "Skip reference deduplication"),
+        ("skip-maf", "Skip MAF filtering on both sides"),
+        ("skip-geno", "Skip genotype-missingness filtering on both sides"),
+        ("skip-project-maf", "Skip MAF filtering on the project side only"),
+        ("fit-has-chr-prefix", "The fit set's chromosomes already carry a 'chr' prefix"),
+        ("cleanup", "Delete intermediates as they are consumed (large cohorts)"),
+    ]:
+        pre_parser.add_argument(f"--{flag}", action="store_true", help=text)
+    pre_parser.add_argument(
+        "--threads", type=int, help="Threads (default: SLURM_CPUS_PER_TASK or 4)"
+    )
+    pre_parser.add_argument(
+        "--memory", type=int, help="plink memory limit, MB (shell default 100000)"
+    )
+    pre_parser.add_argument("--temp-dir", help="Scratch directory (default: OUT/data/temp)")
+    pre_parser.add_argument(
+        "--tools-dir", help="Where harmonisation references live (default: tool cache)"
+    )
+    pre_parser.add_argument(
+        "--min-common-snps", type=int, help="Abort below this many shared SNPs (50000)"
+    )
+    pre_parser.add_argument(
+        "--force", action="store_true", help="Overwrite an existing config.yaml"
+    )
+    pre_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    pre_parser.set_defaults(func=cmd_preprocess)
+
+    sub_parser = subparsers.add_parser(
+        "subsample",
+        help="Choose a cohort's fit samples by label counts or a list",
+        description=(
+            "Optional. Reads a cohort directory and writes one whose fit set is a chosen\n"
+            "subset of its project set; the project set is linked, not copied. The output\n"
+            "uses the `subsample` preset (fit on the subset, embed the subset, landmarked).\n\n"
+            "  --group COLUMN=PATTERN:COUNT   take COUNT samples whose COLUMN matches PATTERN\n"
+            "                                 (case-insensitive regex); repeatable; a sample is\n"
+            "                                 taken once. --include-rest adds every unmatched sample.\n"
+            "  --fit-samples FILE             a FID IID list chosen elsewhere.\n"
+            "  --geosketch N --pca CSV        take N samples via geometric sketching (Hie et al.\n"
+            "                                 2019) on the PCA coordinates in CSV; --n-pcs limits\n"
+            "                                 how many of its columns are used (default: all).\n\n"
+            "  subsample proj/config.yaml --out 10k/ \\\n"
+            '      --group "race_ethnicity=White|European:10000" \\\n'
+            '      --group "race_ethnicity=Black or African American:10000" --include-rest'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub_parser.add_argument("config", help="Config of the cohort to choose fit samples from")
+    sub_parser.add_argument("--out", required=True, help="Directory to write the new cohort into")
+    sub_parser.add_argument(
+        "--group",
+        action="append",
+        metavar="COLUMN=PATTERN:COUNT",
+        help="Take COUNT samples whose COLUMN matches PATTERN (repeatable)",
+    )
+    sub_parser.add_argument(
+        "--include-rest",
+        action="store_true",
+        help="Also include every sample matched by no group",
+    )
+    sub_parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed for subsampling (default: 42)"
+    )
+    sub_parser.add_argument("--fit-samples", help="A FID IID list chosen elsewhere")
+    sub_parser.add_argument(
+        "--geosketch",
+        type=int,
+        metavar="N",
+        help="Take N samples via geometric sketching on --pca coordinates",
+    )
+    sub_parser.add_argument(
+        "--pca", metavar="CSV", help="PCA CSV (sample_id, dim_1, dim_2, ...) for --geosketch"
+    )
+    sub_parser.add_argument(
+        "--n-pcs",
+        type=int,
+        metavar="N",
+        help="Use only the first N columns of --pca for --geosketch (default: all)",
+    )
+    sub_parser.add_argument(
+        "--force", action="store_true", help="Overwrite an existing config.yaml"
+    )
+    sub_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    sub_parser.set_defaults(func=cmd_subsample)
 
     setup_parser = subparsers.add_parser(
         "setup",
@@ -1371,6 +1605,10 @@ def main(argv: Optional[List[str]] = None):
             "  plink2   (~20 MB)\n"
             "  flashpca (~2 MB, Linux x86-64 only)\n"
             "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
+            "With --preprocessing, also fetches the GIAB, WRayner and TOPMed\n"
+            "references the harmonise preset needs (~2 GB, most of it the TOPMed\n"
+            "reference), so preprocess can run its harmonisation step on a\n"
+            "compute node without internet.\n\n"
             "Requires internet access (run on a login node, not a compute node).\n"
             "This command does NOT manage the Python environment."
         ),
@@ -1380,6 +1618,14 @@ def main(argv: Optional[List[str]] = None):
         "--skip-plink1",
         action="store_true",
         help="Skip downloading PLINK v1.9",
+    )
+    setup_parser.add_argument(
+        "--preprocessing",
+        action="store_true",
+        help=(
+            "Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs "
+            "(~2 GB, most of it the TOPMed reference)"
+        ),
     )
     setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     setup_parser.set_defaults(func=cmd_setup)

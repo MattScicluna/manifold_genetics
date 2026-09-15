@@ -32,6 +32,9 @@ SUBCOMMANDS = [
     "metrics-geographic",
     "metrics-admixture",
     "pipeline",
+    "acquire",
+    "preprocess",
+    "subsample",
 ]
 
 _VALIDATORS = [
@@ -140,6 +143,135 @@ def test_command_exception_with_verbose_prints_traceback(monkeypatch, capsys):
     assert "Traceback" in err
 
 
+def test_preprocess_passes_configs_options_and_out(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(fit_config, out_dir, *, project_config=None, options=None, force=False):
+        seen.update(
+            fit=fit_config, project=project_config, out=out_dir, options=options, force=force
+        )
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.preprocess", fake)
+    rc = mg_cli.main(
+        [
+            "preprocess",
+            "a.yaml",
+            "b.yaml",
+            "--out",
+            str(tmp_path),
+            "--preset",
+            "harmonise",
+            "--skip-wrayner",
+            "--skip-geno",
+            "--fit-has-chr-prefix",
+            "--maf",
+            "0.02",
+            "--threads",
+            "4",
+        ]
+    )
+    assert rc == 0
+    assert seen["fit"] == "a.yaml" and seen["project"] == "b.yaml"
+    assert seen["options"].preset == "harmonise"
+    assert seen["options"].skip_wrayner and seen["options"].fit_has_chr_prefix
+    assert seen["options"].skip_geno
+    assert seen["options"].maf == 0.02 and seen["options"].threads == 4
+
+
+def test_subsample_passes_groups_and_include_rest(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(
+        config,
+        out_dir,
+        *,
+        groups=(),
+        include_rest=False,
+        seed=42,
+        fit_samples=None,
+        geosketch=None,
+        pca=None,
+        n_pcs=None,
+        force=False,
+    ):
+        seen.update(
+            config=config,
+            out=out_dir,
+            groups=groups,
+            include_rest=include_rest,
+            seed=seed,
+            fit_samples=fit_samples,
+            geosketch=geosketch,
+            pca=pca,
+            n_pcs=n_pcs,
+            force=force,
+        )
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(
+        [
+            "subsample",
+            "a.yaml",
+            "--out",
+            str(tmp_path),
+            "--group",
+            "race_ethnicity=White|European:10000",
+            "--include-rest",
+            "--seed",
+            "7",
+        ]
+    )
+    assert rc == 0
+    assert seen["config"] == "a.yaml"
+    from manifold_genetics.preprocessing.subsample import Group
+
+    assert seen["groups"] == [Group("race_ethnicity", "White|European", 10000)]
+    assert seen["include_rest"] is True
+    assert seen["seed"] == 7
+
+
+def test_subsample_passes_geosketch_pca_and_n_pcs(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(
+        config,
+        out_dir,
+        *,
+        groups=(),
+        include_rest=False,
+        seed=42,
+        fit_samples=None,
+        geosketch=None,
+        pca=None,
+        n_pcs=None,
+        force=False,
+    ):
+        seen.update(geosketch=geosketch, pca=pca, n_pcs=n_pcs)
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(
+        [
+            "subsample",
+            "a.yaml",
+            "--out",
+            str(tmp_path),
+            "--geosketch",
+            "5000",
+            "--pca",
+            "project_pca_20.csv",
+            "--n-pcs",
+            "10",
+        ]
+    )
+    assert rc == 0
+    assert seen["geosketch"] == 5000
+    assert seen["pca"] == "project_pca_20.csv"
+    assert seen["n_pcs"] == 10
+
+
 # ---------------------------------------------------------------------------
 # setup_logging / _resolve_k_values helpers
 # ---------------------------------------------------------------------------
@@ -197,6 +329,63 @@ def test_cmd_setup_skip_plink1(monkeypatch):
     monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
     assert mg_cli.main(["setup", "--skip-plink1"]) == 0
     assert captured["include_plink1"] is False
+
+
+def test_setup_preprocessing_flag_is_parsed(monkeypatch):
+    seen = {}
+
+    def fake_cmd_setup(args):
+        seen["preprocessing"] = args.preprocessing
+        return 0
+
+    monkeypatch.setattr(mg_cli, "cmd_setup", fake_cmd_setup)
+    assert mg_cli.main(["setup", "--preprocessing"]) == 0
+    assert seen["preprocessing"] is True
+    assert mg_cli.main(["setup"]) == 0
+    assert seen["preprocessing"] is False
+
+
+def test_cmd_setup_preprocessing_installs_harmonisation_references(monkeypatch):
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2"}
+
+    calls = []
+
+    def fake_install():
+        calls.append(True)
+        return {"giab": "/tools/giab/GRCh38_alldifficultregions.bed"}
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    monkeypatch.setattr(
+        "manifold_genetics.preprocessing.references.install_harmonisation_references",
+        fake_install,
+    )
+    out = mg_cli.main(["setup", "--preprocessing"])
+    assert out == 0
+    assert calls == [True]
+
+
+def test_cmd_setup_preprocessing_reports_a_failed_reference_after_the_tools(monkeypatch, capsys):
+    """The tools placed are printed before the error, and the error is the
+    installer's own message (what was placed, what failed, where to put it)."""
+
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2"}
+
+    def fake_install():
+        raise RuntimeError("Failed: wrayner from https://example/x.zip: 404")
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    monkeypatch.setattr(
+        "manifold_genetics.preprocessing.references.install_harmonisation_references",
+        fake_install,
+    )
+    assert mg_cli.main(["setup", "--preprocessing"]) == 1
+    captured = capsys.readouterr()
+    assert "plink2: /bin/plink2" in captured.out
+    assert "Error: Failed: wrayner" in captured.err
 
 
 def test_cmd_pca_fit_project(monkeypatch, tmp_path):

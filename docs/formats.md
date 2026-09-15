@@ -127,7 +127,7 @@ outputs/
 The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,
 `phate_2d.csv` because `method: phate`, one `fit.<K>.csv` per K in range.
 
-Both `init` configs skip admixture, because it needs the `admixture` extra
+Both `acquire` configs skip admixture, because it needs the `admixture` extra
 (torch), so a first run produces the first three directories only. Geographic
 metrics need a coordinates file, which neither supplies.
 

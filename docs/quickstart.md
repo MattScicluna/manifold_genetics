@@ -7,7 +7,7 @@ There are two experiments that you can run immediately. First, make sure you hav
 === "Simulated — seconds, no download"
 
     ```bash
-    manifold-genetics init synthetic
+    manifold-genetics acquire synthetic
     manifold-genetics run config.yaml
     ```
 
@@ -24,14 +24,14 @@ There are two experiments that you can run immediately. First, make sure you hav
 === "Real — HGDP+1KGP, about 183 MB"
 
     ```bash
-    manifold-genetics init hgdp
+    manifold-genetics acquire hgdp
     manifold-genetics run config.yaml
     ```
 
     The public HGDP+1KGP cohort, downloaded already variant-processed. Two
     `plink2 --keep` calls select the 4,094 samples that pass QC and the 3,400 of
     those that are also unrelated. Needs internet and `plink2`, which is fetched
-    automatically — on a cluster, run `init` on a login node. A few minutes.
+    automatically — on a cluster, run `acquire` on a login node. A few minutes.
 
 Both write into the current directory; `--out DIR` puts them elsewhere, and
 neither overwrites an existing `config.yaml` without `--force`.
@@ -59,12 +59,12 @@ manifold-genetics run config.yaml --memory-gb 4
 
 ## Your own data
 
-`init custom` writes the config and colormap for PLINK files you already have.
+`acquire custom` writes the config and colormap for PLINK files you already have.
 
 **One cohort**, fitting on a subset of it and embedding that subset:
 
 ```bash
-manifold-genetics init custom \
+manifold-genetics acquire custom \
     --fit-plink data/fit_subset \
     --project-plink data/project_subset \
     --labels data/labels.csv \
@@ -78,7 +78,7 @@ estimated on, `project_subset` the full cohort the components are computed for.
 because the cohorts need not have the same labels:
 
 ```bash
-manifold-genetics init custom \
+manifold-genetics acquire custom \
     --fit-plink data/reference_panel \
     --project-plink data/my_cohort \
     --fit-labels data/reference_labels.csv \
@@ -92,14 +92,24 @@ figure that colours some of its points and looks finished.
 
 See [formats](formats.md) if you would rather write both files yourself.
 
+If the PLINK files still need SNP filtering, or you want to project your
+cohort onto a reference panel it has not been intersected with, see
+[Preprocessing](preprocessing.md): `preprocess` filters and intersects,
+`subsample` chooses the fit samples, and both write a directory `run` accepts.
+
 ## All of Us
 
 For readers working in the All of Us Researcher Workbench with access to the
 controlled data tier:
 
 ```bash
-manifold-genetics init aou
+manifold-genetics acquire hgdp --archive gs://fc-secure-47ccf5a8-b9ba-460a-aa03-dea8d260953b/Data/1KGPHGDP.tar.gz --out ref/
+manifold-genetics acquire aou --out aou/
+manifold-genetics preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix --out proj/
+manifold-genetics run proj/config.yaml
 ```
 
-Running this in the workbench reproduces the All of Us experiments from the
-manuscript.
+This is the All of Us experiment from the manuscript: the workbench's
+HGDP+1KGP panel, the All of Us V8 arrays, harmonised and intersected, then
+projected. `acquire aou` has not yet been run inside the workbench (issue
+#124); the details are in [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench).

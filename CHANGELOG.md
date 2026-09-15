@@ -7,20 +7,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added
+## [0.3.0] - 2026-09-14
 
-- **`init synthetic` draws the tree the cohort lies along**, as
-  `dla_tree_ground_truth.png` beside the config: solid coloured branches in the
-  embedding's colours, faint dashed grey gaps. It is the same figure manylatents
-  draws for this tree, so the two can be compared side by side, and it is the
-  shape the embedding under `outputs/figures/` is supposed to recover.
-- **`gamma` is accepted in a config file's `embedding` section** and passed to
-  PHATE. The synthetic config sets it to 0, the log-potential distance, under
-  which the tree's branches read more clearly than under the default of 1.
+The release that takes a cohort from raw biobank PLINK files to a figure
+without leaving the package. `init` becomes `acquire`, and two optional
+commands sit between it and `run`: `preprocess` filters SNPs, `subsample`
+chooses the fit samples. Each reads a cohort directory and writes one.
 
 ### Changed
 
-- **`init synthetic` now simulates a branching tree with gaps, not three blobs.**
+- **`init` is now `acquire`.** Same targets (`synthetic`, `hgdp`, `custom`,
+  `aou`), same output, same `--out` and `--force`; the name says what it does
+  now that it fetches All of Us too. There is no alias: two names for the first
+  command a new user runs is worse than one rename.
+- **`acquire aou` fetches the cohort** — the V8 array genotypes from the bucket
+  and self-reported race and ethnicity from the CDR — inside the Researcher
+  Workbench, as `examples/aou/shared/download_aou_data.sh` did. It used to
+  write a config and point at that script. It is a port of the script and has
+  not yet been run in the workbench itself (#124).
+- **`acquire hgdp --archive` accepts the workbench's HGDP+1KGP archive**, as a
+  `gs://` URL or a local path, and normalises it to the public layout: `chr`
+  on every chromosome, the population out of the FID and into `metadata.csv`.
+  The log names which panel it unpacked. That archive carries no relatedness
+  metadata, so for it `acquire hgdp` fits on every sample, as the published
+  All of Us flow did; the public archive still fits on the 3,400 unrelated.
+- **`acquire synthetic` now simulates a branching tree with gaps, not three blobs.**
   The cohort lies along the DLA tree from manylatents' `dla_tree_from_graph`
   config -- eight branches of samples, in pieces separated by four unsampled
   gap edges -- and its genotypes are drawn from allele frequencies that drift
@@ -29,6 +40,60 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   comparable with one made there, and the embedding now has a known shape to
   check rather than merely groups to separate. The label column is `branch`
   (values `Branch 1` to `Branch 8`), 2,000 samples and 1,000 variants.
+- **`run_pipeline` and `load_config` are now importable from the top level** and
+  named in `__all__`, which is the public API. They were reachable only through
+  `manifold_genetics.pipeline.runner`, a private-looking path, while the API
+  reference presented them as the headline entry points and the tutorial
+  notebook imported them that way. The reference page now documents only the
+  supported surface; the PCA backends, the PLINK reader and the standardisation
+  helpers are explicitly internal.
+- **The documentation site is the eight pages a user needs** — home, install,
+  quickstart, preprocessing, tutorial, formats, command line, API. How the project is
+  tested, released and developed is no longer published alongside them. A new
+  quickstart carries the input and output formats end to end.
+
+### Added
+
+- **`preprocess`**: SNP filtering and cross-cohort intersection, shipped inside
+  the package. It is `preprocess_cross_projection.sh` — the shell that produced
+  the published figures — orchestrated from Python: it takes one or two cohort
+  configs, resolves `plink2` and `plink` through the tool resolver, runs the
+  shell, re-filters the labels and writes a new cohort directory. Presets
+  `intersect-only` (no external references) and `harmonise` (every step,
+  including WRayner/TOPMed, with MAF on the reference side only) reproduce the `examples/generic` and All of Us
+  wrappers; the UK Biobank flow is `--skip-wrayner --skip-project-maf`.
+  Verified against the real data: the UK Biobank projection is reproduced from
+  the raw inputs (3,340 × 120,849 fit, 486,748 × 120,849 project, identical to
+  the published cohort), and the public HGDP+1KGP panel round-trips losslessly
+  under `--preset intersect-only --skip-geno`.
+- **`preprocess --skip-geno`**, because the shell's missingness filter had no
+  skip. Re-running it on a subset of an already-filtered panel drops SNPs whose
+  missingness was computed on the full panel — 747 of 172,152 on HGDP+1KGP —
+  and there was no way to say "this panel is finished".
+- **`subsample`**: choose a cohort's fit samples by label counts
+  (`--group COLUMN=PATTERN:COUNT`, repeatable, with `--include-rest`), a
+  `FID IID` list (`--fit-samples`), or geometric sketching on a PCA table
+  (`--geosketch N --pca CSV`, needs the `geosketch` extra). The project set is
+  linked, not copied; the output uses the `subsample` preset. Generalises
+  `examples/aou/shared/select_samples.py` to any cohort directory, with the
+  label column named rather than guessed.
+- **`setup --preprocessing`**: prefetch the GIAB, WRayner and TOPMed references
+  the `harmonise` preset needs (about 2 GB, most of it TOPMed), for compute
+  nodes without internet. The WRayner upstream URL returns 404 at the time of
+  this release, so it stops there — GIAB placed, TOPMed not reached — and the
+  shell's own download of the same URL fails too; the Preprocessing page says
+  where to place the file by hand (after which a re-run fetches TOPMed), or
+  pass `--tools-dir`.
+- **A Preprocessing page** in the documentation, with the cohort directory
+  layout, the presets, and the UK Biobank and All of Us flows as commands.
+- **`acquire synthetic` draws the tree the cohort lies along**, as
+  `dla_tree_ground_truth.png` beside the config: solid coloured branches in the
+  embedding's colours, faint dashed grey gaps. It is the same figure manylatents
+  draws for this tree, so the two can be compared side by side, and it is the
+  shape the embedding under `outputs/figures/` is supposed to recover.
+- **`gamma` is accepted in a config file's `embedding` section** and passed to
+  PHATE. The synthetic config sets it to 0, the log-potential distance, under
+  which the tree's branches read more clearly than under the default of 1.
 
 ### Fixed
 
@@ -49,20 +114,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
   `archive/hpc.md` had asserted the opposite — "Projection chunks over samples and
   is never the constraint" — which is corrected.
-
-### Changed
-
-- **`run_pipeline` and `load_config` are now importable from the top level** and
-  named in `__all__`, which is the public API. They were reachable only through
-  `manifold_genetics.pipeline.runner`, a private-looking path, while the API
-  reference presented them as the headline entry points and the tutorial
-  notebook imported them that way. The reference page now documents only the
-  supported surface; the PCA backends, the PLINK reader and the standardisation
-  helpers are explicitly internal.
-- **The documentation site is the seven pages a user needs** — home, install,
-  quickstart, tutorial, configuration, command line, API. How the project is
-  tested, released and developed is no longer published alongside them. A new
-  quickstart carries the input and output formats end to end.
 
 ### Fixed (test suite)
 
@@ -245,6 +296,7 @@ not yet been verified end to end -- so expect further breaking changes before
 - `examples/_shared/run_pipeline.sh`, `examples/_shared/detect_cluster.sh` and
   the nine per-example `run_pipeline.sh` wrappers, superseded by config files.
 
-[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/MattScicluna/manifold_genetics/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/MattScicluna/manifold_genetics/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/MattScicluna/manifold_genetics/releases/tag/v0.2.1
 [0.2.0]: https://pypi.org/project/manifold-genetics/0.2.0/

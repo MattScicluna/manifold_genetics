@@ -1,0 +1,209 @@
+"""The cohort directory: config.yaml, colormap(s), data/ with genotypes and labels.
+
+`acquire` writes one; `preprocess` and `subsample` read one and write another;
+`run` consumes one. Everything here is about reading that layout through the
+config and writing it back with the paths moved."""
+
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
+import pandas as pd
+import yaml
+
+from ..pipeline.configfile import load_config
+
+logger = logging.getLogger(__name__)
+
+PathLike = Union[str, Path]
+
+
+@dataclass(frozen=True)
+class Side:
+    """One half of a cohort: its genotypes, the labels that cover them, the colours."""
+
+    plink: Path
+    labels: Path
+    colormap: Path
+
+
+@dataclass(frozen=True)
+class CohortConfig:
+    path: Path
+    raw: dict
+    preset: Optional[str]
+    fit: Side
+    project: Side
+    shared_labels: bool
+
+
+def read_cohort(config_path: PathLike) -> CohortConfig:
+    """Read a config and resolve both sides.
+
+    A side's labels are ``<side>_labels`` when given, else the shared ``labels``;
+    colormaps likewise. That is the precedence ``run`` applies.
+    """
+    path = Path(config_path).expanduser().resolve()
+    resolved = load_config(path)
+    raw = yaml.safe_load(path.read_text()) or {}
+
+    def side(name: str) -> Side:
+        labels = resolved.get(f"{name}_labels") or resolved.get("labels")
+        colormap = resolved.get(f"{name}_colormap") or resolved.get("colormap")
+        if labels is None or colormap is None:
+            raise ValueError(f"{path} names no labels or colormap for the {name} side")
+        return Side(
+            plink=Path(resolved[f"{name}_plink"]), labels=Path(labels), colormap=Path(colormap)
+        )
+
+    return CohortConfig(
+        path=path,
+        raw=raw,
+        preset=raw.get("preset"),
+        fit=side("fit"),
+        project=side("project"),
+        shared_labels="labels" in resolved
+        and "fit_labels" not in resolved
+        and "project_labels" not in resolved,
+    )
+
+
+def read_fam_ids(prefix: PathLike) -> List[str]:
+    fam = pd.read_csv(f"{prefix}.fam", sep=r"\s+", header=None, dtype=str, usecols=[0, 1])
+    return list(fam[1])
+
+
+# The one label-coverage rule. `acquire custom` and `acquire aou` accept a label
+# file that describes at least this fraction of the .fam and `run` draws the
+# rest grey; `preprocess` and `subsample` apply the same rule, and check it
+# before any long computation, so a cohort that `acquire` accepted is never
+# rejected hours later.
+MIN_LABEL_COVERAGE = 0.5
+
+
+def _read_labels(labels: PathLike) -> pd.DataFrame:
+    frame = pd.read_csv(labels, dtype={"sample_id": str}, low_memory=False)
+    if "sample_id" not in frame.columns:
+        raise ValueError(f"{labels} has no sample_id column")
+    return frame
+
+
+def _coverage(labels: PathLike, frame: pd.DataFrame, ids: List[str]) -> float:
+    """The fraction of ``ids`` with a row in ``frame``; raises below the rule."""
+    known = set(frame["sample_id"])
+    missing = [i for i in dict.fromkeys(ids) if i not in known]
+    n_ids = len(set(ids))
+    coverage = (n_ids - len(missing)) / max(n_ids, 1)
+    if coverage < MIN_LABEL_COVERAGE:
+        example = ", ".join(missing[:5])
+        raise ValueError(
+            f"{len(missing)} of {n_ids} samples ({1 - coverage:.1%}) are not in {labels} "
+            f"(e.g. {example}). A label file must cover at least {MIN_LABEL_COVERAGE:.0%} of "
+            f"the genotypes it describes; this one covers {coverage:.1%}."
+        )
+    if missing:
+        logger.warning(
+            "%d of %d samples (%.1f%%) have no row in %s (e.g. %s); they will be drawn grey.",
+            len(missing),
+            n_ids,
+            100 * (1 - coverage),
+            labels,
+            ", ".join(missing[:5]),
+        )
+    return coverage
+
+
+def check_label_coverage(labels: PathLike, prefix: PathLike) -> float:
+    """The fraction of ``prefix``.fam that ``labels`` describes.
+
+    Raises:
+        ValueError: ``labels`` has no ``sample_id`` column, or covers less than
+            ``MIN_LABEL_COVERAGE`` of the ``.fam``. Between that and full
+            coverage a warning names the uncovered samples.
+    """
+    return _coverage(labels, _read_labels(labels), read_fam_ids(prefix))
+
+
+def filter_labels_to_ids(labels: PathLike, ids: List[str], out: PathLike) -> int:
+    """Write the rows of ``labels`` for ``ids``, in that order.
+
+    Ids without a row are skipped with a warning; ``run`` draws them grey, as it
+    would had the labels been handed to it directly.
+
+    Raises:
+        ValueError: ``labels`` has no ``sample_id`` column, or fewer than
+            ``MIN_LABEL_COVERAGE`` of ``ids`` have a row -- the rule
+            ``acquire custom`` applies to a label file it is handed.
+    """
+    frame = _read_labels(labels)
+    _coverage(labels, frame, ids)
+    # Drop duplicate sample_ids *before* indexing by the requested order, so a
+    # label file with repeated ids does not expand `.loc[ids]` into extra rows.
+    frame = frame.drop_duplicates("sample_id").set_index("sample_id")
+    covered = [i for i in ids if i in frame.index]
+    kept = frame.loc[covered].reset_index()
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    kept.to_csv(out, index=False)
+    return len(kept)
+
+
+def filter_labels_to_fam(labels: PathLike, prefix: PathLike, out: PathLike) -> int:
+    """Write the rows of ``labels`` for the samples in ``prefix``.fam, in .fam order.
+
+    Raises:
+        ValueError: fewer than ``MIN_LABEL_COVERAGE`` of the .fam has a label row.
+    """
+    return filter_labels_to_ids(labels, read_fam_ids(prefix), out)
+
+
+_CARRIED_SECTIONS = ("pca", "admixture", "embedding", "visualization", "skip")
+
+
+def write_cohort_config(
+    out_dir: Path,
+    *,
+    based_on: CohortConfig,
+    preset: str,
+    data: Dict[str, str],
+    visualization: Optional[Dict[str, str]] = None,
+    written_by: str,
+) -> Path:
+    """Write ``out_dir/config.yaml``: the input's settings with a new data section.
+
+    The data section is replaced wholesale so that no stale key survives -- a
+    ``labels`` left beside ``fit_labels`` is exactly the shape ``run`` rejects.
+    """
+    document: Dict[str, object] = {"preset": preset, "data": dict(data)}
+    for section in _CARRIED_SECTIONS:
+        if section in based_on.raw and based_on.raw[section]:
+            document[section] = dict(based_on.raw[section])
+    if visualization:
+        document.setdefault("visualization", {})
+        document["visualization"].update(visualization)  # type: ignore[union-attr]
+
+    header = (
+        f"# Written by `{written_by}` from {based_on.path}.\n"
+        "#\n"
+        "#   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing\n"
+        "#   manifold-genetics run config.yaml             # do the work\n"
+        "#\n"
+        "# Paths are relative to this file.\n\n"
+    )
+    path = out_dir / "config.yaml"
+    path.write_text(header + yaml.safe_dump(document, sort_keys=False))
+    logger.info("Wrote %s", path)
+    return path
+
+
+__all__ = [
+    "MIN_LABEL_COVERAGE",
+    "CohortConfig",
+    "Side",
+    "check_label_coverage",
+    "filter_labels_to_fam",
+    "filter_labels_to_ids",
+    "read_cohort",
+    "read_fam_ids",
+    "write_cohort_config",
+]

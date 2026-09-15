@@ -9,13 +9,13 @@ Every command prints its own options and a worked example.
 ## Starting from nothing
 
 ```bash
-manifold-genetics init synthetic     # simulate a cohort and a config beside it
-manifold-genetics init hgdp          # fetch and prepare the real HGDP+1KGP cohort
-manifold-genetics init custom        # a config for genotypes you already have
-manifold-genetics init aou           # a config for All of Us (workbench only)
+manifold-genetics acquire synthetic  # simulate a cohort and a config beside it
+manifold-genetics acquire hgdp       # fetch and prepare the real HGDP+1KGP cohort
+manifold-genetics acquire custom     # a config for genotypes you already have
+manifold-genetics acquire aou        # fetch All of Us (workbench only)
 ```
 
-`pip install` downloads no data and no example config, so `init` is what gives you
+`pip install` downloads no data and no example config, so `acquire` is what gives you
 something to run.
 
 `synthetic` needs no network and takes under a minute. It places 2,000 samples
@@ -33,10 +33,10 @@ and the 3,400 of those that are also unrelated, using the flags in the archive's
 filtering, because the archive arrives with that already done. It needs
 internet, so on a cluster run it on a login node.
 
-You can also point `init` at archived data:
+You can also point `acquire` at archived data:
 
 ```bash
-manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz
+manifold-genetics acquire hgdp --archive hgdp_1kgp_full.tar.gz
 ```
 
 `--no-download` means never fetch: it still unpacks an archive already present.
@@ -49,11 +49,17 @@ for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
 
-`aou` does **not** fetch anything: All of Us is controlled-access and prepared
-by workbench-specific tooling. It checks the environment — `GOOGLE_PROJECT`,
-`WORKSPACE_CDR`, `gsutil`, `bq`, `plink2` — names everything missing at once, and
-writes the config. Run in the workbench, it reproduces the All of Us experiments
-from the manuscript.
+`aou` fetches the All of Us V8 array genotypes from their bucket and labels
+every sample by self-reported race and ethnicity from the CDR, which needs the
+`aou` extra (`pip install 'manifold-genetics[aou]'`). It only works inside the
+Researcher Workbench: it checks the environment first — `GOOGLE_PROJECT`,
+`WORKSPACE_CDR`, `gsutil`, `bq` — and names everything missing at once. What it
+writes is the cohort alone; the manuscript's figures projected it onto HGDP+1KGP,
+which is `acquire hgdp --archive gs://…/1KGPHGDP.tar.gz` followed by
+`preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`
+(see [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench)).
+It is a port of the shell script that produced the published figures and has
+not yet been run inside the workbench itself (issue #124).
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.
@@ -125,10 +131,75 @@ manifold-genetics embed --method phate --fit-input out/project_pca.csv \
 external binary). They agree to 1.5e-7 and write the same artefacts, so a model fitted by
 either is readable by the other.
 
+## preprocess
+
+```bash
+manifold-genetics preprocess cohort/config.yaml --out filtered/
+manifold-genetics preprocess ref/config.yaml biobank/config.yaml --out proj/ --preset harmonise
+```
+
+Optional. Filters the SNPs of one cohort, or intersects two, into a new cohort
+directory in the same layout, so the result can go to `run`, `subsample`, or
+another `preprocess`. With one config, the cohort's own fit and project sets
+are the two sides; with two, the first supplies the fit set and the output is a
+`projection`. Samples are never removed here. It runs the shell script that
+produced the published figures, shipped inside the package, and needs `bash`,
+`plink2` and `plink` v1.9.
+
+| preset | what runs |
+|---|---|
+| `--preset intersect-only` | indels, missingness, intersection — no external references |
+| `--preset harmonise` | WRayner/TOPMed, GIAB, HLA, dedup, MAF on the reference side only (`--skip-project-maf`), LD pruning, `--cleanup` |
+| *(none)* | the shell defaults: every step on, MAF on both sides; add `--skip-*` flags |
+
+- `--skip-wrayner`, `--skip-giab`, `--skip-hla`, `--skip-ld-prune`,
+  `--skip-dedup`, `--skip-maf`, `--skip-geno`, `--skip-project-maf` turn off
+  one step each, on top of any preset. The UK Biobank flow is
+  `--skip-wrayner --skip-project-maf`.
+- `--maf`, `--geno`, `--ld-window`, `--ld-step`, `--ld-r2` set the thresholds
+  (shell defaults 0.01, 0.05, 150 kb, 1, 0.05).
+- `--fit-has-chr-prefix` when the fit set's chromosomes are already `chr1`,
+  not `1` — true of the workbench HGDP+1KGP panel `acquire hgdp --archive`
+  writes.
+- `--threads`, `--memory` (MB, default 100000), `--temp-dir`, `--cleanup` for
+  resources; `--tools-dir` for where the `harmonise` references live;
+  `--min-common-snps` (50,000) is the floor below which the run aborts.
+
+`harmonise` downloads its references at run time unless
+`manifold-genetics setup --preprocessing` has fetched them — and one of those
+downloads is currently broken upstream. See
+[Preprocessing](preprocessing.md), which also has the worked UK Biobank and
+All of Us examples.
+
+## subsample
+
+```bash
+manifold-genetics subsample proj/config.yaml --out 10k/ \
+    --group "race_ethnicity=White|European:10000" \
+    --group "race_ethnicity=Black or African American:10000" --include-rest
+```
+
+Reads a cohort directory and writes one whose fit set is a chosen subset of
+its project set; the project set is linked, not copied (a biobank `.bed` can
+be tens of GB). The output uses the `subsample` preset.
+
+Choose the fit samples by exactly one of:
+
+- `--group COLUMN=PATTERN:COUNT` — take COUNT samples whose COLUMN matches
+  PATTERN (case-insensitive regex); repeatable, and a sample is taken at most
+  once across groups. `--include-rest` also adds every sample matched by no
+  group.
+- `--fit-samples FILE` — a `FID IID` list chosen elsewhere.
+- `--geosketch N --pca CSV` — take N samples via geometric sketching (Hie et
+  al. 2019) on the PCA coordinates in CSV (`sample_id, dim_1, dim_2, ...`),
+  restricted to the samples in the project `.fam` first. `--n-pcs` limits how
+  many of the CSV's columns are used (default: all). Needs the `geosketch`
+  extra: `pip install 'manifold-genetics[geosketch]'`.
+
 ## Setup
 
 ```bash
-manifold-genetics setup
+manifold-genetics setup [--skip-plink1] [--preprocessing]
 ```
 
 Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
@@ -137,6 +208,15 @@ from one). They are also fetched on first use, so this is optional — what it i
 for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
+
+`--preprocessing` also fetches the GIAB, WRayner and TOPMed references that
+`preprocess --preset harmonise` needs (about 2 GB, most of it TOPMed) into the
+cache's `preprocessing/` subdirectory. Every reference is attempted even when
+one fails. The WRayner URL currently returns 404 upstream, so today it places
+GIAB and TOPMed and then exits non-zero, naming the failed URL and the path
+where a hand-placed `HRC-1000G-check-bim.pl` goes;
+[Preprocessing](preprocessing.md#what-needs-internet) has the details.
+Re-running is safe: it fetches only what is still missing.
 
 ## Exit codes and logging
 

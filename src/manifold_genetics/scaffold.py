@@ -4,7 +4,7 @@
 ``examples/`` is in neither the wheel nor the sdist. So the documented first
 command, ``manifold-genetics run config.yaml``, had nothing to run: there was no
 config to point it at and no template to copy one from. This module is what
-``manifold-genetics init`` uses to fix that.
+``manifold-genetics acquire`` uses to fix that.
 
 Two targets, because they answer different questions:
 
@@ -17,8 +17,8 @@ Two targets, because they answer different questions:
 """
 
 import logging
-import os
 import shutil
+import subprocess
 import tarfile
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -26,6 +26,15 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 
+# All of Us lives in its own module: the port of download_aou_data.sh is long
+# enough to deserve one. Re-exported here because `acquire` has always found it
+# under this name, and so have the tests. aou imports this module's helpers
+# lazily, so this is not circular.
+from .aou import _AOU_CONFIG  # noqa: F401
+from .aou import _AOU_REQUIRED_ENV  # noqa: F401
+from .aou import _AOU_REQUIRED_TOOLS  # noqa: F401
+from .aou import acquire_aou, aou_environment_problems  # noqa: F401
+from .preprocessing.cohort import MIN_LABEL_COVERAGE
 from .utils.tools import fetch_url
 
 logger = logging.getLogger(__name__)
@@ -89,7 +98,7 @@ DLA_TREE_EDGES = (
 )
 DLA_TREE_GAPS = (9, 10, 11, 12)
 
-# Drawn beside the config by `init synthetic`, so the shape the embedding is
+# Drawn beside the config by `acquire synthetic`, so the shape the embedding is
 # supposed to recover is on disk next to the embedding.
 GROUND_TRUTH_FIGURE = "dla_tree_ground_truth.png"
 
@@ -355,7 +364,7 @@ def simulate_cohort(n_variants: int = 1000, seed: int = 0) -> Tuple[np.ndarray, 
 
 
 _SYNTHETIC_CONFIG = """\
-# Written by `manifold-genetics init synthetic`.
+# Written by `manifold-genetics acquire synthetic`.
 #
 # A simulated cohort of {n_samples} samples lying along a branching tree: {n_branches}
 # branches, in pieces separated by {n_gaps} unsampled gaps, with genotypes drawn
@@ -395,7 +404,7 @@ skip:
 """
 
 
-def init_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Path:
+def acquire_synthetic(out_dir: PathLike, force: bool = False, seed: int = 0) -> Path:
     """Write a simulated cohort and a config that runs on it.
 
     Args:
@@ -495,17 +504,91 @@ def _download_hgdp_archive(destination: Path) -> Path:
         raise RuntimeError(
             f"Could not download the HGDP+1KGP archive: {exc}\n\n"
             "If this is a proxy or an offline machine, fetch it by other means and "
-            "point init at the file:\n\n"
+            "point acquire at the file:\n\n"
             f"    curl -L -o hgdp_1kgp_full.tar.gz '{HGDP_ARCHIVE_URL}'\n"
-            "    manifold-genetics init hgdp --archive hgdp_1kgp_full.tar.gz\n\n"
+            "    manifold-genetics acquire hgdp --archive hgdp_1kgp_full.tar.gz\n\n"
             "curl and wget use the system certificate store, which on a managed "
             "network usually already trusts the proxy."
         ) from exc
     return archive
 
 
+# The two HGDP+1KGP archives `acquire hgdp` knows how to unpack. They are not
+# the same panel: the public one is filtered and LD-pruned and carries QC and
+# relatedness flags in metadata.csv; the workbench one is unfiltered and carries
+# nothing but the population, in the FID.
+_PUBLIC_PREFIX = "full_dataset"
+_WORKBENCH_PREFIX = "extractedChrAllUnpruned"
+_WORKBENCH_FID_PREFIX = "forReference"
+
+
+def _detect_hgdp_layout(raw_dir: Path) -> str:
+    """Which HGDP+1KGP archive was unpacked here.
+
+    "public" is the Dropbox archive `acquire hgdp` fetches: ``full_dataset.*``,
+    already filtered and LD-pruned, with a ``metadata.csv``. "workbench" is the
+    archive kept beside All of Us: ``extractedChrAllUnpruned.*``, unfiltered,
+    chromosomes without a ``chr`` prefix, and the population carried in the FID
+    as ``forReference<Population>``. They are not the same panel and the log
+    line says which one this is.
+
+    The workbench check comes first, and accepts the ``.bim`` as well as the
+    ``.bed``: normalising a workbench archive renames its ``.bed`` to the public
+    name but leaves the original ``.bim`` and ``.fam`` in place, so a directory
+    that has been normalised -- or is being re-run -- still says where its data
+    came from. Without that, every re-run would look public and go looking for
+    QC columns the workbench metadata does not have.
+    """
+    if any((raw_dir / f"{_WORKBENCH_PREFIX}{ext}").exists() for ext in (".bed", ".bim")):
+        return "workbench"
+    if (raw_dir / f"{_PUBLIC_PREFIX}.bed").exists():
+        return "public"
+    raise FileNotFoundError(
+        f"{raw_dir} holds neither {_PUBLIC_PREFIX}.bed (the public archive) nor "
+        f"{_WORKBENCH_PREFIX}.bed (the workbench archive)."
+    )
+
+
+def _normalise_workbench_layout(raw_dir: Path) -> None:
+    """Rewrite the workbench archive into the public layout.
+
+    What ``examples/aou/hgdp_1kgp_proj/prepare_data.sh`` did in steps 3 and 14:
+    ``chr`` on every chromosome, and the population out of the FID and into a
+    ``metadata.csv``. The ``.bed`` is renamed, never read -- it is the same
+    genotypes under the other name.
+    """
+    src = raw_dir / _WORKBENCH_PREFIX
+    dst = raw_dir / _PUBLIC_PREFIX
+
+    bim = pd.read_csv(f"{src}.bim", sep=r"\s+", header=None, dtype=str)
+    bim[0] = bim[0].where(bim[0].str.startswith("chr"), "chr" + bim[0])
+    bim.to_csv(f"{dst}.bim", sep="\t", header=False, index=False)
+
+    fam = pd.read_csv(f"{src}.fam", sep=r"\s+", header=None, dtype=str)
+    population = fam[0].str.replace(f"^{_WORKBENCH_FID_PREFIX}", "", regex=True)
+    fam[0] = population
+    fam.to_csv(f"{dst}.fam", sep="\t", header=False, index=False)
+
+    Path(f"{src}.bed").rename(f"{dst}.bed")
+    pd.DataFrame({"project_meta.sample_id": fam[1], "Population": population}).to_csv(
+        raw_dir / "metadata.csv", index=False
+    )
+    logger.warning(
+        "Workbench HGDP+1KGP archive: unfiltered, %d samples. Not the public panel; "
+        "run `preprocess --preset harmonise --fit-has-chr-prefix` before fitting on it.",
+        len(fam),
+    )
+
+
 def _extract_hgdp_archive(archive: Path, raw_dir: Path) -> None:
-    if (raw_dir / "full_dataset.bed").exists():
+    """Unpack the archive into ``raw_dir`` in the public layout.
+
+    The tar is flattened by basename -- the workbench archive nests its files
+    under a ``1KGPHGDP/`` directory, the public one does not -- and a workbench
+    archive is then normalised, so what follows sees ``full_dataset.*`` and a
+    ``metadata.csv`` either way. Already-extracted data is left alone.
+    """
+    if (raw_dir / f"{_PUBLIC_PREFIX}.bed").exists():
         logger.info("Raw data already extracted in %s", raw_dir)
         return
 
@@ -522,14 +605,31 @@ def _extract_hgdp_archive(archive: Path, raw_dir: Path) -> None:
                 continue
             (raw_dir / name).write_bytes(extracted.read())
 
+    layout = _detect_hgdp_layout(raw_dir)
+    logger.info("Unpacked the %s HGDP+1KGP archive", layout)
+    if layout == "workbench":
+        _normalise_workbench_layout(raw_dir)
 
-_HGDP_CONFIG = """\
-# Written by `manifold-genetics init hgdp`.
+
+# The comment block at the top of the config says what the data beside it is,
+# which differs by archive; the settings below it do not.
+_HGDP_PUBLIC_HEADER = """\
+# Written by `manifold-genetics acquire hgdp`.
 #
 # HGDP+1KGP: 4,094 QC-passing samples across seven genetic regions, with the
 # model fitted on the 3,400 that are also unrelated. This is the cohort the
 # published figures were made from.
 #
+"""
+_HGDP_WORKBENCH_HEADER = """\
+# Written by `manifold-genetics acquire hgdp`, from the workbench archive.
+#
+# HGDP+1KGP as kept beside All of Us: every sample, unfiltered, labelled by
+# population. Not the public panel the published figures were made from. Run
+# `preprocess --preset harmonise --fit-has-chr-prefix` before fitting on it.
+#
+"""
+_HGDP_CONFIG_BODY = """\
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
 #
@@ -554,9 +654,15 @@ embedding:
 skip:
   admixture: true
 """
+_HGDP_CONFIG = _HGDP_PUBLIC_HEADER + _HGDP_CONFIG_BODY
 
 
-def init_hgdp(
+def _hgdp_config(layout: str) -> str:
+    header = _HGDP_PUBLIC_HEADER if layout == "public" else _HGDP_WORKBENCH_HEADER
+    return header + _HGDP_CONFIG_BODY
+
+
+def acquire_hgdp(
     out_dir: PathLike,
     force: bool = False,
     download: bool = True,
@@ -577,7 +683,10 @@ def init_hgdp(
             extracts one that is already present.
         plink2: Path to plink2; resolved automatically when None.
         archive: An already-downloaded ``hgdp_1kgp_full.tar.gz`` to use instead
-            of fetching. For proxied networks and offline machines.
+            of fetching, for proxied networks and offline machines -- or a
+            ``gs://`` URL, fetched with gsutil into ``data/`` once. Either the
+            public archive or the workbench's ``1KGPHGDP.tar.gz``; the layout
+            is detected and the workbench one normalised.
 
     Returns:
         The path of the config file written.
@@ -594,11 +703,28 @@ def init_hgdp(
         # caller named, one left in place by an earlier run, then downloading.
         # `download=False` means "do not fetch", not "do not unpack" -- someone
         # who obtained the archive another way still needs it extracted.
-        local = Path(archive) if archive else data_dir / "hgdp_1kgp_full.tar.gz"
-        if local.exists():
+        if archive and str(archive).startswith("gs://"):
+            # The workbench keeps its copy in a bucket; gsutil is the only way in.
+            fetched = data_dir / Path(str(archive)).name
+            if not fetched.exists():
+                data_dir.mkdir(parents=True, exist_ok=True)
+                logger.info("Fetching %s with gsutil", archive)
+                subprocess.run(["gsutil", "cp", str(archive), str(fetched)], check=True)
+            archive = fetched
+        if archive:
+            # A named archive is the one to use. Falling back to the public
+            # download when it is missing would silently swap in a different
+            # panel, which is worse than stopping.
+            local = Path(archive)
+            if not local.exists():
+                raise FileNotFoundError(f"The archive named, {local}, does not exist.")
             _extract_hgdp_archive(local, raw_dir)
-        elif download:
-            _extract_hgdp_archive(_download_hgdp_archive(data_dir), raw_dir)
+        else:
+            local = data_dir / "hgdp_1kgp_full.tar.gz"
+            if local.exists():
+                _extract_hgdp_archive(local, raw_dir)
+            elif download:
+                _extract_hgdp_archive(_download_hgdp_archive(data_dir), raw_dir)
 
     if not (raw_dir / "full_dataset.bed").exists():
         raise FileNotFoundError(
@@ -607,50 +733,81 @@ def init_hgdp(
             "drop --no-download to fetch it."
         )
 
+    layout = _detect_hgdp_layout(raw_dir)
     metadata = pd.read_csv(raw_dir / "metadata.csv")
-    fit_ids, project_ids = hgdp_subsets(metadata)
+    if layout == "public":
+        fit_ids, project_ids = hgdp_subsets(metadata)
+    else:
+        # The workbench panel carries no relatedness or QC columns, so there is
+        # no unrelated subset to pick; the old AoU flow fitted on every sample,
+        # and so does this.
+        fit_ids = project_ids = metadata["project_meta.sample_id"]
     logger.info("Selected %d fit and %d project samples", len(fit_ids), len(project_ids))
 
     for name, ids in (("fit", fit_ids), ("project", project_ids)):
         keep = data_dir / f"{name}_indices.txt"
-        keep.write_text("".join(f"{i}\t{i}\n" for i in ids))
-        _run_plink2_keep(raw_dir / "full_dataset", keep, data_dir / f"{name}_subset", plink2)
+        _write_keep_file(raw_dir / "full_dataset.fam", ids, keep)
+        _run_plink2_keep(
+            raw_dir / "full_dataset",
+            keep,
+            data_dir / f"{name}_subset",
+            plink2,
+            keep_chr_prefix=layout == "workbench",
+        )
 
-    _write_hgdp_labels(metadata, project_ids, data_dir / "labels.csv", out_dir / "colormap.json")
-    config_path.write_text(_HGDP_CONFIG)
+    if layout == "public":
+        _write_hgdp_labels(
+            metadata, project_ids, data_dir / "labels.csv", out_dir / "colormap.json"
+        )
+    else:
+        labels = metadata.rename(columns={"project_meta.sample_id": "sample_id"})
+        labels.to_csv(data_dir / "labels.csv", index=False)
+        _write_generated_colormap(labels, out_dir / "colormap.json")
+    config_path.write_text(_hgdp_config(layout))
 
     logger.info("Wrote HGDP+1KGP and a config to %s", out_dir)
     return config_path
 
 
-def _run_plink2_keep(bfile: Path, keep: Path, out: Path, plink2: Optional[str]) -> None:
-    import subprocess
+def _write_keep_file(fam_path: Path, ids: pd.Series, keep_path: Path) -> None:
+    """A ``plink2 --keep`` file for the samples named, as ``FID<tab>IID`` lines.
 
+    Read from the ``.fam`` rather than written as ``id<tab>id``: ``--keep``
+    matches both columns, and only the public archive has FID equal to IID. The
+    workbench archive carries the population in the FID, so a keep file that
+    repeated the sample ID would select nobody.
+    """
+    fam = pd.read_csv(fam_path, sep=r"\s+", header=None, dtype=str, usecols=[0, 1])
+    keep = fam[fam[1].isin(set(ids.astype(str)))]
+    keep.to_csv(keep_path, sep="\t", header=False, index=False)
+
+
+def _run_plink2_keep(
+    bfile: Path, keep: Path, out: Path, plink2: Optional[str], keep_chr_prefix: bool = False
+) -> None:
+    """``plink2 --keep --make-bed``.
+
+    ``keep_chr_prefix`` matters for the workbench panel: plink2 writes ``chr1``
+    back out as ``1`` unless told ``--output-chr chrM``, which would silently
+    undo the prefix the normalisation added and that ``preprocess
+    --fit-has-chr-prefix`` is then promised.
+    """
     if plink2 is None:
         from .utils.tools import ToolResolver
 
         plink2 = ToolResolver().resolve_plink2()
 
+    argv = [plink2, "--bfile", str(bfile), "--keep", str(keep)]
+    if keep_chr_prefix:
+        argv += ["--output-chr", "chrM"]
+    argv += ["--make-bed", "--out", str(out), "--silent"]
     logger.info("Creating %s with plink2", out.name)
-    subprocess.run(
-        [
-            plink2,
-            "--bfile",
-            str(bfile),
-            "--keep",
-            str(keep),
-            "--make-bed",
-            "--out",
-            str(out),
-            "--silent",
-        ],
-        check=True,
-    )
+    subprocess.run(argv, check=True)
 
 
 # The metadata column naming each sample's genetic region, and the colours the
 # shipped example uses for it -- examples/colormaps/hgdp_1kgp.json -- so a figure
-# from `init hgdp` is comparable with the published ones.
+# from `acquire hgdp` is comparable with the published ones.
 _HGDP_REGION_COLUMN = "Genetic_region_merged"
 _HGDP_REGION_COLOURS = {
     "Africa": "#008000",
@@ -723,7 +880,7 @@ _PALETTE = (
 )
 
 _CUSTOM_CONFIG = """\
-# Written by `manifold-genetics init custom`.
+# Written by `manifold-genetics acquire custom`.
 #
 #   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
 #   manifold-genetics run config.yaml             # do the work
@@ -780,8 +937,8 @@ def _checked_labels(labels: Path, plink: Path, min_overlap: float) -> pd.DataFra
     if overlap < min_overlap:
         raise ValueError(
             f"{labels} describes {overlap:.1%} of the samples in {plink}.fam. "
-            "Below 50% these are treated as different datasets: a label file that "
-            "half-matches produces figures that colour half the points and look "
+            f"Below {min_overlap:.0%} these are treated as different datasets: a label file "
+            "that half-matches produces figures that colour half the points and look "
             "finished. Check the two describe the same cohort."
         )
     if overlap < 1.0:
@@ -793,7 +950,7 @@ def _checked_labels(labels: Path, plink: Path, min_overlap: float) -> pd.DataFra
     return frame
 
 
-def init_custom(
+def acquire_custom(
     out_dir: PathLike,
     fit_plink: PathLike,
     labels: Optional[PathLike] = None,
@@ -803,7 +960,7 @@ def init_custom(
     preset: str = "whole_cohort",
     n_pcs: int = 20,
     force: bool = False,
-    min_overlap: float = 0.5,
+    min_overlap: float = MIN_LABEL_COVERAGE,
 ) -> Path:
     """Write a config and colormap for genotypes you already have.
 
@@ -828,7 +985,8 @@ def init_custom(
         n_pcs: Components to compute.
         force: Overwrite an existing ``config.yaml``.
         min_overlap: Refuse if fewer than this fraction of genotyped samples
-            appear in the label file.
+            appear in the label file. The default is the rule every command
+            applies (``preprocessing.cohort.MIN_LABEL_COVERAGE``).
 
     Returns:
         The path of the config file written.
@@ -907,121 +1065,3 @@ def _write_generated_colormap(labels: pd.DataFrame, path: Path) -> None:
     import json as _json
 
     path.write_text(_json.dumps(colormap, indent=2) + "\n")
-
-
-# What the All of Us preparation needs, and where each comes from. Checked
-# together rather than one at a time: reporting them singly would be three round
-# trips for someone who is simply not in the workbench.
-_AOU_REQUIRED_ENV = {
-    "GOOGLE_PROJECT": "the workbench's billing project, set for you inside it",
-    "WORKSPACE_CDR": "the CDR version, used to read demographics from BigQuery",
-}
-_AOU_REQUIRED_TOOLS = {
-    "gsutil": "to read gs://fc-aou-datasets-controlled",
-    "bq": "to query the CDR for sample demographics",
-    "plink2": "to filter and harmonise the genotypes",
-}
-
-_AOU_CONFIG = """\
-# Written by `manifold-genetics init aou`.
-#
-# All of Us projected onto the HGDP+1KGP reference panel, matching
-# examples/aou/hgdp_1kgp_proj/config.yaml.
-#
-#   manifold-genetics run config.yaml --dry-run   # print the settings, do nothing
-#   manifold-genetics run config.yaml             # do the work
-#
-# The genotypes are NOT fetched by `init`: All of Us is controlled-access and its
-# preparation is about 1,300 lines of workbench-specific shell -- a GCS download,
-# a per-chromosome split, filtering, harmonisation and intersection with the
-# reference panel. Run that first:
-#
-#   bash examples/aou/hgdp_1kgp_proj/prepare_data.sh
-#
-# and point the paths below at what it produced.
-
-# "projection" fits on the reference panel and transforms the cohort onto it.
-preset: projection
-
-data:
-  fit_plink: data/fit_subset
-  project_plink: data/project_subset
-  fit_labels: data/fit_labels.csv
-  project_labels: data/project_labels.csv
-  fit_colormap: colormap_fit.json
-  project_colormap: colormap_project.json
-  output_dir: outputs
-
-pca:
-  n_pcs: 20
-
-embedding:
-  method: phate
-  # 400,000-odd samples are transformed; batching keeps peak memory bounded.
-  embed_batch_size: 60000
-
-visualization:
-  projection_plot_fit_column: Population
-  projection_plot_project_column: race_ethnicity
-
-# Admixture needs the `admixture` extra (torch) and a GPU to be worth running.
-skip:
-  admixture: true
-"""
-
-
-def aou_environment_problems() -> list:
-    """What is missing before All of Us data can be prepared, in one pass."""
-    problems = []
-    for variable, why in _AOU_REQUIRED_ENV.items():
-        if not os.environ.get(variable):
-            problems.append(f"  ${variable} is not set -- {why}")
-    for tool, why in _AOU_REQUIRED_TOOLS.items():
-        if not shutil.which(tool):
-            problems.append(f"  {tool} is not on PATH -- {why}")
-    return problems
-
-
-def init_aou(out_dir: PathLike, force: bool = False) -> Path:
-    """Write a config for All of Us, after checking this is a place it can run.
-
-    Deliberately does not fetch anything. Unlike HGDP -- one archive over HTTPS
-    and two plink2 calls -- All of Us is controlled-access, lives in
-    ``gs://fc-aou-datasets-controlled``, and its preparation is about 1,300
-    lines of workbench-specific shell. Hiding that behind one command would
-    promise something it cannot deliver, and the failure would arrive deep
-    inside a download rather than at the start.
-
-    So this checks the environment, reports everything missing at once, and
-    writes the config for the prepared cohort.
-
-    Raises:
-        EnvironmentError: this is not an All of Us Researcher Workbench.
-    """
-    out_dir = Path(out_dir)
-    config_path = out_dir / "config.yaml"
-    _refuse_to_clobber(config_path, force)
-
-    problems = aou_environment_problems()
-    if problems:
-        raise EnvironmentError(
-            "All of Us data can only be prepared inside the Researcher Workbench, "
-            "and this does not look like one:\n\n"
-            + "\n".join(problems)
-            + "\n\nIf you are in the workbench, these are normally set for you; "
-            "check the notebook environment. If you are not, there is no way to "
-            "reach the data from here -- it is controlled-access.\n\n"
-            "To try the pipeline without it: `manifold-genetics init synthetic`, "
-            "or `init hgdp` for a real public cohort."
-        )
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(_AOU_CONFIG)
-    logger.info("Wrote an All of Us config to %s", out_dir)
-    logger.warning(
-        "The genotypes are not fetched by init. Run "
-        "examples/aou/hgdp_1kgp_proj/prepare_data.sh first, then point the paths "
-        "in %s at what it produced.",
-        config_path,
-    )
-    return config_path
