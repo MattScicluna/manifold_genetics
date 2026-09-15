@@ -33,9 +33,10 @@ _PLINK = tuple(
 class Cohort:
     """One real dataset the pipeline is tested against.
 
-    ``config`` is repo-relative so it can be compared against the shipped
-    examples; ``requires`` is relative to the resolved data root, because that
-    root moves when the environment variable is set.
+    ``config`` is repo-relative, under the untracked ``examples/`` directory that
+    exists only on machines holding the data; ``requires`` is relative to the
+    resolved data root, because that root moves when the environment variable
+    is set.
     """
 
     name: str
