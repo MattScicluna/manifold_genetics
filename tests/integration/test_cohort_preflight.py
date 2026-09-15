@@ -59,6 +59,11 @@ class Prepared:
 def prepared(request):
     cohort = COHORTS[request.param]
 
+    # The cohort configs live in the untracked examples/ directory: present on
+    # the machines that hold the data, absent from a fresh clone.
+    if not cohort.config_path.exists():
+        pytest.skip(f"{cohort.name}: {cohort.config} is not on this machine")
+
     root = resolve_data_root(cohort)
     if root is None:
         pytest.skip(f"{cohort.name}: no data root (set {cohort.env_var})")

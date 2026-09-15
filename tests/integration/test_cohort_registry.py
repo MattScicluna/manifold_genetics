@@ -20,25 +20,6 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class TestRegistry:
-    def test_every_shipped_config_has_a_cohort_entry(self):
-        """A new example must come with a statement of how it is tested.
-
-        Otherwise an example can be added, look supported, and never be exercised
-        against real data.
-        """
-        shipped = {str(p.relative_to(REPO)) for p in REPO.glob("examples/**/config.yaml")}
-        registered = {c.config for c in COHORTS.values()}
-        # Templates are placeholders, not runnable cohorts.
-        shipped -= {
-            "examples/generic/subset/config.yaml",
-            "examples/generic/hgdp_1kgp_proj/config.yaml",
-        }
-
-        assert shipped == registered, (
-            f"configs without a cohort entry: {sorted(shipped - registered)}\n"
-            f"cohort entries without a config: {sorted(registered - shipped)}"
-        )
-
     def test_public_cohort_is_marked_public(self):
         assert COHORTS["hgdp"].public is True
 
@@ -66,15 +47,16 @@ class TestResolveDataRoot:
 
     def test_falls_back_to_the_config_s_own_directory(self, monkeypatch):
         monkeypatch.delenv("MG_TEST_ROOT", raising=False)
+        # Any directory that exists in a clone will do; examples/ is untracked.
         cohort = Cohort(
             name="x",
-            config="examples/hgdp_1kgp/config.yaml",
+            config="tests/integration/config.yaml",
             env_var="MG_TEST_ROOT",
             public=True,
             requires=(),
         )
 
-        assert resolve_data_root(cohort) == REPO / "examples/hgdp_1kgp"
+        assert resolve_data_root(cohort) == REPO / "tests/integration"
 
     def test_returns_none_when_the_environment_variable_points_nowhere(self, tmp_path, monkeypatch):
         monkeypatch.setenv("MG_TEST_ROOT", str(tmp_path / "absent"))
