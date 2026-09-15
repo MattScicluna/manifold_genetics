@@ -43,7 +43,7 @@ def _check_intermediate_signature(temp_dir: Path, signature: Dict[str, object]) 
     a differing one means the caller changed something that changes what the
     shell filters, and `--force` does not paper over that (it only means
     "rewrite the config and labels"). A temp dir with intermediates but no
-    sentinel predates this check (0.3.0): its provenance is unknown, so we
+    sentinel predates this check (the first release): its provenance is unknown, so we
     warn and proceed rather than break existing resumes.
     """
     temp_dir.mkdir(parents=True, exist_ok=True)
