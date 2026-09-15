@@ -15,16 +15,28 @@ from manifold_genetics.scaffold import acquire_synthetic
 
 
 def _fake_shell(argv):
-    """Copy reference -> fit_subset and biobank -> project_subset, dropping the last variant."""
+    """Copy reference -> fit_subset and biobank -> project_subset, dropping the last variant.
+
+    The dropped variant's genotype block is also cut from .bed (SNP-major: each
+    variant is a contiguous byte-column, so trimming the last one leaves the
+    others byte-identical) -- otherwise the stub's own output would be a
+    byte-inconsistent triplet that `preprocess`'s completeness check rejects.
+    """
     ref = Path(argv[argv.index("--reference-plink") + 1])
     bio = Path(argv[argv.index("--biobank-plink") + 1])
     out = Path(argv[argv.index("--output-dir") + 1])
     out.mkdir(parents=True, exist_ok=True)
     for src, name in ((ref, "fit_subset"), (bio, "project_subset")):
-        for ext in ("bed", "fam"):
-            shutil.copy(f"{src}.{ext}", out / f"{name}.{ext}")
+        shutil.copy(f"{src}.fam", out / f"{name}.fam")
         lines = Path(f"{src}.bim").read_text().splitlines()[:-1]
         (out / f"{name}.bim").write_text("\n".join(lines) + "\n")
+
+        n_variants = len(lines)
+        n_samples = len(Path(f"{src}.fam").read_text().splitlines())
+        bytes_per_variant = (n_samples + 3) // 4
+        expected_size = 3 + n_variants * bytes_per_variant
+        data = Path(f"{src}.bed").read_bytes()
+        (out / f"{name}.bed").write_bytes(data[:expected_size])
 
 
 @pytest.fixture
@@ -153,6 +165,22 @@ def test_missing_shell_output_raises_runtime_error(tmp_path, tools):
     acquire_synthetic(tmp_path / "in")
     with pytest.raises(RuntimeError, match="fit_subset"):
         preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=lambda argv: None)
+
+
+def test_truncated_shell_output_raises_runtime_error_naming_the_prefix(tmp_path, tools):
+    """An OOM-killed shell can leave a truncated fit_subset.bed behind; that must
+    not be mistaken for a finished output."""
+
+    def truncating_shell(argv):
+        _fake_shell(argv)
+        out = Path(argv[argv.index("--output-dir") + 1])
+        bed = out / "fit_subset.bed"
+        bed.write_bytes(bed.read_bytes()[:-1])
+
+    acquire_synthetic(tmp_path / "in")
+    with pytest.raises(RuntimeError, match="incomplete") as excinfo:
+        preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=truncating_shell)
+    assert str(tmp_path / "out/data/fit_subset") in str(excinfo.value)
 
 
 def _cut_labels_to(fraction, config_dir):

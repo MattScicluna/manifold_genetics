@@ -6,6 +6,7 @@ import pytest
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing import PreprocessOptions, preprocess
+from manifold_genetics.preprocessing.cohort import bed_is_complete
 from manifold_genetics.scaffold import acquire_synthetic
 from manifold_genetics.utils.tools import ToolNotFoundError, ToolResolver
 
@@ -71,6 +72,38 @@ def test_the_output_dry_runs(tmp_path, tools):
         ),
     )
     assert main(["run", str(config), "--dry-run"]) == 0
+
+
+def test_a_truncated_intermediate_is_redone_not_reused(tmp_path, tools):
+    """An OOM-killed run once left an intermediate .bed truncated, and the next
+    run's existence-only checkpoint reused it as finished (issue #133). Resuming
+    must detect and redo it instead."""
+    acquire_synthetic(tmp_path / "in")
+    options = PreprocessOptions(
+        preset="intersect-only", min_common_snps=100, memory=2000, threads=2
+    )
+    config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", options=options)
+    loaded = load_config(config)
+    baseline = {
+        side: (_variants(loaded[side]), _samples(loaded[side]))
+        for side in ("fit_plink", "project_plink")
+    }
+
+    prefix = tmp_path / "out/data/temp/reference_filtered"
+    assert bed_is_complete(prefix), "the first run's intermediate must be complete"
+    bed = prefix.with_suffix(".bed")
+    data = bed.read_bytes()
+    bed.write_bytes(data[: len(data) // 2])
+    assert not bed_is_complete(prefix), "the truncation must be detectable"
+
+    config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", options=options, force=True)
+
+    assert bed_is_complete(prefix), "the incomplete intermediate must be redone, not reused"
+    loaded = load_config(config)
+    for side in ("fit_plink", "project_plink"):
+        assert (_variants(loaded[side]), _samples(loaded[side])) == baseline[
+            side
+        ], f"{side} must still be lossless after the redo"
 
 
 def test_preprocess_then_subsample_then_dry_run(tmp_path, tools):

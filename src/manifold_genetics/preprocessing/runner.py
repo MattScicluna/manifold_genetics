@@ -11,6 +11,8 @@ from typing import Callable, List, Optional
 from ..utils.tools import ToolResolver
 from .cohort import (
     PathLike,
+    bed_expected_size,
+    bed_is_complete,
     check_label_coverage,
     filter_labels_to_fam,
     filter_labels_to_ids,
@@ -99,8 +101,17 @@ def preprocess(
         )
     )
     for name in ("fit_subset", "project_subset"):
-        if not (data_dir / f"{name}.bed").exists():
-            raise RuntimeError(f"the shell finished without writing {data_dir / name}.bed")
+        prefix = data_dir / name
+        bed = data_dir / f"{name}.bed"
+        if not bed.exists():
+            raise RuntimeError(f"the shell finished without writing {bed}")
+        if not bed_is_complete(prefix):
+            expected = bed_expected_size(prefix)
+            actual = bed.stat().st_size
+            raise RuntimeError(
+                f"{prefix} is incomplete: expected {expected} bytes but found {actual} "
+                "(the shell may have been killed mid-write)"
+            )
 
     data = {"fit_plink": "data/fit_subset", "project_plink": "data/project_subset"}
     visualization = None
