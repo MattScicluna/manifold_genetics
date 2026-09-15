@@ -599,14 +599,22 @@ def cmd_setup(args):
 
     resolver = ToolResolver()
     tools = resolver.install_tools(include_plink1=not args.skip_plink1)
-    if args.preprocessing:
-        from .preprocessing.references import install_harmonisation_references
-
-        tools.update(install_harmonisation_references())
-
     print("External tools installed:")
     for name, path in tools.items():
         print(f"  - {name}: {path}")
+    if args.preprocessing:
+        from .preprocessing.references import install_harmonisation_references
+
+        try:
+            references = install_harmonisation_references()
+        except RuntimeError as exc:
+            # Every reference was attempted; the message says which were
+            # placed, which failed, and where to put a copy by hand.
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print("Harmonisation references installed:")
+        for name, path in references.items():
+            print(f"  - {name}: {path}")
     return 0
 
 
@@ -1598,8 +1606,9 @@ def main(argv: Optional[List[str]] = None):
             "  flashpca (~2 MB, Linux x86-64 only)\n"
             "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
             "With --preprocessing, also fetches the GIAB, WRayner and TOPMed\n"
-            "references the harmonise preset needs (~1 GB), so preprocess can\n"
-            "run its harmonisation step on a compute node without internet.\n\n"
+            "references the harmonise preset needs (~2 GB, most of it the TOPMed\n"
+            "reference), so preprocess can run its harmonisation step on a\n"
+            "compute node without internet.\n\n"
             "Requires internet access (run on a login node, not a compute node).\n"
             "This command does NOT manage the Python environment."
         ),
@@ -1613,7 +1622,10 @@ def main(argv: Optional[List[str]] = None):
     setup_parser.add_argument(
         "--preprocessing",
         action="store_true",
-        help="Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs (~1 GB)",
+        help=(
+            "Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs "
+            "(~2 GB, most of it the TOPMed reference)"
+        ),
     )
     setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     setup_parser.set_defaults(func=cmd_setup)

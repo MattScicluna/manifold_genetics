@@ -3,8 +3,8 @@ again must change nothing. This is the end-to-end check that `acquire`,
 `preprocess` and the shell agree on what a cohort directory is -- on real data,
 without private access.
 
-Needs the archive: set MG_HGDP_ARCHIVE to a local hgdp_1kgp_full.tar.gz, or
-run with network on a login node."""
+Needs the archive: set MG_HGDP_ARCHIVE to a local hgdp_1kgp_full.tar.gz (the
+fixture never downloads)."""
 
 import os
 from pathlib import Path

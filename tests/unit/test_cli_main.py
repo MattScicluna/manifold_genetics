@@ -366,6 +366,28 @@ def test_cmd_setup_preprocessing_installs_harmonisation_references(monkeypatch):
     assert calls == [True]
 
 
+def test_cmd_setup_preprocessing_reports_a_failed_reference_after_the_tools(monkeypatch, capsys):
+    """The tools placed are printed before the error, and the error is the
+    installer's own message (what was placed, what failed, where to put it)."""
+
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2"}
+
+    def fake_install():
+        raise RuntimeError("Failed: wrayner from https://example/x.zip: 404")
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    monkeypatch.setattr(
+        "manifold_genetics.preprocessing.references.install_harmonisation_references",
+        fake_install,
+    )
+    assert mg_cli.main(["setup", "--preprocessing"]) == 1
+    captured = capsys.readouterr()
+    assert "plink2: /bin/plink2" in captured.out
+    assert "Error: Failed: wrayner" in captured.err
+
+
 def test_cmd_pca_fit_project(monkeypatch, tmp_path):
     """--fit-plink + --project-plink fits one dataset and projects the other."""
     calls = []

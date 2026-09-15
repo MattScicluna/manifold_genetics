@@ -210,12 +210,13 @@ have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
 
 `--preprocessing` also fetches the GIAB, WRayner and TOPMed references that
-`preprocess --preset harmonise` needs (about 2 GB, most of it TOPMed), in that
-order, into the cache's `preprocessing/` subdirectory. The WRayner URL
-currently returns 404 upstream, so today it places GIAB, fails on WRayner and
-does not reach TOPMed; [Preprocessing](preprocessing.md#what-needs-internet)
-says where to place the file by hand, after which re-running it fetches the
-rest.
+`preprocess --preset harmonise` needs (about 2 GB, most of it TOPMed) into the
+cache's `preprocessing/` subdirectory. Every reference is attempted even when
+one fails. The WRayner URL currently returns 404 upstream, so today it places
+GIAB and TOPMed and then exits non-zero, naming the failed URL and the path
+where a hand-placed `HRC-1000G-check-bim.pl` goes;
+[Preprocessing](preprocessing.md#what-needs-internet) has the details.
+Re-running is safe: it fetches only what is still missing.
 
 ## Exit codes and logging
 
