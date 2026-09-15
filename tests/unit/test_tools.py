@@ -1,12 +1,15 @@
 """Tests for utils/tools.py — ToolResolver path resolution.
 
 ToolResolver uses a fallback chain to find external binaries:
-  local bin dir → env var → module system → PATH → auto-download
+  local bin dir → env var → PATH → auto-download
+
+There is no Environment Modules step, and a test below pins that: ``module load``
+in a child shell cannot change this process's PATH, so the step that used to sit
+between env var and PATH never found anything.
 
 Tests use real temp executables (chmod +x shell scripts) rather than mocking
 os.access, so the tests verify actual filesystem permission checks rather than
-the mock infrastructure. Module system and download tests are isolated via
-monkeypatching subprocess.run.
+the mock infrastructure. Download tests stub the download method.
 """
 
 import os
@@ -204,66 +207,106 @@ class TestResolveNeuralAdmixture:
 
 
 # ---------------------------------------------------------------------------
-# TestModuleSystem — isolate subprocess.run failures gracefully
+# The resolution chain, pinned once for every downloadable binary
 # ---------------------------------------------------------------------------
 
 
-class TestModuleSystem:
+@pytest.mark.parametrize(
+    "resolver_name, env_var, binary",
+    [
+        ("resolve_plink2", "PLINK_PATH", "plink2"),
+        ("resolve_plink1", "PLINK1_PATH", "plink"),
+        ("resolve_flashpca", "FLASHPCA_PATH", "flashpca"),
+    ],
+)
+class TestResolutionChain:
+    """download dir → env var → PATH → download, in that order, for each tool.
 
-    def test_module_available_file_not_found_returns_false(self, tmp_path, monkeypatch):
-        """If 'module' command doesn't exist, _module_available returns False."""
-        import manifold_genetics.utils.tools as tools_mod
+    Each test sets up every later source as well as the one under test, so a
+    pass means the earlier source won -- not merely that it was consulted.
+    """
 
-        def fake_run(cmd, **kwargs):
-            raise FileNotFoundError("module: command not found")
+    @pytest.fixture
+    def env_script(self, tmp_path, monkeypatch, env_var, binary):
+        script = make_script(tmp_path / f"env_{binary}")
+        monkeypatch.setenv(env_var, str(script))
+        return script
 
-        monkeypatch.setattr(tools_mod.subprocess, "run", fake_run)
-        resolver = ToolResolver(download_dir=tmp_path)
-        assert resolver._module_available("plink") is False
+    @pytest.fixture
+    def on_path(self, monkeypatch, binary):
+        path = f"/fake/path/{binary}"
+        monkeypatch.setattr(
+            "manifold_genetics.utils.tools.shutil.which",
+            lambda name: path if name == binary else None,
+        )
+        return path
 
-    def test_module_available_timeout_returns_false(self, tmp_path, monkeypatch):
-        """Timeout on module avail returns False — doesn't propagate exception."""
-        import manifold_genetics.utils.tools as tools_mod
+    @pytest.fixture
+    def downloader(self, monkeypatch, resolver_name, binary):
+        calls = []
+        download_name = resolver_name.replace("resolve_", "_download_")
 
-        def fake_run(cmd, **kwargs):
-            raise subprocess.TimeoutExpired(cmd, 5)
+        def _download(self):
+            calls.append(binary)
+            return f"/downloaded/{binary}"
 
-        monkeypatch.setattr(tools_mod.subprocess, "run", fake_run)
-        resolver = ToolResolver(download_dir=tmp_path)
-        assert resolver._module_available("plink") is False
+        monkeypatch.setattr(ToolResolver, download_name, _download)
+        return calls
 
-    def test_try_load_module_file_not_found_returns_false(self, tmp_path, monkeypatch):
-        import manifold_genetics.utils.tools as tools_mod
+    def test_download_dir_beats_everything(
+        self, tmp_path, resolver_name, binary, env_script, on_path, downloader
+    ):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        local = make_script(bin_dir / binary)
+        assert getattr(ToolResolver(download_dir=bin_dir), resolver_name)() == str(local)
+        assert downloader == []
 
-        def fake_run(cmd, **kwargs):
-            raise FileNotFoundError("module: command not found")
+    def test_env_var_beats_path_and_download(
+        self, tmp_path, resolver_name, env_script, on_path, downloader
+    ):
+        resolver = ToolResolver(download_dir=tmp_path / "empty_bin")
+        assert getattr(resolver, resolver_name)() == str(env_script)
+        assert downloader == []
 
-        monkeypatch.setattr(tools_mod.subprocess, "run", fake_run)
-        resolver = ToolResolver(download_dir=tmp_path)
-        assert resolver._try_load_module("plink") is False
+    def test_path_beats_download(
+        self, tmp_path, monkeypatch, resolver_name, env_var, on_path, downloader
+    ):
+        monkeypatch.delenv(env_var, raising=False)
+        resolver = ToolResolver(download_dir=tmp_path / "empty_bin")
+        assert getattr(resolver, resolver_name)() == on_path
+        assert downloader == []
 
-    def test_try_load_module_timeout_returns_false(self, tmp_path, monkeypatch):
-        import manifold_genetics.utils.tools as tools_mod
+    def test_download_is_the_last_resort(
+        self, tmp_path, monkeypatch, resolver_name, env_var, binary, downloader
+    ):
+        monkeypatch.delenv(env_var, raising=False)
+        monkeypatch.setattr("manifold_genetics.utils.tools.shutil.which", lambda name: None)
+        resolver = ToolResolver(download_dir=tmp_path / "empty_bin")
+        assert getattr(resolver, resolver_name)() == f"/downloaded/{binary}"
+        assert downloader == [binary]
 
-        def fake_run(cmd, **kwargs):
-            raise subprocess.TimeoutExpired(cmd, 5)
+    def test_set_but_invalid_env_var_raises(
+        self, tmp_path, monkeypatch, resolver_name, env_var, on_path, downloader
+    ):
+        """A set-but-wrong env var is an error, not a silent fall-through to PATH."""
+        monkeypatch.setenv(env_var, str(tmp_path / "ghost"))
+        resolver = ToolResolver(download_dir=tmp_path / "empty_bin")
+        with pytest.raises(ToolNotFoundError, match=env_var):
+            getattr(resolver, resolver_name)()
+        assert downloader == []
 
-        monkeypatch.setattr(tools_mod.subprocess, "run", fake_run)
-        resolver = ToolResolver(download_dir=tmp_path)
-        assert resolver._try_load_module("plink") is False
 
-    def test_try_load_module_nonzero_exit_returns_false(self, tmp_path, monkeypatch):
-        """Non-zero returncode from module load means the module wasn't loaded."""
-        import manifold_genetics.utils.tools as tools_mod
+def test_resolver_has_no_module_system_step():
+    """``module load`` in a child shell cannot change this process's PATH, so
+    the resolver must not pretend to try it. Grep the source rather than the
+    behaviour: the step was a silent no-op, which is exactly what a behavioural
+    test would fail to notice."""
+    import manifold_genetics.utils.tools as tools_mod
 
-        class FakeResult:
-            returncode = 1
-            stdout = ""
-            stderr = "ERROR: Unable to locate a modulefile for 'nonexistent_module'"
-
-        monkeypatch.setattr(tools_mod.subprocess, "run", lambda cmd, **kwargs: FakeResult())
-        resolver = ToolResolver(download_dir=tmp_path)
-        assert resolver._try_load_module("nonexistent_module") is False
+    source = Path(tools_mod.__file__).read_text()
+    for forbidden in ("module load", "_try_load_module", "Compute Canada"):
+        assert forbidden not in source, f"{forbidden!r} is back in tools.py"
 
 
 # ---------------------------------------------------------------------------

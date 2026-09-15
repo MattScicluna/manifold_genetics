@@ -2,7 +2,7 @@
 Tool path resolution for genomics pipeline.
 
 Resolves paths to required tools (plink2, flashpca, neural-admixture) using
-a fallback chain: environment variables → module system → PATH → download/error.
+a fallback chain: download directory → environment variable → PATH → download/error.
 """
 
 import gzip
@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -183,13 +183,21 @@ def _user_cache_bin() -> Path:
 
 class ToolResolver:
     """
-    Resolve tool paths using fallback chain.
+    Resolve tool paths using a fallback chain.
 
-    Priority order:
-    1. Environment variable (PLINK_PATH, FLASHPCA_PATH, NEURAL_ADMIXTURE_PATH)
-    2. Module system (module load plink)
+    Priority order, for the downloadable binaries (plink2, plink v1.9, flashpca):
+    1. The download directory (pre-fetched by ``manifold-genetics setup``)
+    2. The tool's environment variable (PLINK_PATH, PLINK1_PATH, FLASHPCA_PATH)
     3. PATH lookup (shutil.which)
-    4. Auto-download (FlashPCA only) or error
+    4. Auto-download into the download directory
+
+    neural-admixture is a Python package, so it has no download step: its
+    environment variable, then the active virtual environment, then PATH.
+
+    There is deliberately no Environment Modules step. A child shell cannot
+    change this process's ``PATH``, so loading a module from here never made
+    the binary visible; load it in the shell before running instead, and the
+    PATH lookup finds it.
     """
 
     def __init__(self, download_dir: Optional[Path] = None):
@@ -220,6 +228,60 @@ class ToolResolver:
         self.download_dir.mkdir(parents=True, exist_ok=True)
         return self.download_dir
 
+    def _resolve_binary(
+        self,
+        *,
+        names: Sequence[str],
+        env_var: str,
+        download: Callable[[], str],
+        label: str,
+        local_names: Optional[Sequence[str]] = None,
+    ) -> str:
+        """
+        The four-step chain shared by every downloadable binary.
+
+        Args:
+            names: Executable names to look for on PATH, in order.
+            env_var: Environment variable that may name the executable outright.
+            download: Fetches the binary into ``download_dir`` and returns its path.
+            label: How the tool is called in log and error messages.
+            local_names: File names to accept in ``download_dir``. Defaults to
+                ``names``; it is separate because what a download leaves behind
+                is not always what PATH would be searched for.
+
+        Returns:
+            Path to the executable.
+
+        Raises:
+            ToolNotFoundError: ``env_var`` is set but does not name a valid
+                executable (set-but-wrong is an error, never silently skipped),
+                or nothing was found and the download failed.
+        """
+        # 1. Download directory first: what `setup` pre-fetched wins.
+        for local_name in (local_names if local_names is not None else names):
+            local = self.download_dir / local_name
+            if local.exists() and self._validate_executable(str(local)):
+                logger.debug(f"Using pre-downloaded {label}: {local}")
+                return str(local)
+
+        # 2. The tool's environment variable.
+        if env_path := os.getenv(env_var):
+            if self._validate_executable(env_path):
+                return env_path
+            raise ToolNotFoundError(f"{env_var} points to invalid executable: {env_path}")
+
+        # 3. PATH.
+        for name in names:
+            if path := shutil.which(name):
+                return path
+
+        # 4. Auto-download (will fail on compute nodes without internet!)
+        logger.warning(
+            f"{label} not found in {self.download_dir}, {env_var}, or PATH. "
+            "Attempting download (will fail on compute nodes without internet)..."
+        )
+        return download()
+
     def resolve_plink2(self) -> str:
         """
         Resolve plink2 path.
@@ -227,9 +289,8 @@ class ToolResolver:
         Priority:
         1. Local bin directory (pre-downloaded during setup)
         2. PLINK_PATH environment variable
-        3. Module system (module load plink)
-        4. PATH lookup
-        5. Auto-download to download_dir (will fail on compute nodes without internet)
+        3. PATH lookup (plink2, then plink)
+        4. Auto-download to download_dir (will fail on compute nodes without internet)
 
         Returns:
             Path to plink2 executable
@@ -237,40 +298,13 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If plink2 cannot be found
         """
-        # 1. Check local bin directory FIRST (pre-downloaded during setup)
-        local_plink = self.download_dir / "plink2"
-        if local_plink.exists() and self._validate_executable(str(local_plink)):
-            logger.debug(f"Using pre-downloaded plink2: {local_plink}")
-            return str(local_plink)
-
-        # 2. Check PLINK_PATH env var
-        if env_path := os.getenv("PLINK_PATH"):
-            if self._validate_executable(env_path):
-                return env_path
-            else:
-                raise ToolNotFoundError(f"PLINK_PATH points to invalid executable: {env_path}")
-
-        # 3. Check module system (Compute Canada clusters)
-        # Try multiple plink versions
-        for version in ["plink/2.00-20231024-avx2", "plink/2.00a5.8", "plink"]:
-            if self._try_load_module(version):
-                # Module loaded successfully, check PATH
-                for name in ["plink2", "plink"]:
-                    if path := shutil.which(name):
-                        logger.debug(f"Found plink via module {version}: {path}")
-                        return path
-
-        # 4. Check PATH
-        for name in ["plink2", "plink"]:
-            if path := shutil.which(name):
-                return path
-
-        # 5. Auto-download (will fail on compute nodes without internet!)
-        logger.warning(
-            "plink2 not found in bin/, PATH, or modules. "
-            "Attempting download (will fail on compute nodes without internet)..."
+        return self._resolve_binary(
+            names=["plink2", "plink"],
+            local_names=["plink2"],
+            env_var="PLINK_PATH",
+            download=self._download_plink2,
+            label="plink2",
         )
-        return self._download_plink2()
 
     def resolve_plink1(self) -> str:
         """
@@ -282,9 +316,8 @@ class ToolResolver:
         Priority:
         1. Local bin directory (pre-downloaded during setup)
         2. PLINK1_PATH environment variable
-        3. Module system (module load plink)
-        4. PATH lookup
-        5. Auto-download to download_dir (will fail on compute nodes without internet)
+        3. PATH lookup
+        4. Auto-download to download_dir (will fail on compute nodes without internet)
 
         Returns:
             Path to plink (v1.9) executable
@@ -292,38 +325,12 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If plink v1.9 cannot be found
         """
-        # 1. Check local bin directory FIRST (pre-downloaded during setup)
-        local_plink = self.download_dir / "plink"
-        if local_plink.exists() and self._validate_executable(str(local_plink)):
-            logger.debug(f"Using pre-downloaded plink (v1.9): {local_plink}")
-            return str(local_plink)
-
-        # 2. Check PLINK1_PATH env var
-        if env_path := os.getenv("PLINK1_PATH"):
-            if self._validate_executable(env_path):
-                return env_path
-            else:
-                raise ToolNotFoundError(f"PLINK1_PATH points to invalid executable: {env_path}")
-
-        # 3. Check module system (Compute Canada clusters)
-        # Try multiple plink 1.9 versions
-        for version in ["plink/1.9b_6.21-x86_64", "plink/1.9", "plink"]:
-            if self._try_load_module(version):
-                # Module loaded successfully, check PATH
-                if path := shutil.which("plink"):
-                    logger.debug(f"Found plink via module {version}: {path}")
-                    return path
-
-        # 4. Check PATH
-        if path := shutil.which("plink"):
-            return path
-
-        # 5. Auto-download (will fail on compute nodes without internet!)
-        logger.warning(
-            "plink (v1.9) not found in bin/, PATH, or modules. "
-            "Attempting download (will fail on compute nodes without internet)..."
+        return self._resolve_binary(
+            names=["plink"],
+            env_var="PLINK1_PATH",
+            download=self._download_plink1,
+            label="plink (v1.9)",
         )
-        return self._download_plink1()
 
     def resolve_flashpca(self) -> str:
         """
@@ -341,31 +348,12 @@ class ToolResolver:
         Raises:
             ToolNotFoundError: If download fails
         """
-        # 1. Check local bin directory FIRST (pre-downloaded during setup)
-        for local_name in ["flashpca", "flashpca_x86-64"]:
-            local_flashpca = self.download_dir / local_name
-            if local_flashpca.exists() and self._validate_executable(str(local_flashpca)):
-                logger.debug(f"Using pre-downloaded flashPCA: {local_flashpca}")
-                return str(local_flashpca)
-
-        # 2. Check FLASHPCA_PATH env var
-        if env_path := os.getenv("FLASHPCA_PATH"):
-            if self._validate_executable(env_path):
-                return env_path
-            else:
-                raise ToolNotFoundError(f"FLASHPCA_PATH points to invalid executable: {env_path}")
-
-        # 3. Check PATH
-        for name in ["flashpca", "flashpca_x86-64"]:
-            if path := shutil.which(name):
-                return path
-
-        # 4. Auto-download (will fail on compute nodes without internet!)
-        logger.warning(
-            "FlashPCA not found in bin/, PATH, or environment. "
-            "Attempting download (will fail on compute nodes without internet)..."
+        return self._resolve_binary(
+            names=["flashpca", "flashpca_x86-64"],
+            env_var="FLASHPCA_PATH",
+            download=self._download_flashpca,
+            label="FlashPCA",
         )
-        return self._download_flashpca()
 
     def resolve_neural_admixture(self) -> str:
         """
@@ -423,54 +411,6 @@ class ToolResolver:
         """
         path_obj = Path(path)
         return path_obj.exists() and path_obj.is_file() and os.access(path, os.X_OK)
-
-    def _module_available(self, module_name: str) -> bool:
-        """
-        Check if a module is available via module system.
-
-        Args:
-            module_name: Name of module to check
-
-        Returns:
-            True if module is available
-        """
-        try:
-            # Check if module command exists
-            result = subprocess.run(
-                ["module", "avail", module_name],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            # If module system works and module found
-            return (
-                module_name.lower() in result.stderr.lower()
-                or module_name.lower() in result.stdout.lower()
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
-
-    def _try_load_module(self, module_name: str) -> bool:
-        """
-        Try to load a module via module system.
-
-        Args:
-            module_name: Name of module to load
-
-        Returns:
-            True if module loaded successfully
-        """
-        try:
-            # Try to load the module
-            result = subprocess.run(
-                ["bash", "-c", f"module load {module_name} 2>&1"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
 
     def _download_flashpca(self) -> str:
         """
