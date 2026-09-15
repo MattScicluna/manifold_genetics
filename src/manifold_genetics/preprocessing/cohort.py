@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 import yaml
 
-from ..pipeline.configfile import load_config
+from ..pipeline.configfile import PRESET_OWNED_EMBEDDING_KEYS, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ class CohortConfig:
     fit: Side
     project: Side
     shared_labels: bool
+    geographic_coords: Optional[Path]
 
 
 def read_cohort(config_path: PathLike) -> CohortConfig:
@@ -57,6 +58,8 @@ def read_cohort(config_path: PathLike) -> CohortConfig:
             plink=Path(resolved[f"{name}_plink"]), labels=Path(labels), colormap=Path(colormap)
         )
 
+    geographic_coords = resolved.get("geographic_coords")
+
     return CohortConfig(
         path=path,
         raw=raw,
@@ -66,6 +69,7 @@ def read_cohort(config_path: PathLike) -> CohortConfig:
         shared_labels="labels" in resolved
         and "fit_labels" not in resolved
         and "project_labels" not in resolved,
+        geographic_coords=Path(geographic_coords) if geographic_coords is not None else None,
     )
 
 
@@ -191,7 +195,33 @@ def filter_labels_to_fam(labels: PathLike, prefix: PathLike, out: PathLike) -> i
     return filter_labels_to_ids(labels, read_fam_ids(prefix), out)
 
 
+def filter_geographic_to_fam(geographic: PathLike, prefix: PathLike, out: PathLike) -> int:
+    """Write the rows of ``geographic`` for the samples in ``prefix``.fam, in .fam order.
+
+    Unlike labels, geographic coordinates are legitimately partial -- there is
+    no ``MIN_LABEL_COVERAGE``-style floor and a sample missing a row is simply
+    omitted, silently, rather than warned about.
+    """
+    ids = read_fam_ids(prefix)
+    frame = pd.read_csv(geographic, dtype={"sample_id": str}, low_memory=False)
+    if "sample_id" not in frame.columns:
+        raise ValueError(f"{geographic} has no sample_id column")
+    frame = frame.drop_duplicates("sample_id").set_index("sample_id")
+    covered = [i for i in ids if i in frame.index]
+    kept = frame.loc[covered].reset_index()
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    kept.to_csv(out, index=False)
+    return len(kept)
+
+
 _CARRIED_SECTIONS = ("pca", "admixture", "embedding", "visualization", "skip")
+
+# Dropped from a carried `embedding` section when the output's preset differs
+# from the input's: each is either the preset's own dataset-role choice
+# (`input_mode`) or a landmarking/knn default the preset sets (see PRESETS in
+# configfile.py). Carrying them past a preset change would silently override
+# what the new preset would otherwise set.
+_DROPPED_ON_PRESET_CHANGE = ("input_mode", *sorted(PRESET_OWNED_EMBEDDING_KEYS))
 
 
 def write_cohort_config(
@@ -207,11 +237,29 @@ def write_cohort_config(
 
     The data section is replaced wholesale so that no stale key survives -- a
     ``labels`` left beside ``fit_labels`` is exactly the shape ``run`` rejects.
+
+    When ``preset`` differs from ``based_on.preset``, a carried ``embedding``
+    section has its dataset-role and landmarking keys dropped (see
+    ``_DROPPED_ON_PRESET_CHANGE``), with one warning per key naming the value
+    that was dropped and the preset that now sets it -- otherwise a hand-edited
+    ``input_mode`` or ``n_landmark`` would silently override the new preset.
     """
     document: Dict[str, object] = {"preset": preset, "data": dict(data)}
     for section in _CARRIED_SECTIONS:
         if section in based_on.raw and based_on.raw[section]:
-            document[section] = dict(based_on.raw[section])
+            carried = dict(based_on.raw[section])
+            if section == "embedding" and preset != based_on.preset:
+                for key in _DROPPED_ON_PRESET_CHANGE:
+                    if key in carried:
+                        old_value = carried.pop(key)
+                        logger.warning(
+                            "`embedding.%s: %s` dropped: the `%s` preset sets it.",
+                            key,
+                            old_value,
+                            preset,
+                        )
+            if carried:
+                document[section] = carried
     if visualization:
         document.setdefault("visualization", {})
         document["visualization"].update(visualization)  # type: ignore[union-attr]
@@ -237,6 +285,7 @@ __all__ = [
     "bed_expected_size",
     "bed_is_complete",
     "check_label_coverage",
+    "filter_geographic_to_fam",
     "filter_labels_to_fam",
     "filter_labels_to_ids",
     "read_cohort",

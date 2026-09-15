@@ -43,7 +43,13 @@ from typing import Any, Dict, Mapping, Optional, Union
 
 import yaml
 
-__all__ = ["ConfigFileError", "PRESETS", "PRESET_ALIASES", "load_config"]
+__all__ = [
+    "ConfigFileError",
+    "PRESETS",
+    "PRESET_ALIASES",
+    "PRESET_OWNED_EMBEDDING_KEYS",
+    "load_config",
+]
 
 PathLike = Union[str, Path]
 
@@ -75,6 +81,14 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "embedding": {"knn": 100, "t": 3, "n_landmark": None, "random_landmarking": False},
     },
 }
+
+# Every embedding key a preset sets, derived from PRESETS rather than typed out
+# separately so the two cannot drift. A carried `embedding` section that still
+# names one of these -- or `input_mode` -- after a preset change would silently
+# override what the new preset sets; `cohort.write_cohort_config` drops them.
+PRESET_OWNED_EMBEDDING_KEYS = frozenset(
+    key for spec in PRESETS.values() for key in spec.get("embedding", {})
+)
 
 # Renamed 2026-09-12. This project used `transform` for two different things: the
 # second cohort's dataset role, and the sklearn-style method verb. The role became

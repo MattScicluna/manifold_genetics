@@ -15,6 +15,7 @@ from .cohort import (
     bed_expected_size,
     bed_is_complete,
     check_label_coverage,
+    filter_geographic_to_fam,
     filter_labels_to_fam,
     filter_labels_to_ids,
     read_cohort,
@@ -195,6 +196,19 @@ def preprocess(
         shutil.copy(fit.colormap, out_dir / "colormap.json")
         data.update(labels="data/labels.csv", colormap="colormap.json")
         preset = fit_cohort.preset or "whole_cohort"
+
+    # Neither preprocess nor subsample removes a project-side sample, so a
+    # geographic file the input still covers is still valid for the output --
+    # filtered to the (possibly reordered) project .fam it now sits beside. The
+    # two-config case takes the project config's file, matching its .fam.
+    if project_cohort.geographic_coords is not None:
+        filter_geographic_to_fam(
+            project_cohort.geographic_coords,
+            data_dir / "project_subset",
+            data_dir / "geographic.csv",
+        )
+        data["geographic_coords"] = "data/geographic.csv"
+
     data["output_dir"] = "outputs"
 
     return write_cohort_config(
