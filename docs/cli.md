@@ -36,6 +36,11 @@ internet, so on a cluster run it on a login node.
 Labels carry both `Population` and `Genetic_region_merged`, and the colormap
 ships the published colours for each — 78 population colours plus the 7 region
 ones — so a figure from `acquire hgdp` is comparable with the published ones.
+The public archive's `metadata.csv` also has coordinates, so `geographic.csv`
+is written too (Americas and ACB/ASW/CEU excluded, as they don't preserve
+geography), and the config carries the published admixture settings —
+`k_min`/`k_max` and `admix_group_column` — behind `skip: admixture: true`
+until you install the `admixture` extra and are on a GPU node.
 
 You can also point `acquire` at archived data:
 
