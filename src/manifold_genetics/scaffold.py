@@ -16,6 +16,7 @@ Two targets, because they answer different questions:
   figures were made from.
 """
 
+import json
 import logging
 import shutil
 import subprocess
@@ -805,9 +806,10 @@ def _run_plink2_keep(
     subprocess.run(argv, check=True)
 
 
-# The metadata column naming each sample's genetic region, and the colours the
-# shipped example uses for it -- examples/colormaps/hgdp_1kgp.json -- so a figure
-# from `acquire hgdp` is comparable with the published ones.
+# The metadata columns naming each sample's population and genetic region, and
+# the colours the shipped example uses for them -- examples/colormaps/hgdp_1kgp.json
+# -- so a figure from `acquire hgdp` is comparable with the published ones.
+_HGDP_POPULATION_COLUMN = "Population"
 _HGDP_REGION_COLUMN = "Genetic_region_merged"
 _HGDP_REGION_COLOURS = {
     "Africa": "#008000",
@@ -818,6 +820,89 @@ _HGDP_REGION_COLOURS = {
     "Middle_East": "#808080",
     "Oceania": "#FFFF00",
 }
+# The 78 population colours from the published run's colormap, copied verbatim
+# from examples/colormaps/hgdp_1kgp.json (see test_the_colormap_has_a_published_
+# colour_for_every_population, which checks this against that file).
+_HGDP_POPULATION_COLOURS = {
+    "ACB": "#006D2C",
+    "ASW": "#00441B",
+    "BantuKenya": "#008000",
+    "BantuSouthAfrica": "#008000",
+    "BiakaPygmy": "#008000",
+    "ESN": "#A1D99B",
+    "GWD": "#74C476",
+    "LWK": "#41AB5D",
+    "MSL": "#238B45",
+    "Mandenka": "#008000",
+    "MbutiPygmy": "#008000",
+    "San": "#008000",
+    "YRI": "#C7E9C0",
+    "Yoruba": "#008000",
+    "CLM": "#E3242B",
+    "Colombian": "#FF0000",
+    "Karitiana": "#FF0000",
+    "MXL": "#BC544B",
+    "Maya": "#FF0000",
+    "PEL": "#E0115F",
+    "PUR": "#900D09",
+    "Pima": "#FF0000",
+    "Surui": "#FF0000",
+    "BEB": "#FDBE85",
+    "Balochi": "#FFA500",
+    "Brahui": "#FFA500",
+    "Burusho": "#FFA500",
+    "GIH": "#FD8D3C",
+    "Hazara": "#FFA500",
+    "ITU": "#E6550D",
+    "Kalash": "#FFA500",
+    "Makrani": "#FFA500",
+    "PJL": "#FEEDDE",
+    "Pathan": "#FFA500",
+    "STU": "#E6550D",
+    "Sindhi": "#FFA500",
+    "CDX": "#008080",
+    "CHB": "#DEEBF7",
+    "CHS": "#9ECAE1",
+    "Cambodian": "#0000FF",
+    "Dai": "#0000FF",
+    "Daur": "#0000FF",
+    "Han": "#0000FF",
+    "Hezhen": "#0000FF",
+    "JPT": "#08519C",
+    "Japanese": "#0000FF",
+    "KHV": "#0ABAB5",
+    "Lahu": "#0000FF",
+    "Miao": "#0000FF",
+    "Mongola": "#0000FF",
+    "Naxi": "#0000FF",
+    "Oroqen": "#0000FF",
+    "She": "#0000FF",
+    "Tu": "#0000FF",
+    "Tujia": "#0000FF",
+    "Uygur": "#0000FF",
+    "Xibo": "#0000FF",
+    "Yakut": "#0000FF",
+    "Yi": "#0000FF",
+    "Adygei": "#800080",
+    "Basque": "#800080",
+    "CEU": "#D896FF",
+    "FIN": "#800080",
+    "French": "#800080",
+    "GBR": "#D896FF",
+    "IBS": "#EFBBFF",
+    "Italian": "#800080",
+    "Orcadian": "#800080",
+    "Russian": "#800080",
+    "Sardinian": "#800080",
+    "TSI": "#BE29EC",
+    "Tuscan": "#800080",
+    "Bedouin": "#808080",
+    "Druze": "#808080",
+    "Mozabite": "#808080",
+    "Palestinian": "#808080",
+    "Melanesian": "#FFFF00",
+    "Papuan": "#FFFF00",
+}
 
 
 def _write_hgdp_labels(
@@ -825,37 +910,42 @@ def _write_hgdp_labels(
 ) -> None:
     """Write the label file and colormap for the prepared cohort.
 
-    Raises rather than substituting a placeholder when the region column is
-    absent. It previously wrote "Unknown" for every sample, which produced a
-    complete run, a drawn figure, and every point in it the same grey -- a
-    failure that looks like success until someone reads the legend.
+    Raises rather than substituting a placeholder when the population or region
+    column is absent. It previously wrote "Unknown" for every sample, which
+    produced a complete run, a drawn figure, and every point in it the same grey
+    -- a failure that looks like success until someone reads the legend.
     """
-    if _HGDP_REGION_COLUMN not in metadata.columns:
-        raise KeyError(
-            f"{_HGDP_REGION_COLUMN!r} is not a column of the cohort metadata "
-            f"(found: {sorted(metadata.columns)[:8]}...). Without it the samples "
-            "cannot be labelled, and an unlabelled figure is worse than none."
-        )
+    for column in (_HGDP_POPULATION_COLUMN, _HGDP_REGION_COLUMN):
+        if column not in metadata.columns:
+            raise KeyError(
+                f"{column!r} is not a column of the cohort metadata "
+                f"(found: {sorted(metadata.columns)[:8]}...). Without it the samples "
+                "cannot be labelled, and an unlabelled figure is worse than none."
+            )
 
     keep = metadata[metadata["project_meta.sample_id"].isin(set(project_ids))]
+    population = keep[_HGDP_POPULATION_COLUMN].astype(str)
     region = keep[_HGDP_REGION_COLUMN].astype(str)
 
-    pd.DataFrame({"sample_id": keep["project_meta.sample_id"], _HGDP_REGION_COLUMN: region}).to_csv(
-        labels_path, index=False
-    )
+    pd.DataFrame(
+        {
+            "sample_id": keep["project_meta.sample_id"],
+            _HGDP_POPULATION_COLUMN: population,
+            _HGDP_REGION_COLUMN: region,
+        }
+    ).to_csv(labels_path, index=False)
 
-    unknown = sorted(set(region) - set(_HGDP_REGION_COLOURS))
-    if unknown:
-        logger.warning("No published colour for %s; drawn in grey", ", ".join(unknown))
+    colormap = {}
+    for column, values, published in (
+        (_HGDP_POPULATION_COLUMN, population, _HGDP_POPULATION_COLOURS),
+        (_HGDP_REGION_COLUMN, region, _HGDP_REGION_COLOURS),
+    ):
+        unknown = sorted(set(values) - set(published))
+        if unknown:
+            logger.warning("No published colour for %s; drawn in grey", ", ".join(unknown))
+        colormap[column] = {v: published.get(v, "#999999") for v in sorted(set(values))}
 
-    colours = {r: _HGDP_REGION_COLOURS.get(r, "#999999") for r in sorted(set(region))}
-    colormap_path.write_text(
-        '{\n  "'
-        + _HGDP_REGION_COLUMN
-        + '": {\n'
-        + ",\n".join(f'    "{r}": "{c}"' for r, c in colours.items())
-        + "\n  }\n}\n"
-    )
+    colormap_path.write_text(json.dumps(colormap, indent=2) + "\n")
 
 
 def clean(out_dir: PathLike) -> None:
