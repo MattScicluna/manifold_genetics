@@ -71,6 +71,13 @@ export MANIFOLD_GENETICS_TOOL_DIR=/project/shared/manifold-tools
 `manifold-genetics setup` does not touch your Python environment. It only
 fetches binaries.
 
+On a cluster that provides the tools through Environment Modules, load the
+module in your shell **before** running `manifold-genetics` (for example
+`module load plink`); the binary is then on `PATH`, where it is found. The
+resolver does not run `module load` itself: a child shell cannot change the
+running process's `PATH`. Alternatively, point `PLINK_PATH` or `FLASHPCA_PATH`
+at the executable.
+
 ## Developing on the repository
 
 The clone above is all you need. To work on the documentation as well:

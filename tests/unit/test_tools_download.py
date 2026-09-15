@@ -1,6 +1,6 @@
 """Tests for ToolResolver's resolution fallbacks and the _download_* helpers.
 
-`urllib.request.urlretrieve` and `subprocess.run` are stubbed; the real
+`urllib.request.urlretrieve` and `shutil.which` are stubbed; the real
 gzip/zip extraction, chmod, and cleanup logic runs against fixture archives
 written to tmp_path. No network, no real binaries.
 """
@@ -81,21 +81,11 @@ def _zip_writer(members):
 
 
 # ---------------------------------------------------------------------------
-# resolve_* fallback chain (module -> PATH -> download)
+# resolve_* fallback chain (PATH -> download)
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_plink2_uses_module_then_path(resolver, monkeypatch):
-    monkeypatch.setattr(resolver, "_try_load_module", lambda m: m == "plink")
-    monkeypatch.setattr(
-        "manifold_genetics.utils.tools.shutil.which",
-        lambda n: "/opt/plink2" if n == "plink2" else None,
-    )
-    assert resolver.resolve_plink2() == "/opt/plink2"
-
-
 def test_resolve_plink2_falls_back_to_path(resolver, monkeypatch):
-    monkeypatch.setattr(resolver, "_try_load_module", lambda m: False)
     monkeypatch.setattr(
         "manifold_genetics.utils.tools.shutil.which",
         lambda n: "/usr/bin/plink2" if n == "plink2" else None,
@@ -103,8 +93,28 @@ def test_resolve_plink2_falls_back_to_path(resolver, monkeypatch):
     assert resolver.resolve_plink2() == "/usr/bin/plink2"
 
 
+def test_resolve_plink2_accepts_plink_on_path_when_plink2_is_absent(resolver, monkeypatch):
+    """PATH is searched for ``plink2`` and then ``plink``, in that order."""
+    monkeypatch.setattr(
+        "manifold_genetics.utils.tools.shutil.which",
+        lambda n: "/usr/bin/plink" if n == "plink" else None,
+    )
+    assert resolver.resolve_plink2() == "/usr/bin/plink"
+
+
+def test_resolve_plink2_does_not_accept_plink_in_download_dir(resolver, tmp_path, monkeypatch):
+    """``plink`` in the download dir is v1.9, put there by ``_download_plink1``; it
+    must not be returned as plink2. PATH may offer ``plink`` -- the download dir
+    must not."""
+    v19 = tmp_path / "plink"
+    v19.write_text("#!/bin/sh\n")
+    v19.chmod(0o755)
+    monkeypatch.setattr("manifold_genetics.utils.tools.shutil.which", lambda n: None)
+    monkeypatch.setattr(resolver, "_download_plink2", lambda: "/downloaded/plink2")
+    assert resolver.resolve_plink2() == "/downloaded/plink2"
+
+
 def test_resolve_plink2_falls_back_to_download(resolver, monkeypatch):
-    monkeypatch.setattr(resolver, "_try_load_module", lambda m: False)
     monkeypatch.setattr("manifold_genetics.utils.tools.shutil.which", lambda n: None)
     monkeypatch.setattr(resolver, "_download_plink2", lambda: "/downloaded/plink2")
     assert resolver.resolve_plink2() == "/downloaded/plink2"
@@ -131,28 +141,6 @@ def test_resolve_neural_admixture_uses_path(resolver, monkeypatch):
         lambda n: "/usr/bin/neural-admixture" if n == "neural-admixture" else None,
     )
     assert resolver.resolve_neural_admixture() == "/usr/bin/neural-admixture"
-
-
-# ---------------------------------------------------------------------------
-# _module_available success path
-# ---------------------------------------------------------------------------
-
-
-def test_module_available_true_when_named_in_output(resolver, monkeypatch):
-    class R:
-        stdout = "plink/2.00a5.8\n"
-        stderr = ""
-
-    monkeypatch.setattr("manifold_genetics.utils.tools.subprocess.run", lambda *a, **k: R())
-    assert resolver._module_available("plink") is True
-
-
-def test_try_load_module_true_on_zero_exit(resolver, monkeypatch):
-    class R:
-        returncode = 0
-
-    monkeypatch.setattr("manifold_genetics.utils.tools.subprocess.run", lambda *a, **k: R())
-    assert resolver._try_load_module("plink") is True
 
 
 # ---------------------------------------------------------------------------
