@@ -565,7 +565,7 @@ class TestHgdpLayouts:
 class TestHgdpModule:
     """`acquire hgdp` lives in `hgdp.py`; `scaffold` re-exports it.
 
-    scaffold.py had grown to 1,157 lines with three cohorts in it. The HGDP
+    scaffold.py had grown past 1,200 lines with three cohorts in it. The HGDP
     port moved out the way the All of Us one already had, and the re-exports
     keep every existing import working.
     """
