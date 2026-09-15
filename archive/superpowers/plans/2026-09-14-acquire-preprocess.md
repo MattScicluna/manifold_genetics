@@ -1212,7 +1212,7 @@ The login node is fine for the synthetic cohort (1000 variants), but the user's 
 ```bash
 JOBID=$(squeue --me -h -o %i | head -1)
 srun --jobid=$JOBID --overlap --ntasks=1 --time=10:00 bash -c \
-  'cd /lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics && source .venv/bin/activate && pytest tests/integration/test_preprocess_synthetic.py -v'
+  'cd "$REPO" && source .venv/bin/activate && pytest tests/integration/test_preprocess_synthetic.py -v'
 ```
 Expected: 3 passed. If the shell aborts, read its output: the likely faults are the synthetic `.bim` (chr `1`, alleles A/G — acceptable) and `--memory` (lower it).
 
@@ -1865,7 +1865,7 @@ The second parameter set is the UKBB flag set (default GIAB/HLA/LD-prune/dedup o
 ```bash
 JOBID=$(squeue --me -h -o %i | head -1)
 srun --jobid=$JOBID --overlap --ntasks=1 --time=60:00 bash -c \
-  'cd /lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics && source .venv/bin/activate && \
+  'cd "$REPO" && source .venv/bin/activate && \
    MG_HGDP_ARCHIVE=examples/hgdp_1kgp/data/hgdp_1kgp_full.tar.gz \
    pytest tests/integration/test_hgdp_idempotence.py -v -s 2>&1 | tail -60'
 ```
@@ -2343,7 +2343,7 @@ The project `.bed` is ~15 GB; LD pruning and GIAB/HLA exclusion on 486k samples 
 ```bash
 JOBID=$(squeue --me -h -o %i | head -1)
 srun --jobid=$JOBID --overlap --ntasks=1 --time=180:00 bash -c \
-  'cd /lustre06/project/6065672/sciclun4/ActiveProjects/manifold_genetics && source .venv/bin/activate && \
+  'cd "$REPO" && source .venv/bin/activate && \
    pytest tests/integration/test_ukbb_preprocess_idempotence.py -v -s 2>&1 | tail -80'
 ```
 Expected: both pass. If variants are lost, print which step lost them from the shell's log in `temp/` and record it; do not loosen the assertion without understanding the step.
