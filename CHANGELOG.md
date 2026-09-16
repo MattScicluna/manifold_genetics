@@ -7,61 +7,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added
+Nothing yet.
 
-- `acquire hgdp` writes `data/geographic.csv` (sample_id, latitude, longitude)
-  for the project set, excluding `Genetic_region_merged == "America"` and the
-  populations ACB, ASW and CEU, as `examples/hgdp_1kgp/prepare_data.sh` step 9
-  did -- and wires `geographic_coords` into the config when it does. The
-  config also gains the published run's `admixture: k_min`/`k_max` and
-  `visualization.admix_group_column`, still behind `skip: admixture: true`
-  until the `admixture` extra is installed and a GPU is available.
-
-### Changed
-
-- `ToolResolver` no longer tries `module load` itself. It ran in a child shell
-  and could never affect the running process's `PATH`, so the step never found
-  anything on any cluster; the site-specific module names it carried are gone
-  with it. Load the module before running, or set `PLINK_PATH` /
-  `FLASHPCA_PATH`. The three downloadable binaries now share one resolution
-  chain: download directory, then the tool's environment variable, then
-  `PATH`, then download.
-
-### Fixed
-
-- `metrics-geographic` and `metrics-admixture` draw the `num_samples` pairs
-  before computing any distance instead of computing all `n(n-1)/2` and then
-  subsampling, so memory is O(num_samples) rather than O(n^2) (a 486k-sample
-  cohort attempted an 883 GiB allocation). Small-cohort results are unchanged;
-  both functions gain a `seed` keyword (default 42) for the pair draw.
-- `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships
-  the published colours for both, as the `examples/hgdp_1kgp` run did.
-- `preprocess` no longer resumes from a truncated `.bed` left by an OOM-killed
-  run; checkpoints now verify PLINK 1 file size, not just existence, and
-  redo an incomplete step instead of reusing it.
-- `preprocess` and `subsample` no longer carry a stale `embedding.input_mode`
-  or landmarking key (`knn`, `t`, `n_landmark`, `random_landmarking`) into an
-  output whose preset differs from the input's -- each dropped key now logs a
-  warning naming the value and the preset that supersedes it -- and both now
-  carry `data.geographic_coords` through when the input has one, filtered to
-  the output's project `.fam`, instead of silently dropping it.
-- `preprocess --force` no longer silently reuses intermediates computed under
-  different flags or different input genotypes: a sentinel in
-  `OUT/data/temp` now records what they were made from, and a mismatch is
-  refused with the differing settings named, instead of returning the old
-  result under a new config header.
-- Friendlier errors for three cases that used to surface a raw traceback or a
-  bare exception string: a cohort config missing `fit_plink`/`project_plink`,
-  a missing `gsutil` binary during `acquire hgdp`/`acquire aou`, and
-  `subsample` failing in plink2 or on an empty `--group` selection or a
-  missing `geosketch` extra.
-
-### Changed
-
-- Internal: HGDP acquisition moved to `hgdp.py`; `scaffold` re-exports every
-  name, so existing imports are unchanged.
-
-## [0.3.0] - 2026-09-14
+## [0.3.0] - 2026-09-16
 
 The release that takes a cohort from raw biobank PLINK files to a figure
 without leaving the package. `init` becomes `acquire`, and two optional
@@ -106,6 +54,18 @@ chooses the fit samples. Each reads a cohort directory and writes one.
   tested, released and developed is no longer published alongside them. A new
   quickstart carries the input and output formats end to end.
 
+- `ToolResolver` no longer tries `module load` itself. It ran in a child shell
+  and could never affect the running process's `PATH`, so the step never found
+  anything on any cluster; the site-specific module names it carried are gone
+  with it. Load the module before running, or set `PLINK_PATH` /
+  `FLASHPCA_PATH`. The three downloadable binaries now share one resolution
+  chain: download directory, then the tool's environment variable, then
+  `PATH`, then download.
+
+
+- Internal: HGDP acquisition moved to `hgdp.py`; `scaffold` re-exports every
+  name, so existing imports are unchanged.
+
 ### Added
 
 - **`preprocess`**: SNP filtering and cross-cohort intersection, shipped inside
@@ -149,6 +109,37 @@ chooses the fit samples. Each reads a cohort directory and writes one.
   PHATE. The synthetic config sets it to 0, the log-potential distance, under
   which the tree's branches read more clearly than under the default of 1.
 
+- `acquire hgdp` writes `data/geographic.csv` (sample_id, latitude, longitude)
+  for the project set, excluding `Genetic_region_merged == "America"` and the
+  populations ACB, ASW and CEU, as `examples/hgdp_1kgp/prepare_data.sh` step 9
+  did -- and wires `geographic_coords` into the config when it does. The
+  config also gains the published run's `admixture: k_min`/`k_max` and
+  `visualization.admix_group_column`, still behind `skip: admixture: true`
+  until the `admixture` extra is installed and a GPU is available.
+
+- `preprocess` does not resume from a truncated `.bed` left by an OOM-killed
+  run; checkpoints now verify PLINK 1 file size, not just existence, and
+  redo an incomplete step instead of reusing it.
+
+- `preprocess` and `subsample` do not carry a stale `embedding.input_mode`
+  or landmarking key (`knn`, `t`, `n_landmark`, `random_landmarking`) into an
+  output whose preset differs from the input's -- each dropped key now logs a
+  warning naming the value and the preset that supersedes it -- and both now
+  carry `data.geographic_coords` through when the input has one, filtered to
+  the output's project `.fam`, instead of silently dropping it.
+
+- `preprocess --force` does not silently reuse intermediates computed under
+  different flags or different input genotypes: a sentinel in
+  `OUT/data/temp` now records what they were made from, and a mismatch is
+  refused with the differing settings named, instead of returning the old
+  result under a new config header.
+
+- Friendlier errors for three cases that would otherwise surface a raw
+  traceback: a cohort config missing `fit_plink`/`project_plink`,
+  a missing `gsutil` binary during `acquire hgdp`/`acquire aou`, and
+  `subsample` failing in plink2 or on an empty `--group` selection or a
+  missing `geosketch` extra.
+
 ### Fixed
 
 - **PCA projection had no memory budget and was OOM-killed on any large cohort.**
@@ -169,7 +160,6 @@ chooses the fit samples. Each reads a cohort directory and writes one.
   `archive/hpc.md` had asserted the opposite — "Projection chunks over samples and
   is never the constraint" — which is corrected.
 
-### Fixed (test suite)
 
 - **The real-cohort suite could never have run on UK Biobank or All of Us.** Its
   `_coords` helper read pipeline CSVs with inferred dtypes while label files are
@@ -191,6 +181,15 @@ chooses the fit samples. Each reads a cohort directory and writes one.
   calibrated for one cohort size.
 - The command-line page is now checked against the CLI it documents: a test
   fails if a subcommand is undocumented, or documented but absent.
+
+- `metrics-geographic` and `metrics-admixture` draw the `num_samples` pairs
+  before computing any distance instead of computing all `n(n-1)/2` and then
+  subsampling, so memory is O(num_samples) rather than O(n^2) (a 486k-sample
+  cohort attempted an 883 GiB allocation). Small-cohort results are unchanged;
+  both functions gain a `seed` keyword (default 42) for the pair draw.
+
+- `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships
+  the published colours for both, as the `examples/hgdp_1kgp` run did.
 
 ## [0.2.1] - 2026-09-12
 
