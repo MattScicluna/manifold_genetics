@@ -29,6 +29,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- `metrics-geographic` and `metrics-admixture` draw the `num_samples` pairs
+  before computing any distance instead of computing all `n(n-1)/2` and then
+  subsampling, so memory is O(num_samples) rather than O(n^2) (a 486k-sample
+  cohort attempted an 883 GiB allocation). Small-cohort results are unchanged;
+  both functions gain a `seed` keyword (default 42) for the pair draw.
 - `acquire hgdp` writes `Population` beside `Genetic_region_merged` and ships
   the published colours for both, as the `examples/hgdp_1kgp` run did.
 - `preprocess` no longer resumes from a truncated `.bed` left by an OOM-killed
