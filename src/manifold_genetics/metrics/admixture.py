@@ -10,10 +10,10 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr
 
 from ..utils.io import read_admixture_csv, read_embedding_csv
+from .pairs import sampled_pair_distances
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ def compute_admixture_preservation(
     k_value: Optional[int] = None,
     num_samples: int = 50000,
     subsample: Optional[int] = None,
+    seed: int = 42,
 ) -> dict:
     """
     Compute preservation of admixture distances in genetic embedding.
@@ -32,6 +33,10 @@ def compute_admixture_preservation(
     - Admixture distances (from Q matrices)
     - Embedding distances (from genetic embedding)
 
+    Only ``num_samples`` sample pairs are compared. When the cohort has more
+    pairs than that, the pairs are drawn first and distances computed for
+    those alone, so memory stays O(num_samples) whatever the cohort size.
+
     Args:
         embedding: DataFrame or path to embedding CSV
         q_files: Dictionary mapping K values to Q file paths
@@ -39,6 +44,8 @@ def compute_admixture_preservation(
         num_samples: Maximum number of pairwise distances to sample
         subsample: If set, randomly subsample individuals to this count before
             computing distances. Applied consistently across all K values.
+        seed: Seed for the individual subsample and for the pair draw. The
+            same pairs are drawn for every K, so the K values are comparable.
 
     Returns:
         Dictionary with results for each K:
@@ -69,7 +76,7 @@ def compute_admixture_preservation(
 
     # Subsample individuals (consistent across all K values).
     if subsample is not None and len(sample_ids) > subsample:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(seed)
         idx = rng.choice(len(sample_ids), subsample, replace=False)
         sample_ids = [sample_ids[i] for i in idx]
         embedding_coords = embedding_coords[idx]
@@ -97,18 +104,11 @@ def compute_admixture_preservation(
             logger.warning(f"Not enough samples for K={k}, skipping")
             continue
 
-        # Compute admixture distances (using Euclidean distance on Q)
-        admix_dists = pdist(aligned_q, metric="euclidean")
-
-        # Compute embedding distances
-        emb_dists = pdist(aligned_emb, metric="euclidean")
-
-        # Subsample if needed
-        n_pairs = len(admix_dists)
-        if n_pairs > num_samples:
-            indices = np.random.choice(n_pairs, num_samples, replace=False)
-            admix_dists = admix_dists[indices]
-            emb_dists = emb_dists[indices]
+        # Euclidean distances on Q and on the embedding, for the same pairs
+        # (every pair when they fit within num_samples, else a random subset).
+        admix_dists, emb_dists = sampled_pair_distances(
+            aligned_q, aligned_emb, num_samples, np.random.default_rng(seed)
+        )
 
         # Compute Spearman correlation
         correlation, p_value = spearmanr(admix_dists, emb_dists)
