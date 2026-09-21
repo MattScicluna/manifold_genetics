@@ -158,7 +158,7 @@ def _write_q(tmp_path, ids, ks, seed=0):
     prefix.parent.mkdir(parents=True, exist_ok=True)
     for k in ks:
         q = rng.dirichlet(np.ones(k), len(ids))
-        df = pd.DataFrame(q, columns=[f"component_{i+1}" for i in range(k)])
+        df = pd.DataFrame(q, columns=[f"component_{i + 1}" for i in range(k)])
         df.insert(0, "sample_id", [str(i) for i in ids])
         df.to_csv(f"{prefix}.{k}.csv", index=False)
     return prefix
@@ -225,7 +225,7 @@ def test_bar_grid_no_shared_samples_across_k_raises(tmp_path):
     for k, offset in ((2, 0), (3, 100)):
         ids = list(range(offset, offset + 10))
         q = rng.dirichlet(np.ones(k), 10)
-        df = pd.DataFrame(q, columns=[f"component_{i+1}" for i in range(k)])
+        df = pd.DataFrame(q, columns=[f"component_{i + 1}" for i in range(k)])
         df.insert(0, "sample_id", [str(i) for i in ids])
         df.to_csv(f"{prefix}.{k}.csv", index=False)
     labels = pd.DataFrame({"sample_id": [str(i) for i in range(110)], "Region": ["A"] * 110})
