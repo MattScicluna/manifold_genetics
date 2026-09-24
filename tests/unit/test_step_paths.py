@@ -84,6 +84,23 @@ def test_embedding_paths_single_mode_has_no_fit_embedding():
         assert "fit_embedding" not in p
 
 
+def test_embedding_paths_name_the_dimensionality():
+    """A 3-D run must not write into the 2-D filename. Both the name and the
+    contents would then be wrong, and the checkpoint logic would reuse one as
+    the other."""
+    emb = EmbeddingConfig(method="phate", input_mode="both", params={"n_components": 3})
+    p = embedding_output_paths(_io(), emb)
+    assert p["embedding"] == OUT / "embeddings" / "phate_3d.csv"
+    assert p["fit_embedding"] == OUT / "embeddings" / "phate_fit_3d.csv"
+
+
+def test_embedding_paths_default_to_the_historical_2d_name():
+    """The default must stay byte-identical: example scripts and checkpoint
+    reuse both depend on `<method>_2d.csv`."""
+    emb = EmbeddingConfig(method="umap", input_mode="project", params={})
+    assert embedding_output_paths(_io(), emb)["embedding"] == (OUT / "embeddings" / "umap_2d.csv")
+
+
 def test_metrics_paths_match_documented_layout():
     p = metrics_output_paths(_io())
     assert p["geographic"] == OUT / "metrics" / "geographic.json"

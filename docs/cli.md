@@ -115,8 +115,9 @@ components.
 |---|---|---|
 | `pca` | PLINK prefixes | PCA CSVs and a projectable model |
 | `admixture` | PLINK prefixes | Q matrices per K |
-| `embed` | PCA CSV | 2-D embedding CSV |
+| `embed` | PCA CSV | embedding CSV (2-D by default, `--n-components 3` for 3-D) |
 | `plot` | embedding CSV + labels + colormap | scatter per label column |
+| `plot-3d` | 3-D embedding CSV + labels + colormap | rotatable HTML per label column |
 | `plot-pca` | PCA CSV | PC-pair grid |
 | `plot-projection` | fit and project embeddings | both cohorts on one figure |
 | `plot-admixture` | Q matrices | stacked bar plots |
@@ -134,7 +135,35 @@ manifold-genetics pca --fit-plink data/fit --project-plink data/project \
 # An embedding of components you already have
 manifold-genetics embed --method phate --fit-input out/project_pca.csv \
     --project-output out/phate_2d.csv --knn 100 --t 3
+
+# The same in three dimensions, then a rotatable figure of it
+manifold-genetics embed --method phate --fit-input out/project_pca.csv \
+    --project-output out/phate_3d.csv --knn 100 --t 3 --n-components 3
+
+manifold-genetics plot-3d --input out/phate_3d.csv \
+    --labels data/labels.csv --colormap data/colormap.json \
+    --output out/figures/
 ```
+
+`--n-components` works on `embed` and `pipeline`, for every method. It defaults
+to 2, so existing commands are unchanged.
+
+### Three-dimensional embeddings
+
+A 3-D scatter is only useful if you can turn it, so `plot-3d` writes a
+standalone interactive HTML file per label column rather than a PNG — open it in
+a browser and drag to rotate; hovering a point names its sample and label.
+
+It needs the optional `plotly` dependency:
+
+```bash
+uv sync --extra interactive     # or: pip install 'manifold-genetics[interactive]'
+```
+
+Every point is written into the file itself, so `--max-points` caps how many are
+included (default 100,000) and reports the subsample it took. Pass
+`--max-points 0` to keep all of them, bearing in mind that a biobank-scale
+cohort then produces a document a browser opens slowly.
 
 `--pca-backend` takes `python` (in process, the default) or `flashpca` (the
 external binary). They agree to 1.5e-7 and write the same artefacts, so a model fitted by

@@ -88,6 +88,7 @@ pca:
 
 embedding:
   method: phate               # phate | umap | tsne | diffusion_map
+  n_components: 2             # embedding dimensions; 3 for a rotatable plot-3d figure
   knn: 100                    # method-specific parameters pass straight through
   t: 3
 
@@ -113,6 +114,7 @@ outputs/
 │   └── flashpca_outputs/        the projectable model: loadings, means, SDs
 ├── embeddings/
 │   └── phate_2d.csv             sample_id, dim_1, dim_2
+│                                (phate_3d.csv when n_components: 3)
 ├── figures/
 │   ├── pca/                     PC-pair grids
 │   └── embeddings/              one scatter per colormap column
@@ -125,7 +127,8 @@ outputs/
 ```
 
 The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,
-`phate_2d.csv` because `method: phate`, one `fit.<K>.csv` per K in range.
+`phate_2d.csv` because `method: phate` with the default `n_components: 2`
+(`phate_3d.csv` when it is 3), one `fit.<K>.csv` per K in range.
 
 Both `acquire` configs skip admixture, because it needs the `admixture` extra
 (torch), so a first run produces the first three directories only. Geographic
@@ -138,9 +141,13 @@ The three CSV families look like this:
 sample_id,dim_1,dim_2,...,dim_20
 HG00096,0.073308,0.212584,...
 
-# embeddings/phate_2d.csv         always two dimensions
+# embeddings/phate_2d.csv         as many dimensions as n_components
 sample_id,dim_1,dim_2
 HG00096,0.123,-0.456
+
+# embeddings/phate_3d.csv         the same file with n_components: 3
+sample_id,dim_1,dim_2,dim_3
+HG00096,0.123,-0.456,0.789
 
 # admixture/project.2.csv         proportions, summing to 1 per sample
 sample_id,component_1,component_2
@@ -154,6 +161,9 @@ Two details worth knowing:
   fitted by either is readable by the other.
 - **In `projection` mode there is also `phate_fit_2d.csv`**, the reference panel's
   own embedding, because that mode embeds both cohorts.
+- **Three-dimensional embeddings carry the dimensionality in the name**, so a
+  3-D run never overwrites or is mistaken for a 2-D one. `plot-3d` turns one
+  into a rotatable HTML figure; see [the CLI page](cli.md).
 
 Every CSV has the same shape — a `sample_id` column then `dim_1 … dim_n` — which
 is what lets the stages compose, and lets you start from the middle if you

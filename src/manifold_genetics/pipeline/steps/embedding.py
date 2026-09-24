@@ -57,12 +57,22 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
     Every parameter the CLI path passes is passed here too, including ones whose
     value is ``None`` — omitting them would silently fall back to the embedding
     class's own defaults, which differ (notably ``PHATE(n_landmark=2000)``).
+
+    ``params["n_components"]`` selects the embedding dimensionality and defaults
+    to 2. Setting it to 3 produces ``dim_1, dim_2, dim_3`` output, which
+    ``plot_embedding_3d`` renders.
     """
     p = dict(params or {})
 
+    # Every method accepts n_components; 2 keeps the historical default, so an
+    # existing config that never mentions it produces exactly what it did before.
+    n_components = int(p.get("n_components", 2))
+    if n_components < 1:
+        raise ValueError(f"n_components must be >= 1, got {n_components}")
+
     if method == "phate":
         return PHATE(
-            n_components=2,
+            n_components=n_components,
             knn=p.get("knn", 25),
             t=p.get("t", "auto"),
             n_landmark=p.get("n_landmark"),
@@ -72,14 +82,14 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
         )
     if method == "umap":
         return UMAP(
-            n_components=2,
+            n_components=n_components,
             n_neighbors=p.get("n_neighbors", 15),
             min_dist=p.get("min_dist", 0.1),
         )
     if method == "tsne":
-        return TSNE(n_components=2, perplexity=p.get("perplexity", 30))
+        return TSNE(n_components=n_components, perplexity=p.get("perplexity", 30))
     if method == "diffusion_map":
-        return DiffusionMap(n_components=2, knn=p.get("knn", 25))
+        return DiffusionMap(n_components=n_components, knn=p.get("knn", 25))
 
     raise ValueError(
         f"Unknown embedding method: {method}. Choose from: phate, umap, tsne, diffusion_map"

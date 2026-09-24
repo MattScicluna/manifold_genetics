@@ -7,7 +7,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Embeddings can be three-dimensional.** `--n-components` on `embed` and
+  `pipeline` sets the embedding dimensionality for every method (PHATE, UMAP,
+  t-SNE, diffusion maps). It defaults to 2, so nothing that does not pass it
+  changes. The output is the same standard CSV, with a `dim_3` column.
+- **`plot-3d` renders a 3-D embedding as a rotatable HTML file.** A static 3-D
+  scatter hides the structure it is meant to show behind a single viewing
+  angle, so this writes one standalone interactive document per label column
+  instead of a PNG: drag to rotate, hover a point for its sample and label.
+  `--max-points` (default 100,000) caps how much of a large cohort is written
+  into the file and logs the subsample it took.
+  Requires the new optional `interactive` extra: `uv sync --extra interactive`.
 
 ## [0.3.0] - 2026-09-16
 
