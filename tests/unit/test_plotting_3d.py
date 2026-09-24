@@ -17,6 +17,7 @@ import pytest
 
 from manifold_genetics.visualization.plotting import (
     UNKNOWN_LABEL,
+    plot_admixture_embedding_3d,
     plot_embedding_3d,
     visualize_3d,
 )
@@ -275,3 +276,155 @@ def test_visualize_3d_honours_dataset_prefix(tmp_path):
     )
 
     assert paths[0].name == "fit_embedding_3d_by_Region.html"
+
+
+# ---------------------------------------------------------------------------
+# plot_admixture_embedding_3d
+# ---------------------------------------------------------------------------
+
+
+def _write_q(tmp_path, ids, ks, seed=0):
+    rng = np.random.default_rng(seed)
+    prefix = tmp_path / "q" / "t"
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    for k in ks:
+        q = rng.dirichlet(np.ones(k), len(ids))
+        df = pd.DataFrame(q, columns=[f"component_{i + 1}" for i in range(k)])
+        df.insert(0, "sample_id", [str(i) for i in ids])
+        df.to_csv(f"{prefix}.{k}.csv", index=False)
+    return prefix
+
+
+@pytest.fixture
+def admix_inputs(tmp_path):
+    ids = list(range(12))
+    return _emb(ids, seed=7), _write_q(tmp_path, ids, (2, 3))
+
+
+@pytest.fixture
+def layout(monkeypatch):
+    """Capture the kwargs of the final ``update_layout`` call."""
+    go = pytest.importorskip("plotly.graph_objects")
+    captured = {}
+    real = go.Figure.update_layout
+
+    def rec(self, *a, **k):
+        captured.update(k)
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(go.Figure, "update_layout", rec)
+    return captured
+
+
+def _buttons(layout):
+    (menu,) = layout["updatemenus"]
+    return menu["buttons"]
+
+
+def test_admixture_3d_is_one_trace_coloured_by_the_first_component(admix_inputs, traces, tmp_path):
+    emb, prefix = admix_inputs
+    out = plot_admixture_embedding_3d(emb, prefix, [2, 3], tmp_path / "a.html")
+
+    assert out.exists()
+    assert len(traces) == 1
+    (t,) = traces
+    q2 = pd.read_csv(f"{prefix}.2.csv")
+    assert list(t["x"]) == list(emb["dim_1"])
+    assert list(t["z"]) == list(emb["dim_3"])
+    np.testing.assert_allclose(t["marker"]["color"], q2["component_1"], atol=5e-5)
+    assert t["marker"]["cmin"] == 0 and t["marker"]["cmax"] == 1
+
+
+def test_admixture_3d_dropdown_has_one_entry_per_k_and_component(
+    admix_inputs, traces, layout, tmp_path
+):
+    """One file, and the viewer picks the K and component from a menu."""
+    emb, prefix = admix_inputs
+    plot_admixture_embedding_3d(emb, prefix, [2, 3], tmp_path / "a.html")
+
+    buttons = _buttons(layout)
+    assert [b["label"] for b in buttons] == [
+        "K=2 · Comp 1",
+        "K=2 · Comp 2",
+        "K=3 · Comp 1",
+        "K=3 · Comp 2",
+        "K=3 · Comp 3",
+    ]
+    q3 = pd.read_csv(f"{prefix}.3.csv")
+    restyle = buttons[4]["args"][0]
+    np.testing.assert_allclose(restyle["marker.color"][0], q3["component_3"], atol=5e-5)
+
+
+def test_admixture_3d_component_colormap_sets_gradient_and_lineage_order(
+    admix_inputs, traces, layout, tmp_path
+):
+    """With the colormap exported by plot-admixture, each entry is a white-to-
+    component-colour gradient and components are listed by lineage, as in the
+    2-D grid."""
+    emb, prefix = admix_inputs
+    cmap = {
+        "2": {
+            "component_1": {"color": "#ff0000", "lineage": 1},
+            "component_2": {"color": "#0000ff", "lineage": 0},
+        },
+        "3": {
+            "component_1": {"color": "#ff0000", "lineage": 1},
+            "component_2": {"color": "#0000ff", "lineage": 0},
+            "component_3": {"color": "#00ff00", "lineage": 2},
+        },
+    }
+    plot_admixture_embedding_3d(emb, prefix, [2, 3], tmp_path / "a.html", component_colormap=cmap)
+
+    q2 = pd.read_csv(f"{prefix}.2.csv")
+    (t,) = traces
+    # first entry is K=2, lineage 0 -> component_2, blue
+    np.testing.assert_allclose(t["marker"]["color"], q2["component_2"], atol=5e-5)
+    assert t["marker"]["colorscale"] == [[0, "white"], [1, "#0000ff"]]
+    labels = [b["label"] for b in _buttons(layout)]
+    assert labels[:2] == ["K=2 · Comp 1", "K=2 · Comp 2"]
+    restyle = _buttons(layout)[1]["args"][0]
+    assert restyle["marker.colorscale"] == [[[0, "white"], [1, "#ff0000"]]]
+
+
+def test_admixture_3d_hover_ids_can_be_withheld(admix_inputs, traces, tmp_path):
+    emb, prefix = admix_inputs
+    plot_admixture_embedding_3d(emb, prefix, [2], tmp_path / "a.html")
+    assert list(traces[0]["text"]) == list(emb["sample_id"])
+
+    traces.clear()
+    plot_admixture_embedding_3d(emb, prefix, [2], tmp_path / "b.html", hover_sample_id=False)
+    assert traces[0]["text"] is None
+    assert "sample" not in (tmp_path / "b.html").read_text().lower()
+
+
+def test_admixture_3d_shares_the_face_on_view(admix_inputs, layout, tmp_path):
+    emb, prefix = admix_inputs
+    plot_admixture_embedding_3d(emb, prefix, [2], tmp_path / "a.html")
+    scene = layout["scene"]
+    assert scene["camera"]["projection"] == dict(type="orthographic")
+    assert scene["aspectmode"] == "manual"
+
+
+def test_admixture_3d_max_points_subsamples_embedding_and_q_together(
+    admix_inputs, traces, tmp_path
+):
+    emb, prefix = admix_inputs
+    plot_admixture_embedding_3d(emb, prefix, [2], tmp_path / "a.html", max_points=5)
+    (t,) = traces
+    assert len(t["x"]) == 5
+    q2 = pd.read_csv(f"{prefix}.2.csv", dtype={"sample_id": str}).set_index("sample_id")
+    np.testing.assert_allclose(
+        t["marker"]["color"], q2.loc[list(t["text"]), "component_1"], atol=5e-5
+    )
+
+
+def test_admixture_3d_requires_three_dimensions(tmp_path):
+    ids = list(range(6))
+    prefix = _write_q(tmp_path, ids, (2,))
+    with pytest.raises(ValueError, match="n_components=3"):
+        plot_admixture_embedding_3d(_emb(ids, dims=2), prefix, [2], tmp_path / "a.html")
+
+
+def test_admixture_3d_no_q_files_raises(tmp_path):
+    with pytest.raises(ValueError, match="No admixture CSVs"):
+        plot_admixture_embedding_3d(_emb(range(4)), tmp_path / "nothing", [2], tmp_path / "a.html")

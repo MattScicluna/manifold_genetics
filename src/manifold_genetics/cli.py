@@ -18,6 +18,7 @@ from manifold_genetics import __version__
 from .pipeline import run_pipeline
 from .pipeline.configfile import load_config
 from .pipeline.steps import (
+    admixture_embedding_3d_if_possible,
     plot_pca_pair_grids,
     run_admixture,
     run_admixture_metrics_step,
@@ -39,6 +40,7 @@ from .utils.validation import (
     validate_sample_id_overlap,
 )
 from .visualization import (
+    DEFAULT_MAX_POINTS_3D,
     plot_admixture_bar_grid,
     plot_admixture_embedding_grid,
     plot_knn_composition,
@@ -391,6 +393,20 @@ def cmd_plot_admixture_embedding(args):
         component_colormap=getattr(args, "component_colormap", None),
     )
     print(f"Admixture-embedding plot written to: {output_path}")
+
+    # A 3-D embedding also gets the single-file interactive figure, next to
+    # the PNG. --subsample caps it as it does the grid; otherwise the 3-D
+    # default applies.
+    for html_path in admixture_embedding_3d_if_possible(
+        embedding,
+        q_prefix=q_prefix,
+        k_values=k_values,
+        output_path=output_path.with_name(f"{output_path.stem}_3d.html"),
+        component_colormap=getattr(args, "component_colormap", None),
+        max_points=args.subsample or DEFAULT_MAX_POINTS_3D,
+        hover_sample_id=not args.no_hover_ids,
+    ):
+        print(f"Interactive 3-D admixture-embedding plot written to: {html_path}")
     return 0
 
 
@@ -1188,7 +1204,10 @@ def main(argv: Optional[List[str]] = None):
             "Plot a grid of 2-D embedding scatter plots coloured by admixture component\n"
             "proportion, one subplot per (K, component) combination.\n\n"
             "Pass --component-colormap (exported by plot-admixture) to use the same\n"
-            "white-to-component-colour gradients as the bar chart."
+            "white-to-component-colour gradients as the bar chart.\n\n"
+            "If the embedding has a dim_3 column, a rotatable HTML figure is also\n"
+            "written next to the PNG (<output>_3d.html), with every K and component\n"
+            "selectable from a dropdown. Needs the optional plotly dependency."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1219,6 +1238,12 @@ def main(argv: Optional[List[str]] = None):
         "--component-colormap",
         help="Path to component colors JSON exported by plot-admixture. When provided, each "
         "component subplot uses a white-to-component-color gradient matching the bar chart.",
+    )
+    plot_admix_emb_parser.add_argument(
+        "--no-hover-ids",
+        action="store_true",
+        help="Leave sample IDs out of the interactive 3-D figure's hover labels (and out of "
+        "the file), for a figure shared outside a controlled-access environment.",
     )
     plot_admix_emb_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_admix_emb_parser.set_defaults(func=cmd_plot_admixture_embedding)

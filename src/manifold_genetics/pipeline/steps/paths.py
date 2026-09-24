@@ -61,4 +61,5 @@ def figure_output_paths(io: IOConfig) -> Dict[str, Path]:
         "admixture": admixture,
         "admixture_bars": admixture / "project_bars.png",
         "admixture_colored_embedding": admixture / "project_admixture_colored_embedding.png",
+        "admixture_colored_embedding_3d": admixture / "project_admixture_colored_embedding_3d.html",
     }

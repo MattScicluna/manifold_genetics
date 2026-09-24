@@ -75,6 +75,10 @@ def calls(monkeypatch):
         f"{MODULE}.plot_admixture_embedding_grid",
         rec("plot_admixture_embedding_grid", None),
     )
+    monkeypatch.setattr(
+        f"{MODULE}.plot_admixture_embedding_3d",
+        rec("plot_admixture_embedding_3d", Path("admix.html")),
+    )
     return recorded
 
 
@@ -96,6 +100,10 @@ def test_figure_output_paths_match_the_documented_layout(tmp_path):
     assert (
         p["admixture_colored_embedding"]
         == root / "admixture" / "project_admixture_colored_embedding.png"
+    )
+    assert (
+        p["admixture_colored_embedding_3d"]
+        == root / "admixture" / "project_admixture_colored_embedding_3d.html"
     )
 
 
@@ -431,3 +439,47 @@ class TestAdmixtureEmbeddingVizStep:
         assert list(kw["k_values"]) == [2, 3, 4]
         assert kw["output_path"] == figure_output_paths(io)["admixture_colored_embedding"]
         assert result.figures == (figure_output_paths(io)["admixture_colored_embedding"],)
+        assert [c for c in calls if c[0] == "plot_admixture_embedding_3d"] == []
+
+    def _run(self, tmp_path, ks=(2, 3)):
+        io = make_io(tmp_path)
+        d = tmp_path / "out" / "admixture"
+        admix = AdmixtureStepResult(
+            q_prefix=d / "project",
+            k_values=ks,
+            dir=d,
+            checkpoints_dir=d / "checkpoints",
+            fit_prefix=d / "fit",
+        )
+        emb = EmbeddingStepResult(embedding_file=tmp_path / "phate_3d.csv")
+        return io, run_admixture_embedding_viz_step(io, embedding=emb, admixture=admix)
+
+    def test_three_d_embedding_also_gets_the_interactive_figure(self, tmp_path, calls, monkeypatch):
+        """The PNG grid is unchanged; a 3-D embedding adds one HTML file with
+        every K and component selectable from a menu."""
+        monkeypatch.setattr(f"{MODULE}._embedding_dims", lambda p: 3)
+        io, result = self._run(tmp_path)
+
+        ((_, kw),) = [c for c in calls if c[0] == "plot_admixture_embedding_3d"]
+        assert kw["embedding"] == tmp_path / "phate_3d.csv"
+        assert kw["q_prefix"] == tmp_path / "out" / "admixture" / "project"
+        assert list(kw["k_values"]) == [2, 3]
+        assert kw["output_path"] == figure_output_paths(io)["admixture_colored_embedding_3d"]
+        assert result.figures == (
+            figure_output_paths(io)["admixture_colored_embedding"],
+            Path("admix.html"),
+        )
+
+    def test_missing_plotly_is_a_warning_not_a_failed_step(
+        self, tmp_path, calls, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(f"{MODULE}._embedding_dims", lambda p: 3)
+
+        def no_plotly(**kwargs):
+            raise ImportError("install manifold-genetics[interactive]")
+
+        monkeypatch.setattr(f"{MODULE}.plot_admixture_embedding_3d", no_plotly)
+        with caplog.at_level("WARNING"):
+            io, result = self._run(tmp_path)
+        assert result.figures == (figure_output_paths(io)["admixture_colored_embedding"],)
+        assert "manifold-genetics[interactive]" in caplog.text

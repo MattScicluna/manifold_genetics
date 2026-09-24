@@ -899,13 +899,15 @@ def test_cmd_plot_admixture_dispatch(monkeypatch, tmp_path, stub_validation):
 
 def test_cmd_plot_admixture_embedding_dispatch(monkeypatch, tmp_path, stub_validation):
     monkeypatch.setattr(mg_cli, "plot_admixture_embedding_grid", lambda **k: None)
+    emb = tmp_path / "emb.csv"
+    emb.write_text("sample_id,dim_1,dim_2\n")
     rc = mg_cli.main(
         [
             "plot-admixture-embedding",
             "--q-prefix",
             str(tmp_path / "q"),
             "--embedding",
-            "emb.csv",
+            str(emb),
             "--ks",
             "2",
             "3",
@@ -914,6 +916,42 @@ def test_cmd_plot_admixture_embedding_dispatch(monkeypatch, tmp_path, stub_valid
         ]
     )
     assert rc == 0
+
+
+def test_cmd_plot_admixture_embedding_writes_html_for_a_3d_embedding(
+    monkeypatch, tmp_path, stub_validation, capsys
+):
+    """Same seam as the pipeline step: a ``dim_3`` column adds the interactive
+    file next to the PNG, and ``--no-hover-ids`` reaches it."""
+    emb = tmp_path / "emb.csv"
+    emb.write_text("sample_id,dim_1,dim_2,dim_3\n")
+    monkeypatch.setattr(mg_cli, "plot_admixture_embedding_grid", lambda **k: None)
+    got = {}
+
+    def fake_3d(**kwargs):
+        got.update(kwargs)
+        return kwargs["output_path"]
+
+    monkeypatch.setattr("manifold_genetics.pipeline.steps.viz.plot_admixture_embedding_3d", fake_3d)
+    rc = mg_cli.main(
+        [
+            "plot-admixture-embedding",
+            "--q-prefix",
+            str(tmp_path / "q"),
+            "--embedding",
+            str(emb),
+            "--ks",
+            "2",
+            "--output",
+            str(tmp_path / "ae.png"),
+            "--no-hover-ids",
+        ]
+    )
+    assert rc == 0
+    assert got["output_path"] == tmp_path / "ae_3d.html"
+    assert got["hover_sample_id"] is False
+    assert list(got["k_values"]) == [2]
+    assert "ae_3d.html" in capsys.readouterr().out
 
 
 def test_cmd_plot_knn_composition_dispatch(monkeypatch, tmp_path, stub_validation):

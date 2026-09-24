@@ -182,6 +182,25 @@ Hover labels name the sample by default. `--no-hover-ids` leaves the identifiers
 out of the document altogether and shows only the label, which is what you want
 before a figure of a controlled-access cohort leaves the environment holding it.
 
+Admixture colouring works the same way. `plot-admixture-embedding` always
+writes its PNG grid; given a 3-D embedding it also writes `<output>_3d.html`, a
+single rotatable figure in which a dropdown selects the K and component that
+colour the points, so you keep your viewing angle while switching between them.
+It takes `--component-colormap` and `--no-hover-ids` like its 2-D counterpart and
+`plot-3d`, and `--subsample` caps how many points go into the file. A pipeline
+run with `n_components: 3` writes it as
+`figures/admixture/project_admixture_colored_embedding_3d.html`.
+
+The HTML files are self-contained pages that load plotly.js from a CDN, so they
+can be embedded in a website as they are:
+
+```html
+<iframe src="phate_3d_by_population.html" width="100%" height="700" style="border:0"></iframe>
+```
+
+For a page, export with a smaller `--max-points` (a few tens of thousands) and
+with `--no-hover-ids`.
+
 `--pca-backend` takes `python` (in process, the default) or `flashpca` (the
 external binary). They agree to 1.5e-7 and write the same artefacts, so a model fitted by
 either is readable by the other.

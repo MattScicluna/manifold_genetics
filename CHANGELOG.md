@@ -27,6 +27,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   a figure of a controlled-access cohort can be shared without carrying its
   participant IDs.
   Requires the new optional `interactive` extra: `uv sync --extra interactive`.
+- **Admixture colouring in 3-D, in one file.** `plot-admixture-embedding`
+  still writes its PNG grid; when the embedding has a `dim_3` column it also
+  writes `<output>_3d.html`, a single rotatable figure with every K and
+  component selectable from a dropdown, so the viewer keeps their camera angle
+  while switching. `--component-colormap` gives the same white-to-component
+  gradients as the grid, and the new `--no-hover-ids` keeps sample IDs out of
+  the file. A pipeline run with `n_components: 3` writes it to
+  `figures/admixture/project_admixture_colored_embedding_3d.html`. Library
+  users get `plot_admixture_embedding_3d`, which shares its layout, camera and
+  aspect handling with `plot_embedding_3d`.
 
 ## [0.3.0] - 2026-09-16
 
