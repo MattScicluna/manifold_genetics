@@ -766,6 +766,7 @@ def cmd_plot_3d(args):
         alpha=args.alpha,
         max_points=max_points,
         hover_sample_id=not args.no_hover_ids,
+        aspect=args.aspect,
     )
 
     print("Interactive 3-D visualization complete:")
@@ -1437,6 +1438,15 @@ def main(argv: Optional[List[str]] = None):
         help=(
             "Leave sample IDs out of the hover labels, so the HTML carries no "
             "identifiers -- for sharing a figure of a controlled-access cohort"
+        ),
+    )
+    plot_3d_parser.add_argument(
+        "--aspect",
+        choices=["match", "true"],
+        default="match",
+        help=(
+            "match: dims 1-2 stretched to equal length as in the 2D figures, dim 3 at "
+            "its true length (default); true: every axis at true scale"
         ),
     )
     plot_3d_parser.add_argument("--verbose", action="store_true", help="Verbose output")

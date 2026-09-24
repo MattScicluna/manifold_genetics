@@ -7,7 +7,7 @@ Provides publication-ready plots with customizable colormaps.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -529,6 +529,7 @@ def plot_embedding_3d(
     max_points: Optional[int] = DEFAULT_MAX_POINTS_3D,
     random_state: Optional[int] = 42,
     hover_sample_id: bool = True,
+    aspect: str = "match",
 ) -> Path:
     """Write a rotatable 3-D scatter of an embedding as a standalone HTML file.
 
@@ -543,6 +544,10 @@ def plot_embedding_3d(
         alpha: Marker opacity
         max_points: Cap on points written into the file; None keeps all
         random_state: Seed for that subsample, so the figure is reproducible
+        aspect: ``"match"`` stretches dims 1 and 2 to equal length, as the 2-D
+            figures do, and leaves dim 3 at its true length relative to dim 1
+            -- so the face-on view reproduces the 2-D figure and depth is not
+            exaggerated. ``"true"`` shows every axis at true scale.
         hover_sample_id: Put each point's sample_id in its hover label. Set
             False for a figure that can be shared outside the environment
             holding a controlled-access cohort: the identifiers are then never
@@ -555,8 +560,6 @@ def plot_embedding_3d(
         ImportError: if plotly is not installed
         ValueError: if the embedding has fewer than three dimensions
     """
-    go = _require_plotly()
-
     if isinstance(embedding, (str, Path)):
         embedding_df = read_embedding_csv(embedding)
     else:
@@ -592,6 +595,9 @@ def plot_embedding_3d(
         )
     color_dict = colormap_dict[label_column]
 
+    # Inputs are valid; only now does the optional dependency matter.
+    go = _require_plotly()
+
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -600,6 +606,10 @@ def plot_embedding_3d(
         raise ValueError(f"Column {label_column!r} not found in the labels file")
 
     merged_df = _subsample_for_browser(merged_df, max_points, random_state)
+
+    if aspect not in ("match", "true"):
+        raise ValueError(f"aspect must be 'match' or 'true', got {aspect!r}")
+    extent = (merged_df[required].max() - merged_df[required].min()).to_numpy(dtype=float)
 
     warn_about_unmatched_labels(merged_df[label_column], color_dict, label_column)
 
@@ -653,9 +663,23 @@ def plot_embedding_3d(
             xaxis_title="dim_1",
             yaxis_title="dim_2",
             zaxis_title="dim_3",
-            # Keep the manifold's real proportions; the default rescales each
-            # axis to the cube and distorts the shape being inspected.
-            aspectmode="data",
+            # "match": only dim 2 is rescaled (to dim 1's length, as the 2-D
+            # box does); dim 3 keeps its true ratio to dim 1. "cube" would
+            # inflate the shortest axis the most.
+            aspectmode="data" if aspect == "true" else "manual",
+            aspectratio=(
+                None
+                if aspect == "true"
+                else dict(x=1, y=1, z=float(extent[2] / extent[0]) if extent[0] > 0 else 1)
+            ),
+            # Open looking straight down dim 3, orthographic. A PHATE manifold
+            # is typically a curved sheet: an oblique perspective default shows
+            # it edge-on as a curve that looks nothing like the 2-D figure.
+            camera=dict(
+                eye=dict(x=0, y=0, z=2.0),
+                up=dict(x=0, y=1, z=0),
+                projection=dict(type="orthographic"),
+            ),
         ),
         legend=dict(itemsizing="constant"),
         margin=dict(l=0, r=0, t=40, b=0),
@@ -674,7 +698,7 @@ def visualize_3d(
     output_dir: Optional[Union[str, Path]] = None,
     output_prefix: str = "embedding_3d",
     dataset_prefix: str = "",
-    **kwargs,
+    **kwargs: Any,
 ) -> List[Path]:
     """Write one interactive 3-D plot per label column, mirroring ``visualize``.
 
@@ -685,7 +709,7 @@ def visualize_3d(
         output_dir: Directory to save plots (default: current directory)
         output_prefix: Prefix for output filenames
         dataset_prefix: Prefix for dataset type (e.g. "fit_" or "project_")
-        **kwargs: Forwarded to :func:`plot_embedding_3d`
+        **kwargs: Forwarded to ``plot_embedding_3d``
 
     Returns:
         List of paths to saved HTML files

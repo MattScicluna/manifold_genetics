@@ -19,6 +19,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   instead of a PNG: drag to rotate, hover a point for its sample and label.
   `--max-points` (default 100,000) caps how much of a large cohort is written
   into the file and logs the subsample it took.
+  The figure opens face-on to the plane of the 2-D figure with an orthographic
+  camera; `--aspect match` (default) stretches dims 1-2 like the 2-D figures
+  and keeps dim 3 at true length, `--aspect true` scales nothing. A pipeline run
+  with `n_components: 3` writes these figures alongside the PNGs.
   `--no-hover-ids` leaves sample identifiers out of the document entirely, so
   a figure of a controlled-access cohort can be shared without carrying its
   participant IDs.

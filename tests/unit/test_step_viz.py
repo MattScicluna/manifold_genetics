@@ -65,6 +65,10 @@ def calls(monkeypatch):
 
     monkeypatch.setattr(f"{MODULE}.plot_pca_pairs", rec("plot_pca_pairs", Path("pca.png")))
     monkeypatch.setattr(f"{MODULE}.visualize", rec("visualize", [Path("emb.png")]))
+    monkeypatch.setattr(f"{MODULE}.visualize_3d", rec("visualize_3d", [Path("emb.html")]))
+    # The embedding files in these tests are paths, not real CSVs; the step
+    # reads the header to count dimensions, so stub that to "2-D" by default.
+    monkeypatch.setattr(f"{MODULE}._embedding_dims", lambda p: 2)
     monkeypatch.setattr(f"{MODULE}.plot_projection", rec("plot_projection", Path("proj.png")))
     monkeypatch.setattr(f"{MODULE}.plot_admixture_bar_grid", rec("plot_admixture_bar_grid", None))
     monkeypatch.setattr(
@@ -220,6 +224,51 @@ class TestEmbeddingVizStep:
         assert vis[0][1]["colormap"] == io.fit_colormap
         assert vis[1][1]["labels"] == io.project_labels
         assert vis[1][1]["colormap"] == io.project_colormap
+
+    def test_two_d_embedding_gets_no_interactive_figure(self, tmp_path, calls, stub_colormap):
+        run_embedding_viz_step(
+            io := make_io(tmp_path), VizConfig(), embedding=self._emb(tmp_path), method="phate"
+        )
+        assert [c for c in calls if c[0] == "visualize_3d"] == []
+
+    def test_three_d_embedding_also_gets_the_interactive_figures(
+        self, tmp_path, calls, stub_colormap, monkeypatch
+    ):
+        """Drawn only by `visualize`, a 3-D embedding is a face-on PNG with nothing
+        to say a third axis exists; the rotatable HTML is what shows it."""
+        monkeypatch.setattr(f"{MODULE}._embedding_dims", lambda p: 3)
+        io = make_io(tmp_path)
+        result = run_embedding_viz_step(
+            io, VizConfig(), embedding=self._emb(tmp_path), method="phate"
+        )
+
+        v3 = [c[1] for c in calls if c[0] == "visualize_3d"]
+        assert [v["dataset_prefix"] for v in v3] == ["fit_", "project_"]
+        assert all(v["output_prefix"] == "phate_3d" for v in v3)
+        assert v3[0]["labels"] == io.fit_labels and v3[0]["colormap"] == io.fit_colormap
+        assert v3[1]["labels"] == io.project_labels and v3[1]["colormap"] == io.project_colormap
+        # both the PNGs and the HTMLs are reported
+        assert (
+            Path("emb.html") in result.project_figures and Path("emb.png") in result.project_figures
+        )
+
+    def test_missing_plotly_is_a_warning_not_a_failed_step(
+        self, tmp_path, calls, stub_colormap, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(f"{MODULE}._embedding_dims", lambda p: 3)
+
+        def no_plotly(**kwargs):
+            raise ImportError("install manifold-genetics[interactive]")
+
+        monkeypatch.setattr(f"{MODULE}.visualize_3d", no_plotly)
+        result = run_embedding_viz_step(
+            make_io(tmp_path),
+            VizConfig(),
+            embedding=self._emb(tmp_path, with_fit=False),
+            method="phate",
+        )
+        assert Path("emb.png") in result.project_figures
+        assert "interactive" in caplog.text
 
     def test_projection_plot_only_when_both_columns_configured(
         self, tmp_path, calls, stub_colormap

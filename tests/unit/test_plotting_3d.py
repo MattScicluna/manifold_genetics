@@ -137,6 +137,38 @@ def test_unknown_label_column_raises(emb_inputs, tmp_path):
         plot_embedding_3d(emb, labels, CMAP, tmp_path / "e.html", label_column="Nope")
 
 
+def test_default_view_is_face_on_orthographic_with_matched_aspect(emb_inputs, tmp_path):
+    """The default must open in the plane of the 2-D figure. A PHATE manifold is
+    a curved sheet; plotly's oblique perspective default shows it edge-on."""
+    go = pytest.importorskip("plotly.graph_objects")
+    captured = {}
+    real = go.Figure.update_layout
+
+    def rec(self, *a, **k):
+        captured.update(k)
+        return real(self, *a, **k)
+
+    emb, labels = emb_inputs
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(go.Figure, "update_layout", rec)
+        plot_embedding_3d(emb, labels, CMAP, tmp_path / "e.html")
+    scene = captured["scene"]
+    assert scene["camera"]["eye"] == dict(x=0, y=0, z=2.0)
+    assert scene["camera"]["projection"] == dict(type="orthographic")
+    assert scene["aspectmode"] == "manual"
+    ext = emb[["dim_1", "dim_2", "dim_3"]].max() - emb[["dim_1", "dim_2", "dim_3"]].min()
+    assert scene["aspectratio"]["x"] == 1 and scene["aspectratio"]["y"] == 1
+    assert abs(scene["aspectratio"]["z"] - ext["dim_3"] / ext["dim_1"]) < 1e-9
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(go.Figure, "update_layout", rec)
+        plot_embedding_3d(emb, labels, CMAP, tmp_path / "t.html", aspect="true")
+    assert captured["scene"]["aspectmode"] == "data"
+
+    with pytest.raises(ValueError, match="aspect"):
+        plot_embedding_3d(emb, labels, CMAP, tmp_path / "x.html", aspect="cube")
+
+
 def test_max_points_caps_the_file_and_is_reproducible(traces, tmp_path):
     ids = list(range(50))
     emb = _emb(ids, seed=4)
@@ -175,8 +207,34 @@ def test_missing_plotly_raises_with_install_instructions(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", blocked)
 
+    # Valid inputs, so the missing dependency -- not input validation -- is
+    # what raises. Input errors are reported before plotly is needed.
+    ids = list(range(4))
+    emb = _emb(ids, seed=9)
+    labels = pd.DataFrame({"sample_id": [str(i) for i in ids], "Region": list("AABB")})
     with pytest.raises(ImportError, match=r"interactive"):
-        plot_embedding_3d(pd.DataFrame(), pd.DataFrame(), CMAP, "x.html")
+        plot_embedding_3d(emb, labels, CMAP, "x.html")
+
+
+def test_input_errors_do_not_need_plotly(monkeypatch, tmp_path):
+    """A 2-D file must get 'run with n_components=3', not 'install plotly',
+    whether or not the optional dependency is installed. CI runs without it."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name.startswith("plotly"):
+            raise ImportError("no plotly")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    ids = list(range(4))
+    labels = pd.DataFrame({"sample_id": [str(i) for i in ids], "Region": list("AABB")})
+    with pytest.raises(ValueError, match="n_components=3"):
+        plot_embedding_3d(_emb(ids, dims=2, seed=3), labels, CMAP, tmp_path / "e.html")
+    with pytest.raises(ValueError, match="colormap"):
+        plot_embedding_3d(_emb(ids, seed=3), labels, CMAP, tmp_path / "e.html", label_column="Nope")
 
 
 # ---------------------------------------------------------------------------
