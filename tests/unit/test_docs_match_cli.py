@@ -22,10 +22,16 @@ DOCS = Path(__file__).resolve().parents[2] / "docs" / "cli.md"
 
 
 def documented_commands() -> set:
-    """Subcommands named on the page, either in its table or in a code block."""
+    """Subcommands named on the page, either in its table or in a code block.
+
+    The character class matches digits as well as letters, the same as the
+    ``{a,b,c}`` pattern in ``actual_commands``. Without them a name like
+    ``plot-3d`` is captured as ``plot-``, which both reads as an undocumented
+    command and as a documented one that does not exist.
+    """
     text = DOCS.read_text()
-    in_table = set(re.findall(r"^\| `([a-z][a-z-]*)` \|", text, re.MULTILINE))
-    in_prose = set(re.findall(r"manifold-genetics ([a-z][a-z-]*)\b", text))
+    in_table = set(re.findall(r"^\| `([a-z][a-z0-9-]*)` \|", text, re.MULTILINE))
+    in_prose = set(re.findall(r"manifold-genetics ([a-z][a-z0-9-]*)\b", text))
     return in_table | in_prose
 
 

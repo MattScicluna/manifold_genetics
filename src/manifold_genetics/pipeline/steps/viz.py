@@ -28,6 +28,7 @@ from ...visualization import (
     plot_pca_pairs,
     plot_projection,
     visualize,
+    visualize_3d,
 )
 from ..config import IOConfig, VizConfig
 from .admixture import AdmixtureStepResult
@@ -133,6 +134,36 @@ def run_pca_viz_step(io: IOConfig, *, pca_file: Path, n_pcs: int) -> VizStepResu
     return VizStepResult(figures=tuple(pca_figure_paths))
 
 
+def _embedding_dims(path) -> int:
+    """Number of ``dim_*`` columns in an embedding CSV, from its header alone."""
+    with open(path) as fh:
+        header = fh.readline().strip().split(",")
+    return sum(1 for c in header if c.startswith("dim_"))
+
+
+def _visualize_3d_if_possible(embedding_file, labels, colormap, output_dir, method, dataset_prefix):
+    """Write the rotatable HTML figures for a >=3-D embedding.
+
+    A 3-D embedding drawn only by ``visualize`` would be its face-on projection
+    as a PNG, with nothing to say a third axis exists. plotly is optional, so
+    its absence is a warning naming the extra rather than a failed step.
+    """
+    if _embedding_dims(embedding_file) < 3:
+        return []
+    try:
+        return visualize_3d(
+            embedding=embedding_file,
+            labels=labels,
+            colormap=colormap,
+            output_dir=output_dir,
+            output_prefix=f"{method}_3d",
+            dataset_prefix=dataset_prefix,
+        )
+    except ImportError as exc:
+        logger.warning(f"Embedding has 3 dimensions but the interactive figure was skipped: {exc}")
+        return []
+
+
 def run_embedding_viz_step(
     io: IOConfig, viz: VizConfig, *, embedding: EmbeddingStepResult, method: str
 ) -> EmbeddingVizResult:
@@ -159,6 +190,16 @@ def run_embedding_viz_step(
             output_prefix=method,
             dataset_prefix="fit_",
         )
+        fit_figure_paths = list(fit_figure_paths) + list(
+            _visualize_3d_if_possible(
+                embedding.fit_embedding_file,
+                io.fit_labels,
+                io.fit_colormap,
+                embedding_figures_dir,
+                method,
+                "fit_",
+            )
+        )
         logger.info(f"Created {len(fit_figure_paths)} fit embedding figures")
 
     # Project visualizations — always.
@@ -170,6 +211,16 @@ def run_embedding_viz_step(
         output_dir=embedding_figures_dir,
         output_prefix=method,
         dataset_prefix="project_",
+    )
+    project_figure_paths = list(project_figure_paths) + list(
+        _visualize_3d_if_possible(
+            embedding.embedding_file,
+            io.project_labels,
+            io.project_colormap,
+            embedding_figures_dir,
+            method,
+            "project_",
+        )
     )
     logger.info(f"Created {len(project_figure_paths)} project embedding figures")
 

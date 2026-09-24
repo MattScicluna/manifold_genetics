@@ -7,7 +7,7 @@ Provides publication-ready plots with customizable colormaps.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -468,6 +468,275 @@ def visualize(
         output_paths.append(output_path)
 
     logger.info(f"Generated {len(output_paths)} visualization plots")
+    return output_paths
+
+
+# --------------------------------------------------------------------------- #
+# Interactive 3-D embeddings
+# --------------------------------------------------------------------------- #
+
+# A 3-D scatter is only worth making if it can be rotated, so this path writes
+# an interactive HTML file rather than a PNG. plotly is an optional dependency
+# (``pip install manifold-genetics[interactive]``) and is imported lazily so the
+# rest of the package keeps working without it.
+DEFAULT_MAX_POINTS_3D = 100_000
+
+UNKNOWN_COLOR = "lightgray"
+UNKNOWN_LABEL = "Unknown"
+
+
+def _require_plotly():
+    """Import plotly, or fail with an instruction rather than a traceback."""
+    try:
+        import plotly.graph_objects as go
+    except ImportError as exc:  # pragma: no cover - exercised via monkeypatch
+        raise ImportError(
+            "Interactive 3-D plots require plotly, which is an optional "
+            "dependency of manifold-genetics.\n"
+            "Install it with:  pip install 'manifold-genetics[interactive]'\n"
+            "                  uv sync --extra interactive"
+        ) from exc
+    return go
+
+
+def _subsample_for_browser(
+    df: pd.DataFrame, max_points: Optional[int], random_state: Optional[int]
+) -> pd.DataFrame:
+    """Cap the number of points written into the HTML.
+
+    Every point becomes coordinates in the file itself, so a full biobank-scale
+    embedding produces a document too large for a browser to open comfortably.
+    """
+    if max_points is None or len(df) <= max_points:
+        return df
+
+    logger.warning(
+        f"Subsampling {max_points} of {len(df)} points for the interactive plot "
+        f"(pass max_points=None to keep all of them, at the cost of file size)"
+    )
+    return df.sample(n=max_points, random_state=random_state)
+
+
+def plot_embedding_3d(
+    embedding: Union[pd.DataFrame, str, Path],
+    labels: Union[pd.DataFrame, str, Path],
+    colormap: Union[Dict, str, Path],
+    output_path: Union[str, Path],
+    label_column: Optional[str] = None,
+    title: Optional[str] = None,
+    point_size: float = 2.0,
+    alpha: float = 0.6,
+    max_points: Optional[int] = DEFAULT_MAX_POINTS_3D,
+    random_state: Optional[int] = 42,
+    hover_sample_id: bool = True,
+    aspect: str = "match",
+) -> Path:
+    """Write a rotatable 3-D scatter of an embedding as a standalone HTML file.
+
+    Args:
+        embedding: DataFrame or path to embedding CSV (sample_id, dim_1, dim_2, dim_3)
+        labels: DataFrame or path to labels CSV (sample_id, label_columns)
+        colormap: Dict or path to colormap JSON {label_col: {value: color}}
+        output_path: Path to save the HTML file
+        label_column: Which colormap key to colour by (default: the first one)
+        title: Optional plot title
+        point_size: Marker size
+        alpha: Marker opacity
+        max_points: Cap on points written into the file; None keeps all
+        random_state: Seed for that subsample, so the figure is reproducible
+        aspect: ``"match"`` stretches dims 1 and 2 to equal length, as the 2-D
+            figures do, and leaves dim 3 at its true length relative to dim 1
+            -- so the face-on view reproduces the 2-D figure and depth is not
+            exaggerated. ``"true"`` shows every axis at true scale.
+        hover_sample_id: Put each point's sample_id in its hover label. Set
+            False for a figure that can be shared outside the environment
+            holding a controlled-access cohort: the identifiers are then never
+            written into the HTML, and hover shows the label alone.
+
+    Returns:
+        Path to the saved HTML file
+
+    Raises:
+        ImportError: if plotly is not installed
+        ValueError: if the embedding has fewer than three dimensions
+    """
+    if isinstance(embedding, (str, Path)):
+        embedding_df = read_embedding_csv(embedding)
+    else:
+        embedding_df = embedding
+
+    required = ["dim_1", "dim_2", "dim_3"]
+    missing = [c for c in required if c not in embedding_df.columns]
+    if missing:
+        available = [c for c in embedding_df.columns if c.startswith("dim_")]
+        raise ValueError(
+            f"A 3-D plot needs columns {required}; missing {missing}. "
+            f"This embedding has {available or 'no dim_* columns'}. "
+            "Re-run the embedding with n_components=3."
+        )
+
+    if isinstance(labels, (str, Path)):
+        labels_df = read_labels_csv(labels)
+    else:
+        labels_df = labels
+    if labels_df.index.name == "sample_id":
+        labels_df = labels_df.reset_index()
+
+    if isinstance(colormap, (str, Path)):
+        colormap_dict = read_colormap(colormap)
+    else:
+        colormap_dict = colormap
+
+    if label_column is None:
+        label_column = next(iter(colormap_dict))
+    if label_column not in colormap_dict:
+        raise ValueError(
+            f"Column {label_column!r} is not in the colormap " f"(available: {list(colormap_dict)})"
+        )
+    color_dict = colormap_dict[label_column]
+
+    # Inputs are valid; only now does the optional dependency matter.
+    go = _require_plotly()
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    merged_df = embedding_df.merge(labels_df, on="sample_id", how="inner")
+    if label_column not in merged_df.columns:
+        raise ValueError(f"Column {label_column!r} not found in the labels file")
+
+    merged_df = _subsample_for_browser(merged_df, max_points, random_state)
+
+    if aspect not in ("match", "true"):
+        raise ValueError(f"aspect must be 'match' or 'true', got {aspect!r}")
+    extent = (merged_df[required].max() - merged_df[required].min()).to_numpy(dtype=float)
+
+    warn_about_unmatched_labels(merged_df[label_column], color_dict, label_column)
+
+    traces = []
+
+    # Unlabelled samples first, so they sit behind the coloured groups in the
+    # legend the same way they sit behind them in the 2-D figures.
+    missing_mask = merged_df[label_column].isna()
+    if missing_mask.sum() > 0:
+        unknown = merged_df[missing_mask]
+        traces.append(
+            go.Scatter3d(
+                x=unknown["dim_1"],
+                y=unknown["dim_2"],
+                z=unknown["dim_3"],
+                mode="markers",
+                name=UNKNOWN_LABEL,
+                marker=dict(size=point_size, color=UNKNOWN_COLOR, opacity=alpha * 0.5),
+                text=(unknown["sample_id"].astype(str) if hover_sample_id else None),
+                hovertemplate=(
+                    "%{text}<br>" + UNKNOWN_LABEL + "<extra></extra>"
+                    if hover_sample_id
+                    else UNKNOWN_LABEL + "<extra></extra>"
+                ),
+            )
+        )
+
+    for label in [k for k in color_dict if k in merged_df[label_column].values]:
+        group = merged_df[merged_df[label_column] == label]
+        traces.append(
+            go.Scatter3d(
+                x=group["dim_1"],
+                y=group["dim_2"],
+                z=group["dim_3"],
+                mode="markers",
+                name=str(label),
+                marker=dict(size=point_size, color=color_dict[label], opacity=alpha),
+                text=(group["sample_id"].astype(str) if hover_sample_id else None),
+                hovertemplate=(
+                    f"%{{text}}<br>{label}<extra></extra>"
+                    if hover_sample_id
+                    else f"{label}<extra></extra>"
+                ),
+            )
+        )
+
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        title=title or f"3-D embedding coloured by {label_column}",
+        scene=dict(
+            xaxis_title="dim_1",
+            yaxis_title="dim_2",
+            zaxis_title="dim_3",
+            # "match": only dim 2 is rescaled (to dim 1's length, as the 2-D
+            # box does); dim 3 keeps its true ratio to dim 1. "cube" would
+            # inflate the shortest axis the most.
+            aspectmode="data" if aspect == "true" else "manual",
+            aspectratio=(
+                None
+                if aspect == "true"
+                else dict(x=1, y=1, z=float(extent[2] / extent[0]) if extent[0] > 0 else 1)
+            ),
+            # Open looking straight down dim 3, orthographic. A PHATE manifold
+            # is typically a curved sheet: an oblique perspective default shows
+            # it edge-on as a curve that looks nothing like the 2-D figure.
+            camera=dict(
+                eye=dict(x=0, y=0, z=2.0),
+                up=dict(x=0, y=1, z=0),
+                projection=dict(type="orthographic"),
+            ),
+        ),
+        legend=dict(itemsizing="constant"),
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+
+    fig.write_html(str(output_path), include_plotlyjs="cdn")
+    logger.info(f"Wrote interactive 3-D plot: {output_path} ({len(merged_df)} points)")
+
+    return output_path
+
+
+def visualize_3d(
+    embedding: Union[pd.DataFrame, str, Path],
+    labels: Union[pd.DataFrame, str, Path],
+    colormap: Union[Dict, str, Path],
+    output_dir: Optional[Union[str, Path]] = None,
+    output_prefix: str = "embedding_3d",
+    dataset_prefix: str = "",
+    **kwargs: Any,
+) -> List[Path]:
+    """Write one interactive 3-D plot per label column, mirroring ``visualize``.
+
+    Args:
+        embedding: DataFrame or path to embedding CSV
+        labels: DataFrame or path to labels CSV
+        colormap: Dict or path to colormap JSON
+        output_dir: Directory to save plots (default: current directory)
+        output_prefix: Prefix for output filenames
+        dataset_prefix: Prefix for dataset type (e.g. "fit_" or "project_")
+        **kwargs: Forwarded to ``plot_embedding_3d``
+
+    Returns:
+        List of paths to saved HTML files
+    """
+    output_dir = Path.cwd() if output_dir is None else Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(colormap, (str, Path)):
+        colormap_dict = read_colormap(colormap)
+    else:
+        colormap_dict = colormap
+
+    output_paths = []
+    for label_col in colormap_dict.keys():
+        output_path = output_dir / f"{dataset_prefix}{output_prefix}_by_{label_col}.html"
+        plot_embedding_3d(
+            embedding=embedding,
+            labels=labels,
+            colormap=colormap_dict,
+            output_path=output_path,
+            label_column=label_col,
+            title=f"3-D embedding coloured by {label_col}",
+            **kwargs,
+        )
+        output_paths.append(output_path)
+
+    logger.info(f"Generated {len(output_paths)} interactive 3-D plots")
     return output_paths
 
 

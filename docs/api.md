@@ -39,3 +39,7 @@ from manifold_genetics import run_pipeline, load_config, PCA, PHATE, UMAP, TSNE,
 ::: manifold_genetics.visualization.plotting.visualize
 
 ::: manifold_genetics.visualization.plotting.plot_embedding
+
+::: manifold_genetics.visualization.plotting.plot_embedding_3d
+
+::: manifold_genetics.visualization.plotting.visualize_3d

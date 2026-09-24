@@ -152,6 +152,8 @@ _SKIP_KEYS = {
 # embedding section is a method-specific parameter passed through as a dict.
 _EMBEDDING_ARGS = {"method": "embedding", "input_mode": "embedding_input"}
 _EMBEDDING_PARAMS = {
+    # Applies to every method, unlike the rest of this set.
+    "n_components",
     "knn",
     "t",
     "n_landmark",

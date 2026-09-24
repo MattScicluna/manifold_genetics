@@ -44,6 +44,7 @@ from .visualization import (
     plot_knn_composition,
     plot_projection,
     visualize,
+    visualize_3d,
 )
 
 _LOG_FORMAT = "%(asctime)s - %(name)-40s - %(levelname)s - %(message)s"
@@ -146,6 +147,13 @@ def _embedding_params_from_args(args) -> dict:
         params = {"perplexity": args.perplexity}
     elif method == "diffusion_map":
         params = {"knn": args.knn}
+
+    # Every method accepts n_components, so it is set outside the per-method
+    # branches. Read with getattr because not every subparser defines the flag;
+    # when it is absent the params dict is unchanged and the default of 2 applies.
+    n_components = getattr(args, "n_components", None)
+    if n_components is not None:
+        params["n_components"] = n_components
 
     return params
 
@@ -725,6 +733,43 @@ def cmd_plot(args):
     )
 
     print(f"Visualization complete:")
+    for path in figure_paths:
+        print(f"  {path}")
+    return 0
+
+
+def cmd_plot_3d(args):
+    """Run interactive 3-D visualization command."""
+    setup_logging(args.verbose)
+
+    # Validate inputs
+    validate_embedding_csv(args.input)
+    validate_labels_csv(args.labels)
+    validate_colormap_json(args.colormap)
+    validate_labels_colormap_match(args.labels, args.colormap)
+    validate_sample_id_overlap(args.input, args.labels, "embedding", "labels")
+
+    output_dir = Path(args.output) if args.output else Path.cwd()
+    output_prefix = args.prefix
+
+    # ``--max-points 0`` is the explicit "write every point" escape hatch;
+    # argparse cannot express None on the command line.
+    max_points = None if args.max_points == 0 else args.max_points
+
+    figure_paths = visualize_3d(
+        embedding=args.input,
+        labels=args.labels,
+        colormap=args.colormap,
+        output_dir=output_dir,
+        output_prefix=output_prefix,
+        point_size=args.point_size,
+        alpha=args.alpha,
+        max_points=max_points,
+        hover_sample_id=not args.no_hover_ids,
+        aspect=args.aspect,
+    )
+
+    print("Interactive 3-D visualization complete:")
     for path in figure_paths:
         print(f"  {path}")
     return 0
@@ -1310,6 +1355,12 @@ def main(argv: Optional[List[str]] = None):
         action="store_true",
         help="Use random landmarking for PHATE (requires --n-landmark)",
     )
+    embed_parser.add_argument(
+        "--n-components",
+        type=int,
+        default=2,
+        help="Embedding dimensions (default 2; use 3 for `plot-3d`)",
+    )
     embed_parser.add_argument("--n-neighbors", type=int, default=15, help="Neighbors (UMAP)")
     embed_parser.add_argument("--min-dist", type=float, default=0.1, help="Min dist (UMAP)")
     embed_parser.add_argument("--perplexity", type=float, default=30, help="Perplexity (t-SNE)")
@@ -1346,6 +1397,60 @@ def main(argv: Optional[List[str]] = None):
     plot_parser.add_argument("--output", help="Output figure path")
     plot_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_parser.set_defaults(func=cmd_plot)
+
+    # Plot 3-D command
+    plot_3d_parser = subparsers.add_parser(
+        "plot-3d",
+        help="Visualize a 3-D embedding as a rotatable HTML file",
+        description=(
+            "Generate an interactive, rotatable 3-D scatter of an embedding CSV.\n\n"
+            "One standalone HTML file is written per label column in the colormap JSON.\n"
+            "Input CSV must have columns: sample_id, dim_1, dim_2, dim_3 -- produce one\n"
+            "by running the embedding with n_components=3.\n\n"
+            "Requires the optional plotly dependency: uv sync --extra interactive"
+        ),
+        epilog=(
+            "Example:\n"
+            "  manifold-genetics plot-3d \\\n"
+            "      --input results/embeddings/phate_3d.csv \\\n"
+            "      --labels data/labels.csv \\\n"
+            "      --colormap data/colormap.json \\\n"
+            "      --output results/figures/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    plot_3d_parser.add_argument("--input", required=True, help="Input embedding CSV")
+    plot_3d_parser.add_argument("--labels", required=True, help="Labels CSV file")
+    plot_3d_parser.add_argument("--colormap", required=True, help="Colormap JSON file")
+    plot_3d_parser.add_argument("--output", help="Output directory for HTML files")
+    plot_3d_parser.add_argument("--prefix", default="embedding_3d", help="Output filename prefix")
+    plot_3d_parser.add_argument("--point-size", type=float, default=2.0, help="Marker size")
+    plot_3d_parser.add_argument("--alpha", type=float, default=0.6, help="Marker opacity")
+    plot_3d_parser.add_argument(
+        "--max-points",
+        type=int,
+        default=100_000,
+        help="Cap points written into the HTML (0 keeps all; large files load slowly)",
+    )
+    plot_3d_parser.add_argument(
+        "--no-hover-ids",
+        action="store_true",
+        help=(
+            "Leave sample IDs out of the hover labels, so the HTML carries no "
+            "identifiers -- for sharing a figure of a controlled-access cohort"
+        ),
+    )
+    plot_3d_parser.add_argument(
+        "--aspect",
+        choices=["match", "true"],
+        default="match",
+        help=(
+            "match: dims 1-2 stretched to equal length as in the 2D figures, dim 3 at "
+            "its true length (default); true: every axis at true scale"
+        ),
+    )
+    plot_3d_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    plot_3d_parser.set_defaults(func=cmd_plot_3d)
 
     # Plot PCA command
     plot_pca_parser = subparsers.add_parser(
@@ -1826,6 +1931,12 @@ def main(argv: Optional[List[str]] = None):
         "--random-landmarking",
         action="store_true",
         help="Use random landmarking for PHATE (requires --n-landmark)",
+    )
+    pipeline_parser.add_argument(
+        "--n-components",
+        type=int,
+        default=2,
+        help="Embedding dimensions (default 2; use 3 for `plot-3d`)",
     )
     pipeline_parser.add_argument("--n-neighbors", type=int, default=15, help="Neighbors (UMAP)")
     pipeline_parser.add_argument("--perplexity", type=float, default=30, help="Perplexity (t-SNE)")

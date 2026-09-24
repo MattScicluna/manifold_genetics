@@ -33,10 +33,15 @@ def admixture_output_paths(io: IOConfig, admix: AdmixtureConfig) -> Dict[str, ob
 
 
 def embedding_output_paths(io: IOConfig, emb: EmbeddingConfig) -> Dict[str, Path]:
+    # The dimensionality is in the filename, so a 3-D run does not overwrite a
+    # 2-D one and neither is mislabelled. n_components defaults to 2, which
+    # keeps the historical `<method>_2d.csv` name the checkpoint logic and the
+    # example scripts depend on.
+    n_components = int(emb.params.get("n_components", 2))
     d = io.output_dir / "embeddings"
-    paths = {"embedding": d / f"{emb.method}_2d.csv"}
+    paths = {"embedding": d / f"{emb.method}_{n_components}d.csv"}
     if emb.input_mode == "both":
-        paths["fit_embedding"] = d / f"{emb.method}_fit_2d.csv"
+        paths["fit_embedding"] = d / f"{emb.method}_fit_{n_components}d.csv"
     return paths
 
 

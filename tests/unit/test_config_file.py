@@ -177,6 +177,15 @@ class TestPresets:
         assert kwargs["embedding_params"]["t"] == 100
         assert kwargs["embedding_params"]["knn"] == 500  # still from the preset
 
+    def test_n_components_reaches_run_pipeline(self, tmp_path):
+        """Documented in docs/formats.md as an embedding key, so it has to be
+        accepted rather than rejected as unknown."""
+        path = write_config(
+            tmp_path, {**MINIMAL, "preset": "subsample", "embedding": {"n_components": 3}}
+        )
+
+        assert load_config(path)["embedding_params"]["n_components"] == 3
+
     def test_no_preset_is_allowed(self, tmp_path):
         path = write_config(tmp_path, MINIMAL)
 

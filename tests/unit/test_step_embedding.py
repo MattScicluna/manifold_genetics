@@ -170,6 +170,30 @@ class TestBuildEmbeddingModel:
         build_embedding_model("diffusion_map", {"knn": 9})
         assert fake_models.instances[1].kwargs["knn"] == 9
 
+    def test_n_components_defaults_to_2_for_every_method(self, fake_models):
+        """The historical default. A config that never mentions n_components must
+        keep producing exactly the 2-D output it always has."""
+        for method in ("phate", "umap", "tsne", "diffusion_map"):
+            fake_models.instances = []
+            build_embedding_model(method, {})
+            assert fake_models.instances[0].kwargs["n_components"] == 2, method
+
+    def test_n_components_is_forwarded_for_every_method(self, fake_models):
+        for method in ("phate", "umap", "tsne", "diffusion_map"):
+            fake_models.instances = []
+            build_embedding_model(method, {"n_components": 3})
+            assert fake_models.instances[0].kwargs["n_components"] == 3, method
+
+    def test_n_components_is_coerced_from_string(self, fake_models):
+        """YAML configs and CLI params arrive as strings often enough that
+        passing one straight through to PHATE would fail deep in the library."""
+        build_embedding_model("umap", {"n_components": "3"})
+        assert fake_models.instances[0].kwargs["n_components"] == 3
+
+    def test_n_components_below_one_raises(self, fake_models):
+        with pytest.raises(ValueError, match="n_components"):
+            build_embedding_model("umap", {"n_components": 0})
+
     def test_unknown_method_raises_valueerror(self, fake_models):
         with pytest.raises(ValueError, match="[Uu]nknown"):
             build_embedding_model("wavelet", {})
