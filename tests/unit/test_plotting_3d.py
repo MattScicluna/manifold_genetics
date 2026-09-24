@@ -105,22 +105,6 @@ def test_hover_carries_sample_id(emb_inputs, traces, tmp_path):
     assert set(trace_a["text"]) == {"0", "1", "6", "7"}
 
 
-def test_hover_sample_id_false_writes_no_identifiers(emb_inputs, traces, tmp_path):
-    """The figure of a controlled-access cohort has to be shareable without
-    carrying its participant identifiers into the HTML."""
-    emb, labels = emb_inputs
-    out = tmp_path / "e.html"
-
-    plot_embedding_3d(emb, labels, CMAP, out, hover_sample_id=False)
-
-    assert all(t["text"] is None for t in traces)
-    assert all("%{text}" not in t["hovertemplate"] for t in traces)
-
-    html = out.read_text()
-    for sample_id in emb["sample_id"]:
-        assert f'"{sample_id}"' not in html
-
-
 def test_missing_third_dimension_raises_with_a_remedy(tmp_path):
     ids = list(range(4))
     emb = _emb(ids, dims=2, seed=3)

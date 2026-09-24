@@ -528,7 +528,6 @@ def plot_embedding_3d(
     alpha: float = 0.6,
     max_points: Optional[int] = DEFAULT_MAX_POINTS_3D,
     random_state: Optional[int] = 42,
-    hover_sample_id: bool = True,
 ) -> Path:
     """Write a rotatable 3-D scatter of an embedding as a standalone HTML file.
 
@@ -543,10 +542,6 @@ def plot_embedding_3d(
         alpha: Marker opacity
         max_points: Cap on points written into the file; None keeps all
         random_state: Seed for that subsample, so the figure is reproducible
-        hover_sample_id: Put each point's sample_id in its hover label. Set
-            False for a figure that can be shared outside the environment
-            holding a controlled-access cohort: the identifiers are then never
-            written into the HTML, and hover shows the label alone.
 
     Returns:
         Path to the saved HTML file
@@ -618,12 +613,8 @@ def plot_embedding_3d(
                 mode="markers",
                 name=UNKNOWN_LABEL,
                 marker=dict(size=point_size, color=UNKNOWN_COLOR, opacity=alpha * 0.5),
-                text=(unknown["sample_id"].astype(str) if hover_sample_id else None),
-                hovertemplate=(
-                    "%{text}<br>" + UNKNOWN_LABEL + "<extra></extra>"
-                    if hover_sample_id
-                    else UNKNOWN_LABEL + "<extra></extra>"
-                ),
+                text=unknown["sample_id"].astype(str),
+                hovertemplate="%{text}<br>" + UNKNOWN_LABEL + "<extra></extra>",
             )
         )
 
@@ -637,12 +628,8 @@ def plot_embedding_3d(
                 mode="markers",
                 name=str(label),
                 marker=dict(size=point_size, color=color_dict[label], opacity=alpha),
-                text=(group["sample_id"].astype(str) if hover_sample_id else None),
-                hovertemplate=(
-                    f"%{{text}}<br>{label}<extra></extra>"
-                    if hover_sample_id
-                    else f"{label}<extra></extra>"
-                ),
+                text=group["sample_id"].astype(str),
+                hovertemplate=f"%{{text}}<br>{label}<extra></extra>",
             )
         )
 

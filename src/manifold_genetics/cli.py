@@ -765,7 +765,6 @@ def cmd_plot_3d(args):
         point_size=args.point_size,
         alpha=args.alpha,
         max_points=max_points,
-        hover_sample_id=not args.no_hover_ids,
     )
 
     print("Interactive 3-D visualization complete:")
@@ -1430,14 +1429,6 @@ def main(argv: Optional[List[str]] = None):
         type=int,
         default=100_000,
         help="Cap points written into the HTML (0 keeps all; large files load slowly)",
-    )
-    plot_3d_parser.add_argument(
-        "--no-hover-ids",
-        action="store_true",
-        help=(
-            "Leave sample IDs out of the hover labels, so the HTML carries no "
-            "identifiers -- for sharing a figure of a controlled-access cohort"
-        ),
     )
     plot_3d_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_3d_parser.set_defaults(func=cmd_plot_3d)

@@ -19,9 +19,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   instead of a PNG: drag to rotate, hover a point for its sample and label.
   `--max-points` (default 100,000) caps how much of a large cohort is written
   into the file and logs the subsample it took.
-  `--no-hover-ids` leaves sample identifiers out of the document entirely, so
-  a figure of a controlled-access cohort can be shared without carrying its
-  participant IDs.
   Requires the new optional `interactive` extra: `uv sync --extra interactive`.
 
 ## [0.3.0] - 2026-09-16

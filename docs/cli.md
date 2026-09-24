@@ -165,10 +165,6 @@ included (default 100,000) and reports the subsample it took. Pass
 `--max-points 0` to keep all of them, bearing in mind that a biobank-scale
 cohort then produces a document a browser opens slowly.
 
-Hover labels name the sample by default. `--no-hover-ids` leaves the identifiers
-out of the document altogether and shows only the label, which is what you want
-before a figure of a controlled-access cohort leaves the environment holding it.
-
 `--pca-backend` takes `python` (in process, the default) or `flashpca` (the
 external binary). They agree to 1.5e-7 and write the same artefacts, so a model fitted by
 either is readable by the other.
