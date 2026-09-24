@@ -28,6 +28,7 @@ from .pca import PCAStepResult, pca_output_paths, run_pca, run_pca_step
 from .viz import (
     EmbeddingVizResult,
     VizStepResult,
+    admixture_embedding_3d_if_possible,
     plot_pca_pair_grids,
     run_admixture_embedding_viz_step,
     run_admixture_viz_step,
@@ -36,6 +37,7 @@ from .viz import (
 )
 
 __all__ = [
+    "admixture_embedding_3d_if_possible",
     "AdmixtureStepResult",
     "EmbeddingStepResult",
     "EmbeddingVizResult",

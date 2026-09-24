@@ -19,11 +19,12 @@ the fit/project figures already produced in the same step.
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
 
 from ...utils.io import read_colormap
 from ...visualization import (
     plot_admixture_bar_grid,
+    plot_admixture_embedding_3d,
     plot_admixture_embedding_grid,
     plot_pca_pairs,
     plot_projection,
@@ -310,4 +311,27 @@ def run_admixture_embedding_viz_step(
     )
     logger.info(f"Saved admixture-colored embedding plot: {emb_plot_path}")
 
-    return VizStepResult(figures=(emb_plot_path,))
+    interactive = admixture_embedding_3d_if_possible(
+        embedding.embedding_file,
+        q_prefix=admixture.q_prefix,
+        k_values=admixture.k_values,
+        output_path=paths["admixture_colored_embedding_3d"],
+    )
+    return VizStepResult(figures=(emb_plot_path, *interactive))
+
+
+def admixture_embedding_3d_if_possible(embedding_file, **kwargs) -> List[Path]:
+    """Write the single-file interactive admixture figure for a >=3-D embedding.
+
+    The seam shared by ``plot-admixture-embedding`` and the pipeline step: the
+    2-D grid is always drawn, and this adds the HTML alongside it when there is
+    a third axis to show. As with the label figures, missing plotly is a
+    warning naming the extra rather than a failed step.
+    """
+    if _embedding_dims(embedding_file) < 3:
+        return []
+    try:
+        return [plot_admixture_embedding_3d(embedding=embedding_file, **kwargs)]
+    except ImportError as exc:
+        logger.warning(f"Embedding has 3 dimensions but the interactive figure was skipped: {exc}")
+        return []

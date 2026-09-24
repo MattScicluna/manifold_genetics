@@ -517,6 +517,87 @@ def _subsample_for_browser(
     return df.sample(n=max_points, random_state=random_state)
 
 
+_DIMS_3D = ["dim_1", "dim_2", "dim_3"]
+
+# Blue-white-red, the seismic scale the 2-D admixture grid uses, for
+# components with no exported colour.
+_ADMIXTURE_DEFAULT_COLORSCALE = [[0.0, "#0000ff"], [0.5, "#ffffff"], [1.0, "#ff0000"]]
+
+
+def _read_embedding_3d(embedding: Union[pd.DataFrame, str, Path]) -> pd.DataFrame:
+    """Read an embedding and insist on the first three dimensions."""
+    if isinstance(embedding, (str, Path)):
+        embedding_df = read_embedding_csv(embedding)
+    else:
+        embedding_df = embedding
+
+    missing = [c for c in _DIMS_3D if c not in embedding_df.columns]
+    if missing:
+        available = [c for c in embedding_df.columns if c.startswith("dim_")]
+        raise ValueError(
+            f"A 3-D plot needs columns {_DIMS_3D}; missing {missing}. "
+            f"This embedding has {available or 'no dim_* columns'}. "
+            "Re-run the embedding with n_components=3."
+        )
+    return embedding_df
+
+
+def _write_figure_3d(
+    traces: list,
+    points: pd.DataFrame,
+    output_path: Path,
+    *,
+    title: str,
+    aspect: str,
+    updatemenus: Optional[list] = None,
+) -> Path:
+    """Lay out, frame and write a 3-D figure: the part every 3-D plot shares.
+
+    ``points`` are the rows the traces were built from; only their extent along
+    each axis is used, to set the aspect ratio.
+    """
+    if aspect not in ("match", "true"):
+        raise ValueError(f"aspect must be 'match' or 'true', got {aspect!r}")
+    extent = (points[_DIMS_3D].max() - points[_DIMS_3D].min()).to_numpy(dtype=float)
+
+    go = _require_plotly()
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="dim_1",
+            yaxis_title="dim_2",
+            zaxis_title="dim_3",
+            # "match": only dim 2 is rescaled (to dim 1's length, as the 2-D
+            # box does); dim 3 keeps its true ratio to dim 1. "cube" would
+            # inflate the shortest axis the most.
+            aspectmode="data" if aspect == "true" else "manual",
+            aspectratio=(
+                None
+                if aspect == "true"
+                else dict(x=1, y=1, z=float(extent[2] / extent[0]) if extent[0] > 0 else 1)
+            ),
+            # Open looking straight down dim 3, orthographic. A PHATE manifold
+            # is typically a curved sheet: an oblique perspective default shows
+            # it edge-on as a curve that looks nothing like the 2-D figure.
+            camera=dict(
+                eye=dict(x=0, y=0, z=2.0),
+                up=dict(x=0, y=1, z=0),
+                projection=dict(type="orthographic"),
+            ),
+        ),
+        legend=dict(itemsizing="constant"),
+        margin=dict(l=0, r=0, t=40, b=0),
+        **({"updatemenus": updatemenus} if updatemenus else {}),
+    )
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(str(output_path), include_plotlyjs="cdn")
+    logger.info(f"Wrote interactive 3-D plot: {output_path} ({len(points)} points)")
+    return output_path
+
+
 def plot_embedding_3d(
     embedding: Union[pd.DataFrame, str, Path],
     labels: Union[pd.DataFrame, str, Path],
@@ -560,20 +641,7 @@ def plot_embedding_3d(
         ImportError: if plotly is not installed
         ValueError: if the embedding has fewer than three dimensions
     """
-    if isinstance(embedding, (str, Path)):
-        embedding_df = read_embedding_csv(embedding)
-    else:
-        embedding_df = embedding
-
-    required = ["dim_1", "dim_2", "dim_3"]
-    missing = [c for c in required if c not in embedding_df.columns]
-    if missing:
-        available = [c for c in embedding_df.columns if c.startswith("dim_")]
-        raise ValueError(
-            f"A 3-D plot needs columns {required}; missing {missing}. "
-            f"This embedding has {available or 'no dim_* columns'}. "
-            "Re-run the embedding with n_components=3."
-        )
+    embedding_df = _read_embedding_3d(embedding)
 
     if isinstance(labels, (str, Path)):
         labels_df = read_labels_csv(labels)
@@ -598,18 +666,11 @@ def plot_embedding_3d(
     # Inputs are valid; only now does the optional dependency matter.
     go = _require_plotly()
 
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
     merged_df = embedding_df.merge(labels_df, on="sample_id", how="inner")
     if label_column not in merged_df.columns:
         raise ValueError(f"Column {label_column!r} not found in the labels file")
 
     merged_df = _subsample_for_browser(merged_df, max_points, random_state)
-
-    if aspect not in ("match", "true"):
-        raise ValueError(f"aspect must be 'match' or 'true', got {aspect!r}")
-    extent = (merged_df[required].max() - merged_df[required].min()).to_numpy(dtype=float)
 
     warn_about_unmatched_labels(merged_df[label_column], color_dict, label_column)
 
@@ -656,39 +717,13 @@ def plot_embedding_3d(
             )
         )
 
-    fig = go.Figure(data=traces)
-    fig.update_layout(
+    return _write_figure_3d(
+        traces,
+        merged_df,
+        output_path,
         title=title or f"3-D embedding coloured by {label_column}",
-        scene=dict(
-            xaxis_title="dim_1",
-            yaxis_title="dim_2",
-            zaxis_title="dim_3",
-            # "match": only dim 2 is rescaled (to dim 1's length, as the 2-D
-            # box does); dim 3 keeps its true ratio to dim 1. "cube" would
-            # inflate the shortest axis the most.
-            aspectmode="data" if aspect == "true" else "manual",
-            aspectratio=(
-                None
-                if aspect == "true"
-                else dict(x=1, y=1, z=float(extent[2] / extent[0]) if extent[0] > 0 else 1)
-            ),
-            # Open looking straight down dim 3, orthographic. A PHATE manifold
-            # is typically a curved sheet: an oblique perspective default shows
-            # it edge-on as a curve that looks nothing like the 2-D figure.
-            camera=dict(
-                eye=dict(x=0, y=0, z=2.0),
-                up=dict(x=0, y=1, z=0),
-                projection=dict(type="orthographic"),
-            ),
-        ),
-        legend=dict(itemsizing="constant"),
-        margin=dict(l=0, r=0, t=40, b=0),
+        aspect=aspect,
     )
-
-    fig.write_html(str(output_path), include_plotlyjs="cdn")
-    logger.info(f"Wrote interactive 3-D plot: {output_path} ({len(merged_df)} points)")
-
-    return output_path
 
 
 def visualize_3d(
@@ -1189,6 +1224,152 @@ def plot_admixture_embedding_grid(
     plt.close()
     logger.info(f"Saved admixture embedding grid: {output_path}")
     return output_path
+
+
+def plot_admixture_embedding_3d(
+    embedding: Union[pd.DataFrame, str, Path],
+    q_prefix: Union[str, Path],
+    k_values: Sequence[int],
+    output_path: Union[str, Path],
+    component_colormap: Optional[Union[Dict, str, Path]] = None,
+    title: Optional[str] = None,
+    point_size: float = 2.0,
+    alpha: float = 0.6,
+    max_points: Optional[int] = DEFAULT_MAX_POINTS_3D,
+    random_state: Optional[int] = 42,
+    hover_sample_id: bool = True,
+    aspect: str = "match",
+) -> Path:
+    """Write one rotatable 3-D scatter coloured by admixture proportion.
+
+    The 2-D counterpart, ``plot_admixture_embedding_grid``, is a grid with one
+    panel per (K, component). Here every K and component lives in a single HTML
+    file: a dropdown menu recolours the same points by the chosen component, so
+    the viewer keeps their camera angle while switching between them.
+
+    Args:
+        embedding: DataFrame or path to embedding CSV (sample_id, dim_1..dim_3)
+        q_prefix: Prefix for admixture CSVs (``<prefix>.<K>.csv``)
+        k_values: Which K values to include; missing files are skipped
+        output_path: Path to save the HTML file
+        component_colormap: Dict or path to the component colours JSON exported
+            by ``plot_admixture_bar_grid``. With it, each component is a
+            white-to-component-colour gradient and components are listed by
+            lineage, as in the 2-D grid; without it, a blue-white-red scale.
+        title: Optional plot title
+        point_size: Marker size
+        alpha: Marker opacity
+        max_points: Cap on points written into the file; None keeps all
+        random_state: Seed for that subsample, so the figure is reproducible
+        hover_sample_id: Put each point's sample_id in its hover label; False
+            keeps the identifiers out of the file, as for ``plot_embedding_3d``
+        aspect: ``"match"`` or ``"true"``, as for ``plot_embedding_3d``
+
+    Returns:
+        Path to the saved HTML file
+
+    Raises:
+        ImportError: if plotly is not installed
+        ValueError: if the embedding has fewer than three dimensions, or no
+            admixture CSV exists for any requested K
+    """
+    embedding_df = _read_embedding_3d(embedding)
+
+    if isinstance(component_colormap, (str, Path)):
+        with open(component_colormap) as f:
+            component_colormap = json.load(f)
+
+    admixture = _load_admixture_csv(q_prefix, k_values)
+    if not admixture:
+        raise ValueError("No admixture CSVs found for requested K values.")
+    k_values = [k for k in k_values if k in admixture]
+
+    # Inputs are valid; only now does the optional dependency matter.
+    go = _require_plotly()
+
+    # One row per sample with every K's components side by side, so a single
+    # subsample serves every menu entry and the points never move.
+    merged = embedding_df
+    options = []  # (label, column, colorscale) in menu order
+    for k in k_values:
+        q_df = admixture[k]
+        comp_cols = _get_component_columns(q_df, k)
+        if component_colormap is not None:
+            k_cmap = component_colormap[str(k)]
+            ordered = sorted(k_cmap, key=lambda c: k_cmap[c]["lineage"])
+            scales = [[[0, "white"], [1, k_cmap[c]["color"]]] for c in ordered]
+        else:
+            ordered = comp_cols
+            scales = [_ADMIXTURE_DEFAULT_COLORSCALE] * len(ordered)
+        renamed = {c: f"k{k}_{c}" for c in comp_cols}
+        merged = merged.merge(
+            q_df[["sample_id", *comp_cols]].rename(columns=renamed), on="sample_id", how="inner"
+        )
+        for i, (c, scale) in enumerate(zip(ordered, scales), start=1):
+            options.append((f"K={k} · Comp {i}", renamed[c], scale))
+
+    merged = _subsample_for_browser(merged, max_points, random_state)
+    # Every menu entry carries its own copy of the proportions, so their
+    # precision sets the file size; four decimals is more than a colour shows.
+    q_cols = [col for _, col, _ in options]
+    merged[q_cols] = merged[q_cols].round(4)
+
+    first_label, first_col, first_scale = options[0]
+    trace = go.Scatter3d(
+        x=merged["dim_1"],
+        y=merged["dim_2"],
+        z=merged["dim_3"],
+        mode="markers",
+        marker=dict(
+            size=point_size,
+            opacity=alpha,
+            color=merged[first_col],
+            colorscale=first_scale,
+            cmin=0,
+            cmax=1,
+            showscale=True,
+            colorbar=dict(title="Admixture proportion"),
+        ),
+        text=(merged["sample_id"].astype(str) if hover_sample_id else None),
+        hovertemplate=(
+            "%{text}<br>%{marker.color:.2f}<extra></extra>"
+            if hover_sample_id
+            else "%{marker.color:.2f}<extra></extra>"
+        ),
+    )
+
+    base_title = title or "3-D embedding coloured by admixture proportion"
+    buttons = [
+        dict(
+            label=label,
+            method="update",
+            args=[
+                {"marker.color": [merged[col].tolist()], "marker.colorscale": [scale]},
+                {"title": f"{base_title} — {label}"},
+            ],
+        )
+        for label, col, scale in options
+    ]
+    updatemenus = [
+        dict(
+            buttons=buttons,
+            direction="down",
+            showactive=True,
+            x=0.0,
+            xanchor="left",
+            y=1.0,
+            yanchor="bottom",
+        )
+    ]
+
+    return _write_figure_3d(
+        [trace],
+        merged,
+        output_path,
+        title=f"{base_title} — {first_label}",
+        aspect=aspect,
+        updatemenus=updatemenus,
+    )
 
 
 def plot_knn_composition(
