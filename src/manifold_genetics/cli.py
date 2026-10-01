@@ -472,7 +472,7 @@ def cmd_acquire(args):
         if args.target == "synthetic":
             config = acquire_synthetic(out, force=args.force)
         elif args.target == "aou":
-            config = acquire_aou(out, force=args.force)
+            config = acquire_aou(out, force=args.force, bucket_root=args.bucket_root)
         elif args.target == "custom":
             if not args.fit_plink:
                 print("Error: acquire custom needs --fit-plink.", file=sys.stderr)
@@ -1553,7 +1553,8 @@ def main(argv: Optional[List[str]] = None):
             "              have. Generates a colour for every label value, and\n"
             "              refuses if the labels do not describe the cohort --\n"
             "              the two things worth not doing by hand.\n\n"
-            "  aou         Fetch All of Us (V8 arrays) from its bucket and label it\n"
+            "  aou         Fetch All of Us arrays from the workspace's release (read\n"
+            "              from $CDR_STORAGE_PATH) and label them\n"
             "              from the CDR, as examples/aou/shared/download_aou_data.sh\n"
             "              did. Only works inside a Researcher Workbench, and says\n"
             "              what is missing if this is not one. Needs the `aou` extra.\n\n"
@@ -1607,6 +1608,13 @@ def main(argv: Optional[List[str]] = None):
         help=(
             "hgdp only: an already-downloaded hgdp_1kgp_full.tar.gz, or a gs:// URL "
             "(the workbench's 1KGPHGDP.tar.gz, fetched with gsutil)"
+        ),
+    )
+    acquire_parser.add_argument(
+        "--bucket-root",
+        help=(
+            "aou only: the gs:// directory holding arrays.{bed,bim,fam} "
+            "(default: $CDR_STORAGE_PATH/microarray/plink, the attached release)"
         ),
     )
     acquire_parser.add_argument("--verbose", action="store_true", help="Verbose output")

@@ -43,23 +43,30 @@ _AOU_REQUIRED_ENV = {
     "WORKSPACE_CDR": "the CDR version, used to read demographics from BigQuery",
 }
 _AOU_REQUIRED_TOOLS = {
-    "gsutil": "to read gs://fc-aou-datasets-controlled",
+    "gsutil": "to read the All of Us controlled-tier bucket",
     # pandas-gbq does the querying; bq is on PATH wherever the Google Cloud SDK
     # it authenticates through is installed, which is what is being checked.
     "bq": "the Google Cloud SDK, through which BigQuery is reached",
 }
 
-# download_aou_data.sh: AOU_BUCKET_ROOT_V8. The bucket calls the files
-# arrays.*; the script renamed them to extractedChrAll.* on the way down, and
-# so does this, so a directory made either way reads the same.
+# Every release keeps its array genotypes at <release root>/microarray/plink,
+# and the workbench names the root of the attached release in
+# $CDR_STORAGE_PATH (gs://vwb-aou-datasets-controlled/v9 in the Verily
+# Workbench, set by ~/load-env.sh). Reading it from there is what lets one
+# command fetch whichever release the workspace has. AOU_BUCKET_ROOT_V8 is
+# download_aou_data.sh's fixed path, which the published figures were made
+# from; it is used only when $CDR_STORAGE_PATH is unset. The bucket calls the
+# files arrays.*; the script renamed them to extractedChrAll.* on the way down,
+# and so does this, so a directory made either way reads the same.
 AOU_BUCKET_ROOT_V8 = "gs://fc-aou-datasets-controlled/v8/microarray/plink"
+_PLINK_SUBPATH = "microarray/plink"
 _BUCKET_PREFIX = "arrays"
 _LOCAL_PREFIX = "extractedChrAll"
 
 _AOU_CONFIG = """\
 # Written by `manifold-genetics acquire aou`.
 #
-# All of Us V8 microarray genotypes, every sample, labelled by self-reported
+# All of Us microarray genotypes, every sample, labelled by self-reported
 # race and ethnicity from the CDR. This is the cohort alone. The published
 # analysis projected it onto the HGDP+1KGP panel kept beside it in the
 # workbench; to reproduce that, acquire the panel and intersect the two:
@@ -110,6 +117,23 @@ def aou_environment_problems() -> list:
     return problems
 
 
+def aou_bucket_root(bucket_root: Optional[str] = None) -> str:
+    """Where the PLINK array files are: ``bucket_root`` if given, else
+    ``$CDR_STORAGE_PATH/microarray/plink``, else the v8 path the published
+    figures were made from."""
+    if bucket_root:
+        return bucket_root.rstrip("/")
+    release_root = os.environ.get("CDR_STORAGE_PATH", "").rstrip("/")
+    if release_root:
+        return f"{release_root}/{_PLINK_SUBPATH}"
+    logger.warning(
+        "$CDR_STORAGE_PATH is not set, so the release is unknown; reading the v8 "
+        "arrays from %s. Pass --bucket-root to read another release.",
+        AOU_BUCKET_ROOT_V8,
+    )
+    return AOU_BUCKET_ROOT_V8
+
+
 def _read_gbq(sql: str) -> pd.DataFrame:
     """The script's ``pd.read_gbq(sql, dialect="standard")``, imported lazily:
     pandas-gbq is the ``aou`` extra, and nothing else in the package needs it."""
@@ -147,7 +171,7 @@ def _run_gsutil(argv: list, runner: Optional[Callable] = None) -> None:
 
 
 # =============================================================================
-# STEP 1: All of Us Genotype Download (V8)
+# STEP 1: All of Us Genotype Download
 # =============================================================================
 def _fetch_plink(bucket_root: str, project: str, raw_dir: Path, runner: Callable) -> Path:
     """Download the PLINK files, each unless already present.
@@ -367,6 +391,7 @@ def acquire_aou(
     out_dir: PathLike,
     force: bool = False,
     *,
+    bucket_root: Optional[str] = None,
     runner: Callable = subprocess.run,
     query: Callable = _read_gbq,
 ) -> Path:
@@ -380,6 +405,8 @@ def acquire_aou(
     Args:
         out_dir: Directory to write into.
         force: Overwrite an existing ``config.yaml``.
+        bucket_root: The ``gs://`` directory holding ``arrays.{bed,bim,fam}``;
+            by default the attached release's, from ``$CDR_STORAGE_PATH``.
         runner: What runs ``gsutil``; ``subprocess.run`` outside tests.
         query: What runs a BigQuery SQL string and returns a DataFrame;
             ``pandas_gbq.read_gbq`` (the ``aou`` extra) outside tests.
@@ -416,17 +443,26 @@ def acquire_aou(
     raw_dir = data_dir / "raw"
     meta_dir = raw_dir / "Metadata"
 
-    prefix = _fetch_plink(AOU_BUCKET_ROOT_V8, os.environ["GOOGLE_PROJECT"], raw_dir, runner)
+    source = aou_bucket_root(bucket_root)
+    logger.info("Reading the array genotypes from %s", source)
+    prefix = _fetch_plink(source, os.environ["GOOGLE_PROJECT"], raw_dir, runner)
     _fix_fam(prefix)
     demographics = _fetch_metadata(os.environ["WORKSPACE_CDR"], meta_dir, query)
 
     subset = _link_project_subset(prefix, data_dir)
     labels = _write_labels(demographics, prefix, data_dir / "labels.csv")
     _write_generated_colormap(labels, out_dir / "colormap.json")
-    config_path.write_text(_AOU_CONFIG)
+    config_path.write_text(
+        _AOU_CONFIG.replace(
+            "# Paths are relative",
+            f"# Genotypes: {source}/{_BUCKET_PREFIX}.*\n"
+            f"# CDR:       {os.environ['WORKSPACE_CDR']}\n#\n# Paths are relative",
+            1,
+        )
+    )
 
     logger.info("Wrote All of Us (%s) and a config to %s", subset.name, out_dir)
     return config_path
 
 
-__all__ = ["acquire_aou", "aou_environment_problems", "AOU_BUCKET_ROOT_V8"]
+__all__ = ["acquire_aou", "aou_bucket_root", "aou_environment_problems", "AOU_BUCKET_ROOT_V8"]

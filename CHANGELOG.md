@@ -54,6 +54,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   here or tiny (`fbpca`), so making it optional saved nothing and left
   `--geosketch` failing with an `ImportError` on a default install.
 
+### Fixed
+
+- **`acquire aou` reads whichever All of Us release the workspace has.** It
+  was fixed to the v8 path `gs://fc-aou-datasets-controlled/v8/microarray/plink`,
+  which a Verily Workbench workspace cannot read: v9 lives in
+  `gs://vwb-aou-datasets-controlled/v9`. It now takes the release root from
+  `$CDR_STORAGE_PATH` (set by the workbench's `load-env.sh`) and reads
+  `microarray/plink/arrays.*` under it, falling back to the v8 path with a
+  warning when the variable is unset. `--bucket-root` names the directory
+  outright. The written `config.yaml` records the genotype path and CDR it came
+  from.
+
 ## [0.3.0] - 2026-09-16
 
 The release that takes a cohort from raw biobank PLINK files to a figure
