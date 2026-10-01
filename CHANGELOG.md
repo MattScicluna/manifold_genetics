@@ -46,6 +46,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   users get `plot_admixture_embedding_3d`, which shares its layout, camera and
   aspect handling with `plot_embedding_3d`.
 
+### Changed
+
+- **`geosketch` is a core dependency.** `subsample --geosketch` works on any
+  install; the `geosketch` extra is kept, empty, so existing install commands
+  still resolve. The package is pure Python and its dependencies were already
+  here or tiny (`fbpca`), so making it optional saved nothing and left
+  `--geosketch` failing with an `ImportError` on a default install.
+
 ## [0.3.0] - 2026-09-16
 
 The release that takes a cohort from raw biobank PLINK files to a figure

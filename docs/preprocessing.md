@@ -225,8 +225,7 @@ Choose the samples by exactly one of:
 
     On UK Biobank (487k samples, 120k SNPs) the step-1 fit on 100,000 took
     about 1.5 h and the projection 15 min; `--memory-gb` raises the budget
-    above the default 8 GB. Needs the `geosketch` extra:
-    `pip install 'manifold-genetics[geosketch]'`.
+    above the default 8 GB.
 
 - `--geosketch N --pca CSV`: sketch in PCA coordinates you already have,
   restricted to the project `.fam` first. `--n-pcs` limits how many columns of

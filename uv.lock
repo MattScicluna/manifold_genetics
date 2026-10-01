@@ -1268,6 +1268,7 @@ name = "manifold-genetics"
 version = "0.3.0"
 source = { editable = "." }
 dependencies = [
+    { name = "geosketch" },
     { name = "llvmlite" },
     { name = "matplotlib" },
     { name = "numba" },
@@ -1310,9 +1311,6 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
-geosketch = [
-    { name = "geosketch" },
-]
 interactive = [
     { name = "plotly" },
 ]
@@ -1321,7 +1319,7 @@ interactive = [
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=22.0.0" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-    { name = "geosketch", marker = "extra == 'geosketch'", specifier = ">=1.3" },
+    { name = "geosketch", specifier = ">=1.3" },
     { name = "ipykernel", marker = "extra == 'docs'", specifier = ">=6.29" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.10.0" },
     { name = "llvmlite", specifier = ">=0.40" },

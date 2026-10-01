@@ -134,18 +134,11 @@ def select_by_geosketch(
 
     Raises:
         ValueError: ``pca`` has no rows (nothing survived the ``.fam`` filter).
-        ImportError: ``sketch`` was not given and ``geosketch`` is not installed.
     """
     if len(pca) == 0:
         raise ValueError("no PCA rows match the cohort's .fam")
     if sketch is None:
-        try:
-            from geosketch import gs as sketch
-        except ImportError:
-            raise ImportError(
-                "--geosketch needs the geosketch extra: "
-                "pip install 'manifold-genetics[geosketch]'"
-            ) from None
+        from geosketch import gs as sketch
     if n > len(pca):
         logger.warning(
             "geosketch: requested %d samples but only %d available; using %d", n, len(pca), len(pca)

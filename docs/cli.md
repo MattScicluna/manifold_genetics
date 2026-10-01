@@ -277,9 +277,6 @@ Choose the fit samples by exactly one of:
   `.fam` first. `--n-pcs` limits how many of the CSV's columns are used
   (default: all).
 
-Either form of `--geosketch` needs the `geosketch` extra:
-`pip install 'manifold-genetics[geosketch]'`.
-
 ## Setup
 
 ```bash
