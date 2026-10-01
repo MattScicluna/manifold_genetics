@@ -193,6 +193,8 @@ def test_subsample_passes_groups_and_include_rest(monkeypatch, tmp_path):
         geosketch=None,
         pca=None,
         n_pcs=None,
+        sketch_pool=None,
+        max_memory_gb=None,
         force=False,
     ):
         seen.update(
@@ -246,6 +248,8 @@ def test_subsample_passes_geosketch_pca_and_n_pcs(monkeypatch, tmp_path):
         geosketch=None,
         pca=None,
         n_pcs=None,
+        sketch_pool=None,
+        max_memory_gb=None,
         force=False,
     ):
         seen.update(geosketch=geosketch, pca=pca, n_pcs=n_pcs)
@@ -270,6 +274,35 @@ def test_subsample_passes_geosketch_pca_and_n_pcs(monkeypatch, tmp_path):
     assert seen["geosketch"] == 5000
     assert seen["pca"] == "project_pca_20.csv"
     assert seen["n_pcs"] == 10
+
+
+def test_subsample_passes_sketch_pool_and_memory(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake(config, out_dir, **kwargs):
+        seen.update(kwargs)
+        return Path(out_dir) / "config.yaml"
+
+    monkeypatch.setattr("manifold_genetics.preprocessing.subsample", fake)
+    rc = mg_cli.main(
+        [
+            "subsample",
+            "a.yaml",
+            "--out",
+            str(tmp_path),
+            "--geosketch",
+            "60000",
+            "--sketch-pool",
+            "100000",
+            "--memory-gb",
+            "48",
+        ]
+    )
+    assert rc == 0
+    assert seen["geosketch"] == 60000
+    assert seen["pca"] is None
+    assert seen["sketch_pool"] == 100000
+    assert seen["max_memory_gb"] == 48
 
 
 def test_subsample_reports_a_plink2_failure(monkeypatch, tmp_path, capsys):

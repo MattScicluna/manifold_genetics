@@ -32,6 +32,21 @@ def _plink2_keep(bfile: Path, keep: Path, out: Path, plink2: str) -> None:
     scaffold._run_plink2_keep(bfile, keep, out, plink2)
 
 
+def _run_pca(fit_plink, project_plink, **kwargs) -> pd.DataFrame:
+    """``pipeline.steps.pca.run_pca``, looked up at call time for the same reason
+    as ``_plink2_keep``: the pipeline package imports this one."""
+    from ..pipeline.steps.pca import run_pca
+
+    return run_pca(fit_plink, project_plink, **kwargs)
+
+
+# How many PCs to compute for a sketch when no --pca is given, and how many
+# samples to fit them on: the settings of the UK Biobank pilot
+# (examples/ukbb/fullpca_geosketch_pilot), whose fit on 100k took 1.5 h.
+SKETCH_N_PCS = 20
+SKETCH_POOL = 100_000
+
+
 _GROUP_FORMAT = "COLUMN=PATTERN:COUNT, e.g. race_ethnicity=White|European:10000"
 
 
@@ -144,6 +159,71 @@ def select_by_geosketch(
     return list(pca["sample_id"].iloc[index])
 
 
+def _label_free_pca(
+    project_plink: Path,
+    out_dir: Path,
+    *,
+    pool: int,
+    n_pcs: int,
+    seed: int,
+    max_memory_gb: Optional[float],
+    keep_runner: Callable,
+    pca_runner: Callable,
+) -> Path:
+    """PCs of every cohort sample, chosen without looking at a label.
+
+    The PCA is fitted on ``pool`` samples drawn uniformly from the ``.fam`` and
+    every sample is projected in. Geosketch needs such coordinates -- it cannot
+    run on hundreds of thousands of genotype columns -- but a random pool makes
+    them as imbalanced as the cohort is. That is acceptable because they are
+    used only to choose the fit set; ``run`` then fits a fresh PCA on it.
+
+    Skipped when ``out_dir/sketch_pca.csv`` exists, since the fit can take hours.
+    """
+    from ..scaffold import _write_keep_file
+
+    csv = out_dir / "sketch_pca.csv"
+    if csv.exists():
+        logger.info("Reusing %s; delete it to recompute the sketch PCs", csv)
+        return csv
+
+    work = out_dir / "sketch_pca"
+    work.mkdir(parents=True, exist_ok=True)
+    fam = Path(f"{project_plink}.fam")
+    ids = pd.Series(read_fam_ids(project_plink))
+    if pool >= len(ids):
+        logger.info("Sketch PCs: fitting on all %d samples", len(ids))
+        fit_plink = project_plink
+    else:
+        logger.info("Sketch PCs: fitting on a random %d of %d samples", pool, len(ids))
+        keep = work / "pool_samples.txt"
+        _write_keep_file(fam, ids.sample(n=pool, random_state=seed), keep)
+        fit_plink = work / "sketch_pool"
+        keep_runner(project_plink, keep, fit_plink, ToolResolver().resolve_plink2())
+
+    budget = (
+        {}
+        if max_memory_gb is None
+        else dict(max_fit_memory_gb=max_memory_gb, max_project_memory_gb=max_memory_gb)
+    )
+    partial = work / "sketch_pca.partial.csv"
+    pca_runner(
+        fit_plink,
+        project_plink,
+        project_output=partial,
+        flashpca_dir=work / "pca",
+        n_pcs=n_pcs,
+        **budget,
+    )
+    # Written under another name and renamed, so a killed run never leaves a
+    # truncated CSV that the next run would take as finished.
+    partial.replace(csv)
+    if fit_plink != project_plink:
+        for ext in ("bed", "bim", "fam"):
+            Path(f"{fit_plink}.{ext}").unlink(missing_ok=True)
+    return csv
+
+
 def subsample(
     config: PathLike,
     out_dir: PathLike,
@@ -155,17 +235,27 @@ def subsample(
     geosketch: Optional[int] = None,
     pca: Optional[PathLike] = None,
     n_pcs: Optional[int] = None,
+    sketch_pool: Optional[int] = None,
+    max_memory_gb: Optional[float] = None,
     force: bool = False,
     keep_runner: Callable = _plink2_keep,
+    pca_runner: Callable = _run_pca,
 ) -> Path:
     """Write a cohort directory whose fit set is a chosen subset of the project set.
 
     The input's fit side is dropped: given a projection (HGDP fit, biobank
     project), the output fits on a subset of the biobank.
 
+    ``geosketch`` without ``pca`` sketches in PCs computed here without labels
+    (see ``_label_free_pca``): ``n_pcs`` of them (default 20), fitted on
+    ``sketch_pool`` random samples (default 100,000), saved as
+    ``out_dir/sketch_pca.csv``. With ``pca``, ``n_pcs`` instead limits how many
+    of its columns are used.
+
     Raises:
         ValueError: not exactly one of ``groups``, ``fit_samples`` and
-            ``geosketch`` given, or ``geosketch`` given without ``pca``; or the
+            ``geosketch`` given, or ``sketch_pool`` given without the PCs being
+            computed here (``geosketch`` and no ``pca``); or the
             project labels cover less than half the project ``.fam`` (checked
             before plink runs -- the fit set is drawn from that ``.fam``, so
             its coverage can only be what the input's is).
@@ -175,8 +265,8 @@ def subsample(
         raise ValueError(
             "choose fit samples by exactly one of --group, --fit-samples or --geosketch"
         )
-    if geosketch is not None and pca is None:
-        raise ValueError("--geosketch requires --pca")
+    if sketch_pool is not None and (geosketch is None or pca is not None):
+        raise ValueError("--sketch-pool applies only to --geosketch without --pca")
     out_dir = Path(out_dir).expanduser().resolve()
     config_path = out_dir / "config.yaml"
     if config_path.exists() and not force:
@@ -198,6 +288,17 @@ def subsample(
         shutil.copy(fit_samples, keep)
     elif geosketch is not None:
         available = set(read_fam_ids(project.plink))
+        if pca is None:
+            pca = _label_free_pca(
+                project.plink,
+                out_dir,
+                pool=SKETCH_POOL if sketch_pool is None else sketch_pool,
+                n_pcs=SKETCH_N_PCS if n_pcs is None else n_pcs,
+                seed=seed,
+                max_memory_gb=max_memory_gb,
+                keep_runner=keep_runner,
+                pca_runner=pca_runner,
+            )
         pca_df = pd.read_csv(pca, dtype={"sample_id": str})
         pca_df = pca_df[pca_df["sample_id"].isin(available)].reset_index(drop=True)
         chosen = select_by_geosketch(pca_df, geosketch, seed=seed, n_pcs=n_pcs)

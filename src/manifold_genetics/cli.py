@@ -605,6 +605,8 @@ def cmd_subsample(args):
             geosketch=args.geosketch,
             pca=args.pca,
             n_pcs=args.n_pcs,
+            sketch_pool=args.sketch_pool,
+            max_memory_gb=args.memory_gb,
             force=args.force,
         )
     except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -1687,12 +1689,19 @@ def main(argv: Optional[List[str]] = None):
             "                                 (case-insensitive regex); repeatable; a sample is\n"
             "                                 taken once. --include-rest adds every unmatched sample.\n"
             "  --fit-samples FILE             a FID IID list chosen elsewhere.\n"
-            "  --geosketch N --pca CSV        take N samples via geometric sketching (Hie et al.\n"
-            "                                 2019) on the PCA coordinates in CSV; --n-pcs limits\n"
-            "                                 how many of its columns are used (default: all).\n\n"
+            "  --geosketch N                  take N samples via geometric sketching (Hie et al.\n"
+            "                                 2019), with no labels involved. Sketching needs PCs,\n"
+            "                                 not genotypes: PCA is fitted on --sketch-pool random\n"
+            "                                 samples (default 100000), every sample is projected,\n"
+            "                                 and the sketch is taken in those --n-pcs PCs (default\n"
+            "                                 20), saved as OUT/sketch_pca.csv. `run` then refits\n"
+            "                                 PCA on the N chosen samples, as for any subsample.\n"
+            "  --geosketch N --pca CSV        sketch in PCs computed elsewhere instead; --n-pcs\n"
+            "                                 limits how many of its columns are used (default: all).\n\n"
             "  subsample proj/config.yaml --out 10k/ \\\n"
             '      --group "race_ethnicity=White|European:10000" \\\n'
-            '      --group "race_ethnicity=Black or African American:10000" --include-rest'
+            '      --group "race_ethnicity=Black or African American:10000" --include-rest\n'
+            "  subsample proj/config.yaml --out sketch_60k/ --geosketch 60000"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1717,16 +1726,33 @@ def main(argv: Optional[List[str]] = None):
         "--geosketch",
         type=int,
         metavar="N",
-        help="Take N samples via geometric sketching on --pca coordinates",
+        help="Take N samples via geometric sketching in label-free PCs (or --pca's)",
     )
     sub_parser.add_argument(
-        "--pca", metavar="CSV", help="PCA CSV (sample_id, dim_1, dim_2, ...) for --geosketch"
+        "--pca",
+        metavar="CSV",
+        help="PCA CSV (sample_id, dim_1, dim_2, ...) to sketch in, instead of computing PCs",
     )
     sub_parser.add_argument(
         "--n-pcs",
         type=int,
         metavar="N",
-        help="Use only the first N columns of --pca for --geosketch (default: all)",
+        help=(
+            "PCs to sketch in: how many to compute (default: 20), or with --pca how many "
+            "of its columns to use (default: all)"
+        ),
+    )
+    sub_parser.add_argument(
+        "--sketch-pool",
+        type=int,
+        metavar="N",
+        help="Random samples to fit the sketch PCs on, without --pca (default: 100000)",
+    )
+    sub_parser.add_argument(
+        "--memory-gb",
+        type=float,
+        metavar="GB",
+        help="Memory budget for fitting and projecting the sketch PCs (default: 8)",
     )
     sub_parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing config.yaml"

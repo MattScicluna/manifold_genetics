@@ -43,7 +43,8 @@ manifold-genetics run config.yaml
 `acquire hgdp` fetches the public HGDP+1KGP cohort instead; `acquire custom`
 writes a config for PLINK files you already have. For raw biobank genotypes,
 `preprocess` filters and intersects SNPs and `subsample` chooses the fit
-samples, each writing a directory `run` accepts.
+samples — by label counts, a list, or a label-free geometric sketch — each
+writing a directory `run` accepts.
 
 ## Documentation and tutorials
 

@@ -9,6 +9,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`subsample --geosketch N` without labels or a prior run.** `--pca` is now
+  optional: without it, `subsample` fits PCA on `--sketch-pool` random samples
+  (default 100,000), projects the whole cohort, and sketches in those
+  `--n-pcs` PCs (default 20), saving them as `sketch_pca.csv`. A geometric
+  sketch of a biobank is now two commands, `subsample --geosketch` and `run`,
+  where it used to need an earlier label-chosen run to supply the PCs.
+  `--memory-gb` sets the budget for that fit.
+
 - **Embeddings can be three-dimensional.** `--n-components` on `embed` and
   `pipeline` sets the embedding dimensionality for every method (PHATE, UMAP,
   t-SNE, diffusion maps). It defaults to 2, so nothing that does not pass it
