@@ -58,7 +58,8 @@ for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
 
-`aou` fetches the All of Us V8 array genotypes from their bucket and labels
+`aou` fetches the All of Us array genotypes of the release attached to the
+workspace (from `$CDR_STORAGE_PATH/microarray/plink`, or `--bucket-root`) and labels
 every sample by self-reported race and ethnicity from the CDR, which needs the
 `aou` extra (`pip install 'manifold-genetics[aou]'`). It only works inside the
 Researcher Workbench: it checks the environment first — `GOOGLE_PROJECT`,

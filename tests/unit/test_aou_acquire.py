@@ -25,6 +25,8 @@ _BUCKET_FAM = "0 1000001 0 0 1 0\n0 1000002 0 0 2 0\n0 1000003 0 0 0 0\n"
 def workbench(monkeypatch):
     monkeypatch.setenv("GOOGLE_PROJECT", "proj")
     monkeypatch.setenv("WORKSPACE_CDR", "cdr.v8")
+    # Unset, so the tests below read the v8 fallback unless they set it.
+    monkeypatch.delenv("CDR_STORAGE_PATH", raising=False)
     monkeypatch.setattr(aou, "aou_environment_problems", lambda: [])
 
 
@@ -154,6 +156,35 @@ class TestDownload:
             "gs://fc-aou-datasets-controlled/v8/microarray/plink/arrays.bim",
             "gs://fc-aou-datasets-controlled/v8/microarray/plink/arrays.fam",
         ]
+
+    def test_the_release_comes_from_cdr_storage_path(self, tmp_path, workbench, monkeypatch):
+        """The Verily Workbench sets $CDR_STORAGE_PATH to the attached release
+        (v9 and later live in a different bucket from v8)."""
+        monkeypatch.setenv("CDR_STORAGE_PATH", "gs://vwb-aou-datasets-controlled/v9/")
+        calls = []
+        config = _acquire(tmp_path, calls=calls)
+
+        assert [c[-2] for c in calls if c[0] == "gsutil"] == [
+            f"gs://vwb-aou-datasets-controlled/v9/microarray/plink/arrays.{ext}"
+            for ext in ("bed", "bim", "fam")
+        ]
+        text = config.read_text()
+        assert "gs://vwb-aou-datasets-controlled/v9/microarray/plink/arrays.*" in text
+        assert "cdr.v8" in text
+
+    def test_an_explicit_bucket_root_wins(self, tmp_path, workbench, monkeypatch):
+        monkeypatch.setenv("CDR_STORAGE_PATH", "gs://vwb-aou-datasets-controlled/v9")
+        calls = []
+        _acquire(tmp_path, calls=calls, bucket_root="gs://elsewhere/plink/")
+
+        assert [c[-2] for c in calls if c[0] == "gsutil"] == [
+            f"gs://elsewhere/plink/arrays.{ext}" for ext in ("bed", "bim", "fam")
+        ]
+
+    def test_without_cdr_storage_path_it_warns_and_reads_v8(self, tmp_path, workbench, caplog):
+        _acquire(tmp_path)
+
+        assert "CDR_STORAGE_PATH is not set" in caplog.text
 
     def test_nothing_runs_plink(self, tmp_path, workbench):
         """The script's per-chromosome split (L146-156) is not ported: nothing
@@ -385,7 +416,7 @@ class TestCli:
     def test_a_failed_gsutil_names_the_command(self, tmp_path, monkeypatch, capsys):
         from manifold_genetics import cli, scaffold
 
-        def boom(out, force=False):
+        def boom(out, force=False, bucket_root=None):
             raise subprocess.CalledProcessError(1, ["gsutil", "-u", "proj", "cp", "a", "b"])
 
         monkeypatch.setattr(scaffold, "acquire_aou", boom)
@@ -393,3 +424,17 @@ class TestCli:
         assert cli.main(["acquire", "aou", "--out", str(tmp_path)]) == 1
         err = capsys.readouterr().err
         assert "gsutil -u proj cp a b" in err
+
+    def test_bucket_root_reaches_acquire_aou(self, tmp_path, monkeypatch):
+        from manifold_genetics import cli, scaffold
+
+        seen = {}
+
+        def record(out, force=False, bucket_root=None):
+            seen["bucket_root"] = bucket_root
+            return Path(out) / "config.yaml"
+
+        monkeypatch.setattr(scaffold, "acquire_aou", record)
+
+        cli.main(["acquire", "aou", "--out", str(tmp_path), "--bucket-root", "gs://b/plink"])
+        assert seen["bucket_root"] == "gs://b/plink"

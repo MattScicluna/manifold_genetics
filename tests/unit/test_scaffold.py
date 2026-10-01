@@ -910,7 +910,7 @@ class TestInitCustom:
 class TestInitAou:
     """All of Us is controlled-access and lives in a workbench.
 
-    Its data comes from `gs://fc-aou-datasets-controlled` and needs
+    Its data comes from the release's controlled bucket and needs
     GOOGLE_PROJECT, gsutil and bq, which only exist inside the Researcher
     Workbench. What the command does once it is there -- the download, the FAM
     fix, the BigQuery metadata, the labels -- is tested against stubs in
