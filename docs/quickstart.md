@@ -113,3 +113,11 @@ This is the All of Us experiment from the manuscript: the workbench's
 HGDP+1KGP panel, the All of Us arrays (V8 in the manuscript), harmonised and intersected, then
 projected. `acquire aou` has not yet been run inside the workbench (issue
 #124); the details are in [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench).
+
+To embed All of Us on its own instead, fit on a geometric sketch of it, chosen
+without labels:
+
+```bash
+manifold-genetics subsample proj/config.yaml --geosketch 60000 --out sketch_60k/
+manifold-genetics run sketch_60k/config.yaml
+```

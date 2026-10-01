@@ -30,7 +30,6 @@ This test should take about two minutes.
 
 ```bash
 pip install 'manifold-genetics[admixture]'   # torch + neural-admixture
-pip install 'manifold-genetics[geosketch]'   # geometric-sketch subsetting
 ```
 
 `admixture` installs [neural admixture](https://github.com/AI-sandbox/neural-admixture) and its dependencies.
@@ -40,10 +39,6 @@ compiles a small PyTorch extension on first use and stops with
 toolkit matching your PyTorch build and set `CUDA_HOME` to its root (on a cluster,
 the CUDA module usually does this). The first `K` takes a few minutes longer while
 it compiles; the rest run at GPU speed.
-
-`geosketch` is needed only to *select* a geometric sketch of a large cohort, and
-runs on PCA coordinates rather than genotypes. Nothing in the pipeline imports
-it.
 
 ## External tools
 

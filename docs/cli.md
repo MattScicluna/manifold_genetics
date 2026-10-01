@@ -265,11 +265,18 @@ Choose the fit samples by exactly one of:
   once across groups. `--include-rest` also adds every sample matched by no
   group.
 - `--fit-samples FILE` — a `FID IID` list chosen elsewhere.
-- `--geosketch N --pca CSV` — take N samples via geometric sketching (Hie et
-  al. 2019) on the PCA coordinates in CSV (`sample_id, dim_1, dim_2, ...`),
-  restricted to the samples in the project `.fam` first. `--n-pcs` limits how
-  many of the CSV's columns are used (default: all). Needs the `geosketch`
-  extra: `pip install 'manifold-genetics[geosketch]'`.
+- `--geosketch N` — take N samples via geometric sketching (Hie et al. 2019),
+  with no labels involved. Sketching runs in PC space, not on genotypes: PCA is
+  fitted on `--sketch-pool` samples drawn at random (default 100,000; the whole
+  cohort if it is smaller), every sample is projected in, and the sketch is
+  taken in those `--n-pcs` PCs (default 20). They are saved as
+  `OUT/sketch_pca.csv` and reused if the command is rerun. `--memory-gb` sets
+  the fit and projection memory budget (default 8). These PCs only choose the
+  sample; `run` refits PCA on it, as for any subsample.
+- `--geosketch N --pca CSV` — sketch in PCA coordinates computed elsewhere
+  (`sample_id, dim_1, dim_2, ...`), restricted to the samples in the project
+  `.fam` first. `--n-pcs` limits how many of the CSV's columns are used
+  (default: all).
 
 ## Setup
 

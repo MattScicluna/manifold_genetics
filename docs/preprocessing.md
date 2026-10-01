@@ -202,10 +202,34 @@ Choose the samples by exactly one of:
     manifold-genetics subsample proj/config.yaml --fit-samples fit_samples.txt --out 10k/
     ```
 
-- `--geosketch N --pca CSV`: geometric sketching (Hie et al. 2019) on the PCA
-  coordinates of an earlier `run`, restricted to the project `.fam` first.
-  `--n-pcs` limits how many columns of the CSV are used (default: all). Needs
-  the `geosketch` extra: `pip install 'manifold-genetics[geosketch]'`.
+- `--geosketch N`: geometric sketching (Hie et al. 2019) — a fit set that
+  covers the cohort's genetic variation evenly instead of following its
+  majority, chosen without any label. It replaces a hand-picked `--group`
+  balance. Geosketch cannot run on genotypes (hundreds of thousands of
+  columns), so it runs on PCs, in three steps:
+
+    1. PCA is fitted on `--sketch-pool` samples drawn at random (default
+       100,000, or everyone if the cohort is smaller) and every sample is
+       projected in — `--n-pcs` PCs, default 20. Being random, the pool is as
+       imbalanced as the cohort, and so are these PCs.
+    2. N samples are sketched in those PCs. They are saved as
+       `OUT/sketch_pca.csv`; a rerun reuses them rather than fitting again.
+    3. `run` fits a fresh PCA on the N chosen samples, as for any subsample,
+       and embeds them. The imbalanced PCs from step 1 are used for nothing
+       but the choice.
+
+    ```bash
+    manifold-genetics subsample proj/config.yaml --geosketch 60000 --out sketch_60k/
+    manifold-genetics run sketch_60k/config.yaml
+    ```
+
+    On UK Biobank (487k samples, 120k SNPs) the step-1 fit on 100,000 took
+    about 1.5 h and the projection 15 min; `--memory-gb` raises the budget
+    above the default 8 GB.
+
+- `--geosketch N --pca CSV`: sketch in PCA coordinates you already have,
+  restricted to the project `.fam` first. `--n-pcs` limits how many columns of
+  the CSV are used (default: all).
 
     ```bash
     manifold-genetics subsample proj/config.yaml --geosketch 50000 \
@@ -268,4 +292,12 @@ manifold-genetics subsample proj/config.yaml --out 10k/ \
     --group "self_described_ancestry=^British$:10000" \
     --group "self_described_ancestry=^Irish$:5000"
 manifold-genetics run 10k/config.yaml
+```
+
+Or choose the fit set without labels, by geometric sketch (see
+[`--geosketch`](#subsample-choose-the-fit-samples)):
+
+```bash
+manifold-genetics subsample proj/config.yaml --geosketch 60000 --out sketch_60k/
+manifold-genetics run sketch_60k/config.yaml
 ```

@@ -1,6 +1,5 @@
 """Choosing the fit samples of a cohort by label counts, a list, or geosketch."""
 
-import builtins
 import logging
 from pathlib import Path
 
@@ -130,19 +129,6 @@ class TestSelectByGeosketch:
         pca = pd.DataFrame({"sample_id": ["A", "B", "C"], "dim_1": [1, 2, 3], "dim_2": [4, 5, 6]})
         select_by_geosketch(pca, 2, seed=0, sketch=sketch, n_pcs=1)
         assert captured["shape"] == (3, 1)
-
-    def test_missing_geosketch_raises_a_named_import_error(self, monkeypatch):
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if name == "geosketch":
-                raise ImportError("no module named geosketch")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", fake_import)
-        pca = pd.DataFrame({"sample_id": ["A"], "dim_1": [1]})
-        with pytest.raises(ImportError, match="geosketch"):
-            select_by_geosketch(pca, 1, seed=0)
 
     def test_n_larger_than_available_rows_is_clamped_with_a_warning(self, caplog):
         pca = pd.DataFrame({"sample_id": ["A", "B", "C"], "dim_1": [1, 2, 3]})
@@ -292,9 +278,155 @@ class TestSubsample:
             )
         assert calls == [], "plink must not have been started"
 
-    def test_geosketch_requires_pca(self, cohort, tmp_path):
-        with pytest.raises(ValueError, match="--pca"):
-            subsample(cohort, tmp_path / "out", geosketch=3, keep_runner=_fake_keep)
+    @staticmethod
+    def _fake_pca(calls):
+        """A ``pca_runner`` writing a fake PCA of the project .fam: dim_k = row
+        index * k, so a sketch's input is recognisable without fitting anything."""
+
+        def pca_runner(fit_plink, project_plink, *, project_output, flashpca_dir, n_pcs, **kw):
+            calls.append(
+                dict(
+                    fit_ids=[line.split()[1] for line in open(f"{fit_plink}.fam")],
+                    project_plink=Path(project_plink),
+                    flashpca_dir=Path(flashpca_dir),
+                    n_pcs=n_pcs,
+                    **kw,
+                )
+            )
+            iids = [line.split()[1] for line in open(f"{project_plink}.fam")]
+            df = pd.DataFrame({"sample_id": iids})
+            for k in range(1, n_pcs + 1):
+                df[f"dim_{k}"] = np.arange(len(iids), dtype=float) * k
+            df.to_csv(project_output, index=False)
+            return df
+
+        return pca_runner
+
+    def test_geosketch_without_pca_fits_on_a_random_pool_and_sketches_its_projection(
+        self, cohort, tmp_path, monkeypatch
+    ):
+        """No --pca: the PCs to sketch in come from a PCA fitted on a random pool
+        and projected onto the whole cohort -- labels play no part."""
+        import sys
+
+        subsample_module = sys.modules["manifold_genetics.preprocessing.subsample"]
+        fam_ids = [line.split()[1] for line in open(tmp_path / "in/data/project_subset.fam")]
+        captured = {}
+
+        def fake_select(pca_df, n, seed, sketch=None, n_pcs=None):
+            captured.update(ids=list(pca_df["sample_id"]), n_pcs=n_pcs, ncols=pca_df.shape[1])
+            return list(pca_df["sample_id"])[:n]
+
+        monkeypatch.setattr(subsample_module, "select_by_geosketch", fake_select)
+        calls = []
+        config = subsample(
+            cohort,
+            tmp_path / "out",
+            geosketch=3,
+            sketch_pool=50,
+            n_pcs=4,
+            keep_runner=_fake_keep,
+            pca_runner=self._fake_pca(calls),
+        )
+
+        assert len(calls) == 1
+        pool = calls[0]["fit_ids"]
+        assert len(pool) == 50 and len(set(pool)) == 50
+        assert set(pool) <= set(fam_ids)
+        project_plink = tmp_path / "in/data/project_subset"
+        assert calls[0]["project_plink"].resolve() == project_plink.resolve()
+        assert calls[0]["n_pcs"] == 4
+
+        sketch_pca = tmp_path / "out/sketch_pca.csv"
+        assert sketch_pca.exists(), "the selection's PCs are kept beside the cohort"
+        assert captured["ids"] == fam_ids, "the whole cohort is sketched, not the pool"
+        assert captured["ncols"] == 5, "sample_id + the 4 PCs computed"
+        fit = [line.split()[1] for line in open(f"{load_config(config)['fit_plink']}.fam")]
+        assert fit == fam_ids[:3]
+        assert not list(
+            (tmp_path / "out").glob("**/sketch_pool.bed")
+        ), "the pool's genotypes are a temporary, removed once the PCs exist"
+
+    def test_the_random_pool_does_not_depend_on_labels(self, cohort, tmp_path):
+        """Same seed, labels rewritten: the same pool is drawn."""
+        pools = []
+        for name in ("a", "b"):
+            if name == "b":
+                labels_path = tmp_path / "in/data/labels.csv"
+                labels = pd.read_csv(labels_path, dtype=str)
+                labels["branch"] = labels["branch"].iloc[::-1].to_numpy()
+                labels.to_csv(labels_path, index=False)
+            calls = []
+            subsample(
+                cohort,
+                tmp_path / name,
+                geosketch=3,
+                sketch_pool=50,
+                n_pcs=2,
+                seed=7,
+                keep_runner=_fake_keep,
+                pca_runner=self._fake_pca(calls),
+            )
+            pools.append(calls[0]["fit_ids"])
+        assert pools[0] == pools[1]
+
+    def test_a_pool_covering_the_cohort_fits_on_the_cohort_itself(self, cohort, tmp_path):
+        keeps, calls = [], []
+
+        def keep_runner(bfile, keep, out, plink2):
+            keeps.append(Path(out).name)
+            _fake_keep(bfile, keep, out, plink2)
+
+        subsample(
+            cohort,
+            tmp_path / "out",
+            geosketch=3,
+            sketch_pool=10**9,
+            n_pcs=2,
+            keep_runner=keep_runner,
+            pca_runner=self._fake_pca(calls),
+        )
+        project_plink = (tmp_path / "in/data/project_subset").resolve()
+        fam_ids = [line.split()[1] for line in open(f"{project_plink}.fam")]
+        assert calls[0]["fit_ids"] == fam_ids
+        assert keeps == ["fit_subset"], "no pool subset is written when the pool is everyone"
+
+    def test_existing_sketch_pca_is_reused(self, cohort, tmp_path):
+        """A rerun (say after plink2 failed later on) does not refit the PCA."""
+        calls = []
+        kwargs = dict(
+            geosketch=3,
+            sketch_pool=50,
+            n_pcs=2,
+            keep_runner=_fake_keep,
+            pca_runner=self._fake_pca(calls),
+        )
+        subsample(cohort, tmp_path / "out", **kwargs)
+        subsample(cohort, tmp_path / "out", force=True, **kwargs)
+        assert len(calls) == 1
+
+    def test_geosketch_without_pca_computes_20_pcs_by_default(self, cohort, tmp_path):
+        calls = []
+        subsample(
+            cohort,
+            tmp_path / "out",
+            geosketch=3,
+            sketch_pool=50,
+            keep_runner=_fake_keep,
+            pca_runner=self._fake_pca(calls),
+        )
+        assert calls[0]["n_pcs"] == 20
+
+    def test_sketch_pool_without_computing_pcs_is_an_error(self, cohort, tmp_path):
+        with pytest.raises(ValueError, match="--sketch-pool"):
+            subsample(
+                cohort,
+                tmp_path / "out",
+                geosketch=3,
+                pca=tmp_path / "pca.csv",
+                sketch_pool=50,
+                keep_runner=_fake_keep,
+            )
 
     def test_needs_exactly_one_way_of_choosing(self, cohort, tmp_path):
         with pytest.raises(ValueError, match="one of"):

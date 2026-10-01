@@ -42,6 +42,9 @@ dependencies = [
     # Dimensionality reduction
     "phate>=2.0.0",
     "umap-learn>=0.5.0",
+    # Geometric-sketch subsetting (`subsample --geosketch`). Pure Python, and its
+    # own dependencies (numpy, scikit-learn, fbpca) are already here or tiny.
+    "geosketch>=1.3",
     "llvmlite>=0.40",
 ]
 
@@ -65,9 +68,9 @@ dev = [
 aou = [
     "pandas-gbq>=0.19.0",
 ]
-geosketch = [
-    "geosketch>=1.3",
-]
+# Kept so `pip install 'manifold-genetics[geosketch]'` still resolves; geosketch
+# is now a core dependency.
+geosketch = []
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",

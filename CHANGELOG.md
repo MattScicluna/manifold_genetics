@@ -9,6 +9,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`subsample --geosketch N` without labels or a prior run.** `--pca` is now
+  optional: without it, `subsample` fits PCA on `--sketch-pool` random samples
+  (default 100,000), projects the whole cohort, and sketches in those
+  `--n-pcs` PCs (default 20), saving them as `sketch_pca.csv`. A geometric
+  sketch of a biobank is now two commands, `subsample --geosketch` and `run`,
+  where it used to need an earlier label-chosen run to supply the PCs.
+  `--memory-gb` sets the budget for that fit.
+
 - **Embeddings can be three-dimensional.** `--n-components` on `embed` and
   `pipeline` sets the embedding dimensionality for every method (PHATE, UMAP,
   t-SNE, diffusion maps). It defaults to 2, so nothing that does not pass it
@@ -37,6 +45,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `figures/admixture/project_admixture_colored_embedding_3d.html`. Library
   users get `plot_admixture_embedding_3d`, which shares its layout, camera and
   aspect handling with `plot_embedding_3d`.
+
+### Changed
+
+- **`geosketch` is a core dependency.** `subsample --geosketch` works on any
+  install; the `geosketch` extra is kept, empty, so existing install commands
+  still resolve. The package is pure Python and its dependencies were already
+  here or tiny (`fbpca`), so making it optional saved nothing and left
+  `--geosketch` failing with an `ImportError` on a default install.
 
 ### Fixed
 
