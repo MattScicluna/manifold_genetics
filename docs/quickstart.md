@@ -110,6 +110,6 @@ manifold-genetics run proj/config.yaml
 ```
 
 This is the All of Us experiment from the manuscript: the workbench's
-HGDP+1KGP panel, the All of Us V8 arrays, harmonised and intersected, then
+HGDP+1KGP panel, the All of Us arrays (V8 in the manuscript), harmonised and intersected, then
 projected. `acquire aou` has not yet been run inside the workbench (issue
 #124); the details are in [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench).
