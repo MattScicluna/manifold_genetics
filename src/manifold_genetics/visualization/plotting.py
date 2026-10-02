@@ -30,6 +30,20 @@ matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
 
 
+def uncoloured(values, color_dict):
+    """Which samples have no colour: an empty label, or a value the colormap
+    does not list. Both are drawn as the grey "Unknown" background layer.
+
+    Testing ``isna()`` alone left unlisted values out of every layer, so their
+    points vanished from the figure while the warning said they were grey.
+    """
+    import pandas as pd
+
+    values = pd.Series(values)
+    coloured = {str(k) for k in color_dict}
+    return values.isna() | ~values.astype(str).isin(coloured)
+
+
 def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
     """Warn, loudly, about label values the colormap has no colour for.
 
@@ -63,7 +77,7 @@ def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
     if share == 1.0:
         logger.warning(
             "COLORMAP MISMATCH: none of the %d values in %r have a colour (%s). "
-            "Every point will be drawn grey and the legend will be empty. This "
+            "Every point will be drawn grey, as Unknown. This "
             "usually means the colormap and the label file describe different "
             "cohorts, or the column was renamed.",
             len(counts),
@@ -73,7 +87,7 @@ def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
     else:
         logger.warning(
             "COLORMAP MISMATCH: %d of %d samples (%.1f%%) have a value in %r with "
-            "no colour: %s. Those points are drawn grey and left out of the legend.",
+            "no colour: %s. Those points are drawn grey, as Unknown.",
             affected,
             len(values),
             100 * share,
@@ -150,7 +164,7 @@ def plot_embedding(
             continue
 
         # FIRST: Plot samples with missing data in gray (background layer)
-        missing_mask = merged_df[label_col].isna()
+        missing_mask = uncoloured(merged_df[label_col], color_dict)
         if missing_mask.sum() > 0:
             ax.scatter(
                 merged_df.loc[missing_mask, "dim_1"],
@@ -193,7 +207,7 @@ def plot_embedding(
             for g in color_dict.keys()
             if g in merged_df[label_col].values
         ]
-        if merged_df[label_col].isna().any():
+        if missing_mask.any():
             legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
         # Remove ticks, tick labels, axis labels, and titles
@@ -339,7 +353,7 @@ def plot_pca_pairs(
         pc_y_col = available_pcs[pc_y_idx]
 
         # FIRST: Plot samples with missing data in gray (background layer)
-        missing_mask = merged_df[label_column].isna()
+        missing_mask = uncoloured(merged_df[label_column], color_dict)
         if missing_mask.sum() > 0:
             ax.scatter(
                 merged_df.loc[missing_mask, pc_x_col],
@@ -391,7 +405,7 @@ def plot_pca_pairs(
         for g in color_dict.keys()
         if g in merged_df[label_column].values
     ]
-    if merged_df[label_column].isna().any():
+    if uncoloured(merged_df[label_column], color_dict).any():
         legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
     # Add legend with patches
@@ -678,7 +692,7 @@ def plot_embedding_3d(
 
     # Unlabelled samples first, so they sit behind the coloured groups in the
     # legend the same way they sit behind them in the 2-D figures.
-    missing_mask = merged_df[label_column].isna()
+    missing_mask = uncoloured(merged_df[label_column], color_dict)
     if missing_mask.sum() > 0:
         unknown = merged_df[missing_mask]
         traces.append(
@@ -1772,7 +1786,7 @@ def plot_projection(
     # LAYER 1: Plot missing data in lightgray for both datasets
     # Fit missing data
     if fit_label_column in fit_merged.columns:
-        fit_missing_mask = fit_merged[fit_label_column].isna()
+        fit_missing_mask = uncoloured(fit_merged[fit_label_column], fit_color_dict)
         if fit_missing_mask.sum() > 0:
             ax.scatter(
                 fit_merged.loc[fit_missing_mask, "dim_1"],
@@ -1789,7 +1803,7 @@ def plot_projection(
 
     # Project missing data
     if project_label_column in project_merged.columns:
-        project_missing_mask = project_merged[project_label_column].isna()
+        project_missing_mask = uncoloured(project_merged[project_label_column], project_color_dict)
         if project_missing_mask.sum() > 0:
             ax.scatter(
                 project_merged.loc[project_missing_mask, "dim_1"],

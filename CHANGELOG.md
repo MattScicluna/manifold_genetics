@@ -56,6 +56,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Label values the colormap does not list are drawn, in grey, as Unknown.**
+  Only empty labels reached the grey layer, so an unlisted value was drawn by
+  no layer at all: its points vanished from the figure while the warning said
+  they were grey. Fixed in the 2-D, PCA-pairs, projection and 3-D plots; the
+  legend's Unknown entry now covers them too.
+- **Generated colormaps never give two values one colour.** The palette wrapped
+  at ten, so an eleventh value reused the first one's colour. It now runs to
+  thirty fixed colours and generates distinct ones beyond that. Colormap
+  generation moved to `colormaps.py`; the old names still import from
+  `scaffold`.
+- **`acquire aou` keeps the published All of Us colours.** Colours followed
+  alphabetical position, so a category new in a release recoloured every one
+  after it: on v9, "American Indian or Alaska Native" sorted first and moved
+  every race group's colour. The manuscript's colours and legend order are now
+  fixed (`AOU_COLOURS`), the new category has its own, and only values never
+  seen before get generated colours.
+- **PCA holds one chunk at a time, not two.** A chunk was read while the
+  previous one was still bound to the loop variable, so streaming fits and
+  projections peaked at twice `--memory-gb`; at 80 GB on a 128 GB machine,
+  projecting 553,949 samples was killed. The streaming fit also squared each
+  chunk into a second array to sum it; it uses `einsum` now.
+- **`acquire custom` resolves relative paths from where it is run.** They were
+  written into `config.yaml` verbatim and then read against the config's own
+  directory, so `--labels raw/labels.csv --out ref/` looked in `ref/raw/`.
+
 - **`acquire aou` reads whichever All of Us release the workspace has.** It
   was fixed to the v8 path `gs://fc-aou-datasets-controlled/v8/microarray/plink`,
   which a Verily Workbench workspace cannot read: v9 lives in
