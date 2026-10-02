@@ -63,6 +63,35 @@ _PLINK_SUBPATH = "microarray/plink"
 _BUCKET_PREFIX = "arrays"
 _LOCAL_PREFIX = "extractedChrAll"
 
+# The manuscript's colours (examples/colormaps/aou.json, removed in #132), so a
+# figure keeps them whatever categories a release adds. v9 added "American Indian
+# or Alaska Native", which had none; it gets one not used by the others. `race`
+# takes the same colours, being the same answers without the Hispanic rule.
+# Values not listed here still get a distinct generated colour.
+# Order is aou.json's: it is the legend order, and the first entries are drawn
+# on top.
+_RACE_COLOURS = {
+    "Black or African American": "#3FA34D",
+    "Middle Eastern or North African": "#9E9E9E",
+    "White": "#9B59B6",
+    "Hispanic or Latino": "#FF5A5F",
+    "Asian": "#4C6FFF",
+    "Native Hawaiian or Other Pacific Islander": "#FFD84D",
+    "American Indian or Alaska Native": "#F28E2B",
+    "More than one population": "#3BA99C",
+    "No information": "#E5E5E5",
+}
+AOU_COLOURS = {
+    "race_ethnicity": _RACE_COLOURS,
+    "race": _RACE_COLOURS,
+    "ethnicity": {
+        "Hispanic or Latino": "#FF5A5F",
+        "Not Hispanic or Latino": "#4C6FFF",
+        "No information": "#E5E5E5",
+        "No matching concept": "#B0B0B0",
+    },
+}
+
 _AOU_CONFIG = """\
 # Written by `manifold-genetics acquire aou`.
 #
@@ -451,7 +480,7 @@ def acquire_aou(
 
     subset = _link_project_subset(prefix, data_dir)
     labels = _write_labels(demographics, prefix, data_dir / "labels.csv")
-    _write_generated_colormap(labels, out_dir / "colormap.json")
+    _write_generated_colormap(labels, out_dir / "colormap.json", known=AOU_COLOURS)
     config_path.write_text(
         _AOU_CONFIG.replace(
             "# Paths are relative",
@@ -465,4 +494,10 @@ def acquire_aou(
     return config_path
 
 
-__all__ = ["acquire_aou", "aou_bucket_root", "aou_environment_problems", "AOU_BUCKET_ROOT_V8"]
+__all__ = [
+    "acquire_aou",
+    "aou_bucket_root",
+    "aou_environment_problems",
+    "AOU_BUCKET_ROOT_V8",
+    "AOU_COLOURS",
+]

@@ -864,6 +864,21 @@ class TestInitCustom:
         kwargs = load_config(config)
         assert kwargs["fit_plink"] == cohort / "cohort"
 
+    def test_relative_paths_are_read_from_where_the_command_ran(self, cohort, monkeypatch):
+        """config.yaml reads relative paths against its own directory, so a
+        relative --labels written into it verbatim pointed inside --out:
+        `--labels raw/labels.csv --out ref/` was looked for at ref/raw/."""
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import acquire_custom
+
+        monkeypatch.chdir(cohort)
+        config = acquire_custom("out", fit_plink="cohort", labels="labels.csv")
+
+        kwargs = load_config(config)
+        assert Path(kwargs["fit_plink"]).resolve() == (cohort / "cohort").resolve()
+        text = config.read_text()
+        assert str((cohort / "labels.csv").resolve()) in text
+
     def test_generates_a_colour_for_every_label_value(self, cohort):
         """The 22-colours-by-hand problem is the reason this command exists."""
         from manifold_genetics.scaffold import acquire_custom

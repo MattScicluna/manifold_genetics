@@ -83,3 +83,58 @@ class TestAutoStreamingProducesTheSameAnswer:
         auto = SklearnPCABackend(n_components=4, random_state=0, max_fit_memory_gb=1e-7).fit(prefix)
 
         np.testing.assert_allclose(auto.eigenvalues, whole.eigenvalues, rtol=1e-6)
+
+
+class TestOneChunkLive:
+    """The budget sizes one chunk, so only one may be live at a time.
+
+    A loop variable stays bound while the next chunk is read, so without an
+    explicit release the peak is two chunks: twice the budget. That is how
+    `subsample --geosketch --memory-gb 80` on a 128 GB machine was killed while
+    projecting 553,949 samples: the first 80 GB chunk was still held when the
+    second was read.
+    """
+
+    @pytest.fixture
+    def live(self, monkeypatch):
+        """Wrap read_bed_dosages so every chunk it returns is tracked while alive."""
+        import weakref
+
+        from manifold_genetics.pca.backends import sklearn_backend
+
+        state = {"live": 0, "peak_at_read": 0}
+        real = sklearn_backend.read_bed_dosages
+
+        def tracked(*args, **kwargs):
+            # How many chunks are still alive at the moment a new one is read.
+            state["peak_at_read"] = max(state["peak_at_read"], state["live"])
+            chunk = real(*args, **kwargs)
+            state["live"] += 1
+            weakref.finalize(chunk, lambda: state.__setitem__("live", state["live"] - 1))
+            return chunk
+
+        monkeypatch.setattr(sklearn_backend, "read_bed_dosages", tracked)
+        return state
+
+    @pytest.fixture
+    def cohort(self, tmp_path):
+        import numpy as np
+
+        from .test_pca_backend_sklearn import write_plink
+
+        rng = np.random.default_rng(0)
+        return write_plink(tmp_path / "c", rng.binomial(2, 0.3, size=(40, 120)).astype(float))
+
+    def test_the_streaming_fit_reads_with_no_chunk_alive(self, cohort, live):
+        SklearnPCABackend(n_components=3, fit_chunk_size=16).fit(cohort)
+
+        assert live["peak_at_read"] == 0
+
+    def test_projection_reads_with_no_chunk_alive(self, cohort, live):
+        backend = SklearnPCABackend(n_components=3, variant_chunk_size=16)
+        model = backend.fit(cohort)
+        live["peak_at_read"] = 0
+
+        backend.project(cohort, model)
+
+        assert live["peak_at_read"] == 0
