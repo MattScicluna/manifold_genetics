@@ -203,3 +203,77 @@ jobs:
         run: |
           # Flags live in .flake8 so a local `flake8 src tests` matches CI exactly.
           uv run flake8 src tests
+
+  # The Nextflow workflow (main.nf): both profiles' wiring in stub mode, then a
+  # real no_admixture run on the synthetic cohort with the package from this
+  # checkout (`-profile local`, no container).
+  nextflow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java (for Nextflow)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.12.13"
+
+      - name: Install the package and Nextflow
+        run: |
+          uv sync --frozen --extra dev
+          curl -s https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+
+      - name: Synthetic cohort
+        run: uv run manifold-genetics acquire synthetic --out /tmp/syn
+
+      - name: Stub runs (both profiles)
+        run: |
+          for profile in full no_admixture; do
+            nextflow run main.nf -profile "$profile,local" -stub \
+              --fit_plink /tmp/syn/data/fit_subset --project_plink /tmp/syn/data/project_subset \
+              --labels /tmp/syn/data/labels.csv --colormap /tmp/syn/colormap.json \
+              --outdir "/tmp/stub_$profile" --cpus 2 --memory '4 GB'
+          done
+          test -f /tmp/stub_full/results/admixture/Q.txt
+          test ! -e /tmp/stub_no_admixture/results/admixture
+
+      - name: Real no_admixture run
+        run: |
+          source .venv/bin/activate
+          nextflow run main.nf -profile no_admixture,local \
+            --fit_plink /tmp/syn/data/fit_subset --project_plink /tmp/syn/data/project_subset \
+            --labels /tmp/syn/data/labels.csv --colormap /tmp/syn/colormap.json \
+            --outdir /tmp/real --cpus 2 --memory '6 GB' --n_pcs 10
+          ls /tmp/real/results/pca/fit_pca_10.csv /tmp/real/results/embeddings/phate_2d.csv
+          test ! -e /tmp/real/results/admixture
+
+  # The workflow's container builds, with the external tools baked in.
+  container:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build --platform linux/amd64 -t manifold-genetics:ci .
+
+      - name: Tools and entry point are present
+        run: |
+          docker run --rm manifold-genetics:ci sh -c '
+            manifold-genetics --help > /dev/null &&
+            ls /opt/manifold-tools &&
+            python -c "import torch, neural_admixture, plotly, imageio_ffmpeg; print(\"extras ok\")"'
