@@ -8,7 +8,5 @@
   "manifold_genetics.labels": "gs://<bucket>/cohort/labels.csv",
   "manifold_genetics.colormap": "gs://<bucket>/cohort/colormap.json",
   "manifold_genetics.run_admixture": false,
-  "manifold_genetics.n_landmark": 10000,
-  "manifold_genetics.random_landmarking": true,
   "manifold_genetics.docker": "us-central1-docker.pkg.dev/<project>/<repo>/manifold-genetics:0.3.0"
 }

@@ -11,9 +11,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - **A WDL version of the workflow (`manifold_genetics.wdl`)**, for Cromwell —
   Verily Workbench workspaces that offer WDL workflows. Same container and
-  command as `main.nf`; `run_admixture` takes the place of the two profiles.
-  Takes the PLINK files themselves, returns `results.tar.gz` and the figures.
-  Example inputs in `wdl/`; CI validates it with womtool.
+  command as `main.nf`. Required: the PLINK files, one labels file, a colormap
+  and the container; the rest default to the published biobank settings
+  (fit-set embedding, knn 500, t 50, 10,000 random landmarks, no admixture —
+  `run_admixture` adds it). Returns `results.tar.gz` and the figures. Example
+  inputs in `wdl/`; CI validates it with womtool. `.gcloudignore` keeps a Cloud
+  Build upload to the package source, as `.dockerignore` does for the image.
 
 - **A Nextflow workflow (`main.nf`, `nextflow.config`) and its container
   (`Dockerfile`).** Runs `manifold-genetics pipeline` as one job on Verily

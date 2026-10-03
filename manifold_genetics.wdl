@@ -3,10 +3,10 @@ version 1.0
 ## manifold-genetics as a WDL workflow (Cromwell, e.g. Verily Workbench).
 ##
 ## The same pipeline as main.nf: `manifold-genetics pipeline` in the project's
-## container. WDL has no profiles, so run_admixture chooses between the two
-## modes: true runs everything; false passes --skip-admixture (no admixture
-## step, plots or metrics). Example inputs: wdl/inputs.full.json and
-## wdl/inputs.no_admixture.json.
+## container. Defaults are the published biobank settings (fit-set embedding,
+## knn 500, t 50, 10,000 random landmarks); run_admixture adds admixture, its
+## plots and metrics. extra_args is appended last, so it can override any
+## option (e.g. "--embedding umap"). Example inputs: wdl/inputs.*.json.
 
 workflow manifold_genetics {
     input {
@@ -18,26 +18,18 @@ workflow manifold_genetics {
         File? project_bim
         File? project_fam
 
-        # One labels CSV and colormap for both sets, or fit_/project_ versions.
-        File? labels
-        File? colormap
-        File? fit_labels
-        File? project_labels
-        File? fit_colormap
-        File? project_colormap
+        # Labels for every sample, and the colormap.
+        File labels
+        File colormap
         File? geographic
 
-        Boolean run_admixture = true
-
+        Boolean run_admixture = false
         Int n_pcs = 20
-        String pca_backend = "python"
-        String embedding = "phate"
-        String embedding_input = "both"
         Int n_components = 2
-        Int? knn
-        String? t
-        Int? n_landmark
-        Boolean random_landmarking = false
+        String embedding_input = "fit"
+        Int knn = 500
+        Int t = 50
+        Int n_landmark = 10000      # 0 = no landmarks (dense n x n memory)
         Int k_min = 2
         Int k_max = 10
         String extra_args = ""
@@ -47,7 +39,6 @@ workflow manifold_genetics {
         Int memory_gb = 128
         Int disk_gb = 500
         Int gpus = 0
-        String gpu_type = "nvidia-tesla-t4"
     }
 
     call pipeline {
@@ -60,21 +51,14 @@ workflow manifold_genetics {
             project_fam = select_first([project_fam, fit_fam]),
             labels = labels,
             colormap = colormap,
-            fit_labels = fit_labels,
-            project_labels = project_labels,
-            fit_colormap = fit_colormap,
-            project_colormap = project_colormap,
             geographic = geographic,
             run_admixture = run_admixture,
             n_pcs = n_pcs,
-            pca_backend = pca_backend,
-            embedding = embedding,
-            embedding_input = embedding_input,
             n_components = n_components,
+            embedding_input = embedding_input,
             knn = knn,
             t = t,
             n_landmark = n_landmark,
-            random_landmarking = random_landmarking,
             k_min = k_min,
             k_max = k_max,
             extra_args = extra_args,
@@ -82,8 +66,7 @@ workflow manifold_genetics {
             cpu = cpu,
             memory_gb = memory_gb,
             disk_gb = disk_gb,
-            gpus = gpus,
-            gpu_type = gpu_type
+            gpus = gpus
     }
 
     output {
@@ -100,23 +83,16 @@ task pipeline {
         File project_bed
         File project_bim
         File project_fam
-        File? labels
-        File? colormap
-        File? fit_labels
-        File? project_labels
-        File? fit_colormap
-        File? project_colormap
+        File labels
+        File colormap
         File? geographic
         Boolean run_admixture
         Int n_pcs
-        String pca_backend
-        String embedding
-        String embedding_input
         Int n_components
-        Int? knn
-        String? t
-        Int? n_landmark
-        Boolean random_landmarking
+        String embedding_input
+        Int knn
+        Int t
+        Int n_landmark
         Int k_min
         Int k_max
         String extra_args
@@ -125,7 +101,6 @@ task pipeline {
         Int memory_gb
         Int disk_gb
         Int gpus
-        String gpu_type
     }
 
     command <<<
@@ -152,24 +127,18 @@ task pipeline {
         manifold-genetics pipeline \
             --fit-plink fit/data \
             --project-plink project/data \
-            ~{"--labels " + labels} \
-            ~{"--colormap " + colormap} \
-            ~{"--fit-labels " + fit_labels} \
-            ~{"--project-labels " + project_labels} \
-            ~{"--fit-colormap " + fit_colormap} \
-            ~{"--project-colormap " + project_colormap} \
+            --labels "~{labels}" \
+            --colormap "~{colormap}" \
             ~{"--geographic " + geographic} \
             --output results \
             --threads ~{cpu} \
             --n-pcs ~{n_pcs} \
-            --pca-backend ~{pca_backend} \
-            --embedding ~{embedding} \
+            --embedding phate \
             --embedding-input ~{embedding_input} \
             --n-components ~{n_components} \
-            ~{"--knn " + knn} \
-            ~{"--t " + t} \
-            ~{"--n-landmark " + n_landmark} \
-            ~{if random_landmarking then "--random-landmarking" else ""} \
+            --knn ~{knn} \
+            --t ~{t} \
+            ~{if n_landmark > 0 then "--n-landmark " + n_landmark + " --random-landmarking" else ""} \
             ~{if run_admixture then "--k-min " + k_min + " --k-max " + k_max else "--skip-admixture"} \
             ~{if run_admixture && gpus > 0 then "--num-gpus " + gpus else ""} \
             ~{extra_args}
@@ -188,7 +157,7 @@ task pipeline {
         memory: "~{memory_gb} GB"
         disks: "local-disk ~{disk_gb} SSD"
         gpuCount: gpus
-        gpuType: gpu_type
+        gpuType: "nvidia-tesla-t4"
         preemptible: 0
     }
 }
