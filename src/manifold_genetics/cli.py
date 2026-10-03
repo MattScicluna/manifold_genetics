@@ -785,6 +785,8 @@ def cmd_plot_3d(args):
         max_points=max_points,
         hover_sample_id=not args.no_hover_ids,
         aspect=args.aspect,
+        video_format=None if args.no_video else args.video_format,
+        video_kwargs={"fps": args.fps, "seconds": args.seconds, "elev": args.elev},
     )
 
     print("Interactive 3-D visualization complete:")
@@ -1475,6 +1477,29 @@ def main(argv: Optional[List[str]] = None):
             "match: dims 1-2 stretched to equal length as in the 2D figures, dim 3 at "
             "its true length (default); true: every axis at true scale"
         ),
+    )
+    plot_3d_parser.add_argument(
+        "--no-video",
+        action="store_true",
+        help="Write the HTML only, without the rotating video beside it",
+    )
+    plot_3d_parser.add_argument(
+        "--video-format",
+        choices=["mp4", "gif"],
+        default="mp4",
+        help="Format of the rotating video (default: mp4)",
+    )
+    plot_3d_parser.add_argument(
+        "--fps", type=int, default=24, help="Video frames per second (default: 24)"
+    )
+    plot_3d_parser.add_argument(
+        "--seconds", type=float, default=12.0, help="Video length, one full turn (default: 12)"
+    )
+    plot_3d_parser.add_argument(
+        "--elev",
+        type=float,
+        default=20.0,
+        help="Camera elevation in degrees for the video (default: 20)",
     )
     plot_3d_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_3d_parser.set_defaults(func=cmd_plot_3d)

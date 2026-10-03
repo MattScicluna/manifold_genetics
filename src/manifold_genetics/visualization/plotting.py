@@ -752,9 +752,13 @@ def visualize_3d(
     output_dir: Optional[Union[str, Path]] = None,
     output_prefix: str = "embedding_3d",
     dataset_prefix: str = "",
+    video_format: Optional[str] = "mp4",
+    video_kwargs: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> List[Path]:
-    """Write one interactive 3-D plot per label column, mirroring ``visualize``.
+    """Write one interactive 3-D plot per label column, mirroring ``visualize``,
+    and beside each a video of the embedding rotating (``video_format`` mp4 or
+    gif; None for the HTML alone).
 
     Args:
         embedding: DataFrame or path to embedding CSV
@@ -763,10 +767,14 @@ def visualize_3d(
         output_dir: Directory to save plots (default: current directory)
         output_prefix: Prefix for output filenames
         dataset_prefix: Prefix for dataset type (e.g. "fit_" or "project_")
-        **kwargs: Forwarded to ``plot_embedding_3d``
+        video_format: "mp4", "gif", or None for no video
+        video_kwargs: Forwarded to ``video.plot_embedding_rotation`` (fps,
+            seconds, elev, dpi)
+        **kwargs: Forwarded to ``plot_embedding_3d``; ``point_size``, ``alpha``,
+            ``max_points`` and ``random_state`` also shape the video
 
     Returns:
-        List of paths to saved HTML files
+        List of paths to the saved HTML files and videos
     """
     output_dir = Path.cwd() if output_dir is None else Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -790,7 +798,34 @@ def visualize_3d(
         )
         output_paths.append(output_path)
 
-    logger.info(f"Generated {len(output_paths)} interactive 3-D plots")
+        if video_format:
+            from .video import plot_embedding_rotation
+
+            shared = {
+                k: kwargs[k]
+                for k in ("point_size", "alpha", "max_points", "random_state")
+                if k in kwargs
+            }
+            try:
+                output_paths.append(
+                    plot_embedding_rotation(
+                        embedding=embedding,
+                        labels=labels,
+                        colormap=colormap_dict,
+                        output_path=output_path.with_suffix(f".{video_format}"),
+                        label_column=label_col,
+                        title=f"3-D embedding coloured by {label_col}",
+                        **shared,
+                        **(video_kwargs or {}),
+                    )
+                )
+            except ImportError as exc:
+                # The HTML is written; an environment from before the video
+                # existed lacks only the encoder. Say so, and keep going.
+                logger.warning(f"Wrote the HTML but not the video: {exc}")
+                video_format = None
+
+    logger.info(f"Generated {len(output_paths)} 3-D figures (HTML and video)")
     return output_paths
 
 

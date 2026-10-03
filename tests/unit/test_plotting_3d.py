@@ -285,7 +285,8 @@ def test_visualize_3d_writes_one_html_per_label_column(tmp_path):
     )
     cmap = {"Region": {"A": "#111111", "B": "#222222"}, "Cohort": {"X": "#333333", "Y": "#444444"}}
 
-    paths = visualize_3d(emb, labels, cmap, output_dir=tmp_path)
+    # HTML only here; the video beside each is covered in test_video_3d.py.
+    paths = visualize_3d(emb, labels, cmap, output_dir=tmp_path, video_format=None)
 
     assert [p.name for p in paths] == [
         "embedding_3d_by_Region.html",

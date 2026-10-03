@@ -82,6 +82,9 @@ docs = [
 ]
 interactive = [
     "plotly>=5.20",
+    # The rotating MP4 written beside each 3-D HTML: a bundled ffmpeg binary,
+    # so no system install. GIFs need only Pillow, which matplotlib brings.
+    "imageio-ffmpeg>=0.4",
 ]
 
 [project.scripts]

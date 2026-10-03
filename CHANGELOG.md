@@ -9,6 +9,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`plot-3d` writes a rotating video beside each HTML.** An interactive page
+  cannot go into slides or supplementary material, so every 3-D figure now
+  also gets `<prefix>_by_<column>.mp4`: one full turn (12 s at 24 fps by
+  default), stacked like the other figures, with a static legend. `--video-format
+  gif`, `--fps`, `--seconds`, `--elev`; `--no-video` for the HTML alone. Frames
+  are drawn with matplotlib (no browser); MP4 uses `imageio-ffmpeg`, now in the
+  `interactive` extra, and an environment without it still gets the HTML, with a
+  warning naming the install. Pipeline 3-D runs write the video too.
+
 - **`subsample --geosketch N` without labels or a prior run.** `--pca` is now
   optional: without it, `subsample` fits PCA on `--sketch-pool` random samples
   (default 100,000), projects the whole cohort, and sketches in those
