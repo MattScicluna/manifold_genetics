@@ -712,7 +712,11 @@ def plot_embedding_3d(
             )
         )
 
-    for label in [k for k in color_dict if k in merged_df[label_column].values]:
+    # Same stacking rule as the 2-D figures: the colormap's first entries are
+    # drawn on top. plotly draws later traces over earlier ones, so the groups
+    # are added in reverse; legendrank keeps the legend in colormap order.
+    groups = [k for k in color_dict if k in merged_df[label_column].values]
+    for rank, label in reversed(list(enumerate(groups, start=1))):
         group = merged_df[merged_df[label_column] == label]
         traces.append(
             go.Scatter3d(
@@ -721,6 +725,7 @@ def plot_embedding_3d(
                 z=group["dim_3"],
                 mode="markers",
                 name=str(label),
+                legendrank=rank,
                 marker=dict(size=point_size, color=color_dict[label], opacity=alpha),
                 text=(group["sample_id"].astype(str) if hover_sample_id else None),
                 hovertemplate=(
