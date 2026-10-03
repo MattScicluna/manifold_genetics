@@ -67,10 +67,39 @@ def test_writes_one_trace_per_present_group_with_colormap_colours(emb_inputs, tr
     plot_embedding_3d(emb, labels, CMAP, out)
 
     assert out.exists()
-    assert [t["name"] for t in traces] == ["A", "B", "C"]
-    assert [t["marker"]["color"] for t in traces] == ["#111111", "#222222", "#333333"]
+    by_name = {t["name"]: t for t in traces}
+    assert set(by_name) == {"A", "B", "C"}
+    assert [by_name[n]["marker"]["color"] for n in "ABC"] == ["#111111", "#222222", "#333333"]
     # Every point lands in exactly one trace.
     assert sum(len(t["x"]) for t in traces) == len(emb)
+
+
+def test_the_colormaps_first_groups_are_drawn_on_top(emb_inputs, traces, tmp_path):
+    """The 2-D rule: the colormap's first entries sit on top. plotly draws later
+    traces over earlier ones, so they come last; the legend keeps colormap order.
+
+    Drawn forward, All of Us figures buried every group under "More than one
+    population" and "No information", the last two entries.
+    """
+    emb, labels = emb_inputs
+
+    plot_embedding_3d(emb, labels, CMAP, tmp_path / "e.html")
+
+    assert [t["name"] for t in traces] == ["C", "B", "A"], "A last, so on top"
+    legend = sorted(traces, key=lambda t: t["legendrank"])
+    assert [t["name"] for t in legend] == ["A", "B", "C"]
+
+
+def test_unknown_is_drawn_first_and_listed_last(traces, tmp_path):
+    ids = list(range(6))
+    emb = _emb(ids, seed=3)
+    labels = pd.DataFrame({"sample_id": [str(i) for i in ids], "Region": ["A", "B", None] * 2})
+
+    plot_embedding_3d(emb, labels, CMAP, tmp_path / "e.html")
+
+    assert traces[0]["name"] == UNKNOWN_LABEL
+    ranks = {t["name"]: t.get("legendrank", 1000) for t in traces}
+    assert ranks[UNKNOWN_LABEL] > max(ranks["A"], ranks["B"])
 
 
 def test_uses_all_three_dimensions(emb_inputs, traces, tmp_path):
