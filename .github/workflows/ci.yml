@@ -296,7 +296,11 @@ jobs:
       - name: Validate with womtool
         run: |
           curl -sSL -o womtool.jar https://github.com/broadinstitute/cromwell/releases/download/92/womtool-92.jar
-          java -jar womtool.jar validate manifold_genetics.wdl
+          for wdl in *.wdl; do
+            java -jar womtool.jar validate "$wdl"
+          done
           for inputs in wdl/inputs.*.json; do
             java -jar womtool.jar validate manifold_genetics.wdl -i "$inputs"
           done
+          java -jar womtool.jar validate aou_prepare.wdl -i wdl/aou_prepare.inputs.json
+          java -jar womtool.jar validate analyse.wdl -i wdl/analyse.inputs.json
