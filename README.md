@@ -48,13 +48,11 @@ writing a directory `run` accepts.
 
 ## As a Nextflow workflow
 
-`main.nf` runs the pipeline as one Nextflow job — on Verily Workbench, Google
-Batch, or locally — with two profiles: `full`, and `no_admixture`
-(`--skip-admixture`). See **[Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/)**.
-
 ```bash
 nextflow run main.nf -profile no_admixture --fit_plink data/fit --labels labels.csv --colormap colormap.json
 ```
+
+See [Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/).
 
 ## Documentation and tutorials
 
