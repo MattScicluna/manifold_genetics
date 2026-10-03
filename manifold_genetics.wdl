@@ -5,7 +5,7 @@ version 1.0
 ## The same pipeline as main.nf: `manifold-genetics pipeline` in the project's
 ## container. Defaults are the published biobank settings (fit-set embedding,
 ## knn 500, t 50, 10,000 random landmarks); run_admixture adds admixture, its
-## plots and metrics. extra_args is appended last, so it can override any
+## plots and metrics (on CPU: the image's torch is the CPU build). extra_args is appended last, so it can override any
 ## option (e.g. "--embedding umap"). Example inputs: wdl/inputs.*.json.
 
 workflow manifold_genetics {
@@ -38,7 +38,6 @@ workflow manifold_genetics {
         Int cpu = 16
         Int memory_gb = 128
         Int disk_gb = 500
-        Int gpus = 0
     }
 
     call pipeline {
@@ -65,8 +64,7 @@ workflow manifold_genetics {
             docker = docker,
             cpu = cpu,
             memory_gb = memory_gb,
-            disk_gb = disk_gb,
-            gpus = gpus
+            disk_gb = disk_gb
     }
 
     output {
@@ -100,7 +98,6 @@ task pipeline {
         Int cpu
         Int memory_gb
         Int disk_gb
-        Int gpus
     }
 
     command <<<
@@ -140,7 +137,6 @@ task pipeline {
             --t ~{t} \
             ~{if n_landmark > 0 then "--n-landmark " + n_landmark + " --random-landmarking" else ""} \
             ~{if run_admixture then "--k-min " + k_min + " --k-max " + k_max else "--skip-admixture"} \
-            ~{if run_admixture && gpus > 0 then "--num-gpus " + gpus else ""} \
             ~{extra_args}
 
         tar -czf results.tar.gz results
@@ -156,8 +152,6 @@ task pipeline {
         cpu: cpu
         memory: "~{memory_gb} GB"
         disks: "local-disk ~{disk_gb} SSD"
-        gpuCount: gpus
-        gpuType: "nvidia-tesla-t4"
         preemptible: 0
     }
 }
