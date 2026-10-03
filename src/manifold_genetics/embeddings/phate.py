@@ -108,6 +108,8 @@ class PHATE(EmbeddingBase):
 
         logger.info(f"Fitting PHATE with knn={self.knn}, t={self.t}...")
         self.model.fit(X_array)
+        # Kept to recognise the fit data in transform(); PHATE holds it already.
+        self._fit_X = X_array
         self._is_fitted = True
 
         logger.info(f"✓ PHATE fitted on {len(X_array)} samples")
@@ -160,8 +162,23 @@ class PHATE(EmbeddingBase):
         X_array, sample_ids = self._load_input_data(X)
         n_samples = len(X_array)
 
+        # The fit data is never batched. Whole, PHATE recognises it and returns
+        # its embedding; sliced, each batch is "new data" and is re-extended
+        # through a fresh neighbour search -- on UKBB (59,264 fit samples) the
+        # same peak memory, ~15x the time, and approximate coordinates (#157).
+        is_fit_data = self._is_fit_data(X_array)
+        if is_fit_data and self.embed_batch_size is not None and n_samples > self.embed_batch_size:
+            logger.info(
+                f"Input is the fit data: returning PHATE's embedding without batching "
+                f"(embed_batch_size={self.embed_batch_size} applies to new samples only)"
+            )
+
         # Check if batch processing is needed
-        if self.embed_batch_size is not None and n_samples > self.embed_batch_size:
+        if (
+            not is_fit_data
+            and self.embed_batch_size is not None
+            and n_samples > self.embed_batch_size
+        ):
             logger.info(
                 f"🔄 BATCH MODE: Transforming {n_samples} samples with PHATE in batches of {self.embed_batch_size}..."
             )
@@ -195,6 +212,11 @@ class PHATE(EmbeddingBase):
             embedding = self.model.transform(X_array)
 
         return self._format_output(embedding, sample_ids)
+
+    def _is_fit_data(self, X_array: np.ndarray) -> bool:
+        """Whether ``X_array`` is the matrix PHATE was fitted on."""
+        fit_X = getattr(self, "_fit_X", None)
+        return fit_X is not None and fit_X.shape == X_array.shape and np.array_equal(fit_X, X_array)
 
     def fit_transform(
         self,

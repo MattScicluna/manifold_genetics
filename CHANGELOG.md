@@ -65,6 +65,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   stops with the remedy (`--n-landmark 10000 --random-landmarking`).
   Defaults are unchanged; `MANIFOLD_GENETICS_FORCE_EXACT=1` skips the check.
 
+- **PHATE never batches the fit samples.** Sliced into `embed_batch_size`
+  batches, the fit data stopped being the fit data to PHATE: every batch was
+  re-extended as new samples. On UKBB (59,264 fit samples) that kept the same
+  peak memory, took ~15× longer, and returned approximate coordinates instead of
+  the embedding. The fit data is now transformed whole; batching applies to new
+  samples only (#157).
+
 - **3-D plots stack groups like the 2-D ones.** The colormap's first entries
   are drawn on top in 2-D; in 3-D they were drawn first and so buried, leaving
   "More than one population" and "No information" over every All of Us group.
