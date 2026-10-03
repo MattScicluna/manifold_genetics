@@ -5,6 +5,7 @@ Wrapper for the PHATE algorithm with a consistent API.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Union
 
@@ -103,6 +104,7 @@ class PHATE(EmbeddingBase):
             Self (for method chaining)
         """
         X_array, self._sample_ids = self._load_input_data(X)
+        self._check_exact_fits_in_memory(len(X_array))
 
         logger.info(f"Fitting PHATE with knn={self.knn}, t={self.t}...")
         self.model.fit(X_array)
@@ -112,6 +114,37 @@ class PHATE(EmbeddingBase):
 
         logger.info(f"✓ PHATE fitted on {len(X_array)} samples")
         return self
+
+    # Without landmarks PHATE holds dense n x n operators. Measured on UKBB
+    # (n = 59,264; one n x n is 26.2 GB): the fit peaked at ~1x, the transform
+    # passed 2.2x before the 56 GB ceiling stopped it, and a synthetic run held
+    # 3x. So 3 x 8 n^2 bytes is the estimate.
+    EXACT_DENSE_COPIES = 3
+
+    def _check_exact_fits_in_memory(self, n_samples: int) -> None:
+        """Refuse an exact (no-landmark) run that cannot fit, before it starts.
+
+        Exact is the default and stays so -- it is what every result so far was
+        computed with -- but at biobank scale it needs hundreds of GB and is
+        OOM-killed tens of minutes in, after the fit has already succeeded.
+        Failing here, with the remedy, costs nothing. MANIFOLD_GENETICS_FORCE_EXACT=1
+        skips the check.
+        """
+        if self.n_landmark is not None or os.environ.get("MANIFOLD_GENETICS_FORCE_EXACT"):
+            return
+        from ..utils.memory import available_memory_bytes
+
+        needed = self.EXACT_DENSE_COPIES * 8 * n_samples**2
+        available = available_memory_bytes()
+        if available is None or needed <= available:
+            return
+        raise MemoryError(
+            f"PHATE without landmarks on {n_samples:,} samples needs about "
+            f"{needed / 1024**3:,.0f} GB (dense {n_samples:,} x {n_samples:,} operators), "
+            f"but about {available / 1024**3:,.0f} GB is available. Use landmarks, as the "
+            "subsample preset does: --n-landmark 10000 --random-landmarking (or fewer "
+            "landmarks for less memory). Set MANIFOLD_GENETICS_FORCE_EXACT=1 to run exact anyway."
+        )
 
     def transform(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> pd.DataFrame:
         """
@@ -201,6 +234,7 @@ class PHATE(EmbeddingBase):
             DataFrame with sample_id and PHATE coordinates
         """
         X_array, sample_ids = self._load_input_data(X)
+        self._check_exact_fits_in_memory(len(X_array))
 
         logger.info(f"Running PHATE (knn={self.knn}, t={self.t}) on {len(X_array)} samples...")
         embedding = self.model.fit_transform(X_array)
