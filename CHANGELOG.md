@@ -9,6 +9,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **All of Us workflows: `aou_prepare.wdl` and `analyse.wdl`.** For All of Us
+  researchers on Verily Workbench, starting from the release in their own
+  workspace. `aou_prepare` (once per release) acquires the release's arrays and
+  CDR demographics, intersects them with an HGDP+1KGP reference and writes the
+  prepared cohort to `<output_dir>/prepared/`. `analyse` runs experiments on a
+  prepared cohort — by default the manuscript's label-balanced and geosketch fit
+  sets — each as subsample + PCA, then PHATE and figures (2-D, 3-D HTML and
+  MP4), published to `<output_dir>/<experiment>/`. The image now has the Google
+  Cloud CLI and the GIAB difficult-regions bed, so runs need only Google
+  services. The reference is internal for now (#172).
+
 - **A WDL version of the workflow (`manifold_genetics.wdl`)**, for Cromwell —
   Verily Workbench workspaces that offer WDL workflows. Same container and
   command as `main.nf`. Required: the PLINK files, one labels file, a colormap

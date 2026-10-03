@@ -1,0 +1,8 @@
+{
+  "aou_prepare.output_dir": "gs://<bucket>/aou_v9",
+  "aou_prepare.workspace_cdr": "<$WORKSPACE_CDR, e.g. project.C2025Q4R6>",
+  "aou_prepare.cdr_storage_path": "gs://vwb-aou-datasets-controlled/v9",
+  "aou_prepare.reference_bed": "gs://<reference bucket>/hgdp1kgp_ref.bed",
+  "aou_prepare.reference_bim": "gs://<reference bucket>/hgdp1kgp_ref.bim",
+  "aou_prepare.reference_fam": "gs://<reference bucket>/hgdp1kgp_ref.fam"
+}
