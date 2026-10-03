@@ -1,0 +1,14 @@
+{
+  "manifold_genetics.fit_bed": "gs://<bucket>/cohort/fit_subset.bed",
+  "manifold_genetics.fit_bim": "gs://<bucket>/cohort/fit_subset.bim",
+  "manifold_genetics.fit_fam": "gs://<bucket>/cohort/fit_subset.fam",
+  "manifold_genetics.project_bed": "gs://<bucket>/cohort/project_subset.bed",
+  "manifold_genetics.project_bim": "gs://<bucket>/cohort/project_subset.bim",
+  "manifold_genetics.project_fam": "gs://<bucket>/cohort/project_subset.fam",
+  "manifold_genetics.labels": "gs://<bucket>/cohort/labels.csv",
+  "manifold_genetics.colormap": "gs://<bucket>/cohort/colormap.json",
+  "manifold_genetics.run_admixture": true,
+  "manifold_genetics.n_landmark": 10000,
+  "manifold_genetics.random_landmarking": true,
+  "manifold_genetics.docker": "us-central1-docker.pkg.dev/<project>/<repo>/manifold-genetics:0.3.0"
+}

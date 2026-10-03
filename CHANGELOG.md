@@ -9,6 +9,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **A WDL version of the workflow (`manifold_genetics.wdl`)**, for Cromwell —
+  Verily Workbench workspaces that offer WDL workflows. Same container and
+  command as `main.nf`; `run_admixture` takes the place of the two profiles.
+  Takes the PLINK files themselves, returns `results.tar.gz` and the figures.
+  Example inputs in `wdl/`; CI validates it with womtool.
+
 - **A Nextflow workflow (`main.nf`, `nextflow.config`) and its container
   (`Dockerfile`).** Runs `manifold-genetics pipeline` as one job on Verily
   Workbench, Google Batch or locally. One workflow, two profiles: `full`, and

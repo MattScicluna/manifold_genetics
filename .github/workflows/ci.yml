@@ -277,3 +277,26 @@ jobs:
             manifold-genetics --help > /dev/null &&
             ls /opt/manifold-tools &&
             python -c "import torch, neural_admixture, plotly, imageio_ffmpeg; print(\"extras ok\")"'
+
+  # The WDL version of the workflow (Cromwell, e.g. Verily Workbench) is valid,
+  # alone and with its example inputs.
+  wdl:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Validate with womtool
+        run: |
+          curl -sSL -o womtool.jar https://github.com/broadinstitute/cromwell/releases/download/92/womtool-92.jar
+          java -jar womtool.jar validate manifold_genetics.wdl
+          for inputs in wdl/inputs.*.json; do
+            java -jar womtool.jar validate manifold_genetics.wdl -i "$inputs"
+          done
