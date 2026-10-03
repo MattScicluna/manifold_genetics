@@ -5,6 +5,7 @@ Wrapper for the PHATE algorithm with a consistent API.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Union
 
@@ -103,13 +104,47 @@ class PHATE(EmbeddingBase):
             Self (for method chaining)
         """
         X_array, self._sample_ids = self._load_input_data(X)
+        self._check_exact_fits_in_memory(len(X_array))
 
         logger.info(f"Fitting PHATE with knn={self.knn}, t={self.t}...")
         self.model.fit(X_array)
+        # Kept to recognise the fit data in transform(); PHATE holds it already.
+        self._fit_X = X_array
         self._is_fitted = True
 
         logger.info(f"✓ PHATE fitted on {len(X_array)} samples")
         return self
+
+    # Without landmarks PHATE holds dense n x n operators. Measured on UKBB
+    # (n = 59,264; one n x n is 26.2 GB): the fit peaked at ~1x, the transform
+    # passed 2.2x before the 56 GB ceiling stopped it, and a synthetic run held
+    # 3x. So 3 x 8 n^2 bytes is the estimate.
+    EXACT_DENSE_COPIES = 3
+
+    def _check_exact_fits_in_memory(self, n_samples: int) -> None:
+        """Refuse an exact (no-landmark) run that cannot fit, before it starts.
+
+        Exact is the default and stays so -- it is what every result so far was
+        computed with -- but at biobank scale it needs hundreds of GB and is
+        OOM-killed tens of minutes in, after the fit has already succeeded.
+        Failing here, with the remedy, costs nothing. MANIFOLD_GENETICS_FORCE_EXACT=1
+        skips the check.
+        """
+        if self.n_landmark is not None or os.environ.get("MANIFOLD_GENETICS_FORCE_EXACT"):
+            return
+        from ..utils.memory import available_memory_bytes
+
+        needed = self.EXACT_DENSE_COPIES * 8 * n_samples**2
+        available = available_memory_bytes()
+        if available is None or needed <= available:
+            return
+        raise MemoryError(
+            f"PHATE without landmarks on {n_samples:,} samples needs about "
+            f"{needed / 1024**3:,.0f} GB (dense {n_samples:,} x {n_samples:,} operators), "
+            f"but about {available / 1024**3:,.0f} GB is available. Use landmarks, as the "
+            "subsample preset does: --n-landmark 10000 --random-landmarking (or fewer "
+            "landmarks for less memory). Set MANIFOLD_GENETICS_FORCE_EXACT=1 to run exact anyway."
+        )
 
     def transform(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> pd.DataFrame:
         """
@@ -127,8 +162,23 @@ class PHATE(EmbeddingBase):
         X_array, sample_ids = self._load_input_data(X)
         n_samples = len(X_array)
 
+        # The fit data is never batched. Whole, PHATE recognises it and returns
+        # its embedding; sliced, each batch is "new data" and is re-extended
+        # through a fresh neighbour search -- on UKBB (59,264 fit samples) the
+        # same peak memory, ~15x the time, and approximate coordinates (#157).
+        is_fit_data = self._is_fit_data(X_array)
+        if is_fit_data and self.embed_batch_size is not None and n_samples > self.embed_batch_size:
+            logger.info(
+                f"Input is the fit data: returning PHATE's embedding without batching "
+                f"(embed_batch_size={self.embed_batch_size} applies to new samples only)"
+            )
+
         # Check if batch processing is needed
-        if self.embed_batch_size is not None and n_samples > self.embed_batch_size:
+        if (
+            not is_fit_data
+            and self.embed_batch_size is not None
+            and n_samples > self.embed_batch_size
+        ):
             logger.info(
                 f"🔄 BATCH MODE: Transforming {n_samples} samples with PHATE in batches of {self.embed_batch_size}..."
             )
@@ -163,6 +213,11 @@ class PHATE(EmbeddingBase):
 
         return self._format_output(embedding, sample_ids)
 
+    def _is_fit_data(self, X_array: np.ndarray) -> bool:
+        """Whether ``X_array`` is the matrix PHATE was fitted on."""
+        fit_X = getattr(self, "_fit_X", None)
+        return fit_X is not None and fit_X.shape == X_array.shape and np.array_equal(fit_X, X_array)
+
     def fit_transform(
         self,
         X: Union[np.ndarray, pd.DataFrame, str, Path],
@@ -179,6 +234,7 @@ class PHATE(EmbeddingBase):
             DataFrame with sample_id and PHATE coordinates
         """
         X_array, sample_ids = self._load_input_data(X)
+        self._check_exact_fits_in_memory(len(X_array))
 
         logger.info(f"Running PHATE (knn={self.knn}, t={self.t}) on {len(X_array)} samples...")
         embedding = self.model.fit_transform(X_array)
