@@ -8,7 +8,7 @@ set -uo pipefail
 : "${OUT:=results.jsonl}"
 : "${CEILING:=56}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-run() { python "$HERE/bench_phate.py" --pca "$PCA" --out "$OUT" --ceiling-gb "$CEILING" "$@" || echo "run exited $? ($*)"; }
+run() { python "$HERE/bench_phate.py" --pca "$PCA" --out "$OUT" --ceiling-gb "$CEILING" ${SAVE_DIR:+--save-dir "$SAVE_DIR"} "$@" || echo "run exited $? ($*)"; }
 
 case "${1:-}" in
   phase1)  # published settings (knn 500, t 50, 10k random landmarks); fit-sample transform

@@ -122,21 +122,40 @@ def main():
     ap.add_argument("--t", type=int, default=50)
     ap.add_argument("--n-components", type=int, default=3)
     ap.add_argument("--n-landmark", type=int, default=10000, help="0 = no landmarks (n x n)")
-    ap.add_argument("--random-landmarking", action=argparse.BooleanOptionalAction, default=True,
-                    help="default on, as the subsample preset (the published UKBB/AoU runs)")
+    ap.add_argument(
+        "--random-landmarking",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="default on, as the subsample preset (the published UKBB/AoU runs)",
+    )
     ap.add_argument("--batch", type=int, default=0, help="embed_batch_size (0 = none)")
     ap.add_argument("--knn-max", type=int, default=0, help="phate knn_max (0 = unset)")
-    ap.add_argument("--transform-input", choices=["fit", "other"], default="fit",
-                    help="fit: transform the fit samples (what the pipeline does); "
-                         "other: transform held-out rows (true out-of-sample)")
+    ap.add_argument(
+        "--transform-input",
+        choices=["fit", "other"],
+        default="fit",
+        help="fit: transform the fit samples (what the pipeline does); "
+        "other: transform held-out rows (true out-of-sample)",
+    )
     ap.add_argument("--n-other", type=int, default=20000)
     ap.add_argument("--ceiling-gb", type=float, default=56)
     ap.add_argument("--label", default="")
+    ap.add_argument(
+        "--save-dir",
+        default="",
+        help="save transform coordinates as <label>.npy "
+        "(for fidelity checks; keep inside the data's environment)",
+    )
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
-    record = {"config": vars(a), "steps": {}, "status": "ok", "host": os.uname().nodename,
-              "cpus": os.cpu_count()}
+    record = {
+        "config": vars(a),
+        "steps": {},
+        "status": "ok",
+        "host": os.uname().nodename,
+        "cpus": os.cpu_count(),
+    }
 
     def finish(status=None):
         if status:
@@ -189,7 +208,7 @@ def main():
         order = rng.permutation(len(df))
         n_fit = len(df) if not a.n else min(a.n, len(df))
         fit = df.iloc[order[:n_fit]].reset_index(drop=True)
-        other = df.iloc[order[n_fit:n_fit + a.n_other]].reset_index(drop=True)
+        other = df.iloc[order[n_fit : n_fit + a.n_other]].reset_index(drop=True)
         return fit, other
 
     fit_df, other_df = step("load", load)
@@ -217,7 +236,11 @@ def main():
     step("fit", lambda: model.fit(fit_df))
     target = fit_df if a.transform_input == "fit" else other_df
     record["n_transformed"] = len(target)
-    step("transform", lambda: model.transform(target))
+    emb = step("transform", lambda: model.transform(target))
+    if a.save_dir:
+        os.makedirs(a.save_dir, exist_ok=True)
+        dims = [c for c in emb.columns if c != "sample_id"]
+        np.save(os.path.join(a.save_dir, f"{a.label}.npy"), emb[dims].to_numpy())
 
     sampler.stop()
     finish()

@@ -138,8 +138,8 @@ exact for the fit samples; O3, P1, P2 are approximations and need numbers.
 
 - [x] Harness, runner, summariser; smoke-tested locally.
 - [x] Root cause of the AoU 3-D OOMs identified (no landmarks; batching path).
-- [ ] Phase 1 (running since 2026-10-03)
-- [ ] Phase 1L
+- [x] Phase 1 (2026-10-03)
+- [ ] Phase 1L (running)
 - [ ] Phase 2
 - [ ] Phase 3
 - [ ] Choose optimisations; implement O* on a branch with tests; re-run
@@ -147,4 +147,27 @@ exact for the fit samples; O3, P1, P2 are approximations and need numbers.
 
 ## Results
 
-(fill in from `summarize.py`)
+### Phase 1 — UKBB fit set (n = 59,264), knn 500, t 50, 10k random landmarks
+
+| run | fit s | fit peak | transform s | transform adds | transform kneighbors |
+|---|---|---|---|---|---|
+| 2-D, no batch | 65 | 7.0 GB | 74 | +3.0 GB | none (same-data path) |
+| 3-D, no batch | 63 | 7.0 GB | 77 | +3.0 GB | none |
+| 3-D, batch 20k | 63 | 7.1 GB | 1,142 | +3.0 GB | 3 × (≤20k × 3,000) |
+| 3-D, batch 10k | 65 | 7.1 GB | 1,161 | +3.0 GB | 6 × (≤10k × 3,000) |
+| 3-D, batch 5k | 63 | 7.1 GB | 1,151 | +3.0 GB | 12 × (≤5k × 3,000) |
+
+- **Batching the fit-sample transform saves no memory** (+3.0 GB at every batch
+  size): the transform's peak is computing the embedding itself (potential +
+  MDS over the landmarks), which precedes the batches. Each batch's search
+  (≤ 20k × 3,000 × 16 B ≈ 1 GB) sits under that peak; the search never widened
+  past 3,000 at this n.
+- **It costs ~15× the time** (≈1,150 s vs ≈75 s), independent of batch size:
+  only 15–38 s is the neighbour search; the rest is per-row kernel/transition
+  extension against the landmark operator. For fit samples it is pure waste.
+- **Peak overall is the fit** (7.0 GB ≈ 2.6× its 2.65 GB neighbour arrays);
+  2-D vs 3-D makes no difference.
+- Linear extrapolation to AoU (n = 101k): fit ≈ 12 GB, transform +≈5 GB — fine
+  on 128 GB. The AoU OOMs came from running without landmarks.
+- ⇒ **O1 is a pure ~15× time win**, memory-neutral, and returns the exact fit
+  embedding.
