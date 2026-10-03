@@ -9,6 +9,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **A Nextflow workflow (`main.nf`, `nextflow.config`) and its container
+  (`Dockerfile`).** Runs `manifold-genetics pipeline` as one job on Verily
+  Workbench, Google Batch or locally. One workflow, two profiles: `full`, and
+  `no_admixture` (`--skip-admixture`: no admixture step, plots or metrics). PLINK
+  prefixes, labels, colormaps and the main options are parameters; resources
+  are set per profile, with one retry at twice the memory after an OOM kill.
+  The image bakes in plink2, flashpca and plink 1.9, so runs download nothing;
+  `.dockerignore` admits only the package source. The single process sits in a
+  sub-workflow so the steps can be split into processes later. CI stub-runs both
+  profiles, runs `no_admixture` for real on the synthetic cohort, and builds the
+  image. See `docs/nextflow.md`.
+
 - **`plot-3d` writes a rotating video beside each HTML.** An interactive page
   cannot go into slides or supplementary material, so every 3-D figure now
   also gets `<prefix>_by_<column>.mp4`: one full turn (12 s at 24 fps by

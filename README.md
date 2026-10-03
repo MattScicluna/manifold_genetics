@@ -46,6 +46,16 @@ writes a config for PLINK files you already have. For raw biobank genotypes,
 samples — by label counts, a list, or a label-free geometric sketch — each
 writing a directory `run` accepts.
 
+## As a Nextflow workflow
+
+`main.nf` runs the pipeline as one Nextflow job — on Verily Workbench, Google
+Batch, or locally — with two profiles: `full`, and `no_admixture`
+(`--skip-admixture`). See **[Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/)**.
+
+```bash
+nextflow run main.nf -profile no_admixture --fit_plink data/fit --labels labels.csv --colormap colormap.json
+```
+
 ## Documentation and tutorials
 
 - **[Documentation](https://mattscicluna.github.io/manifold_genetics/)**

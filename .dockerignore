@@ -1,0 +1,11 @@
+# Allowlist: the image is built from the package source only. A checkout on a
+# cluster can hold controlled-access data in its working tree; none of it may
+# reach an image layer (see scripts/check_sensitive_files.py).
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src/
+**/__pycache__
+**/*.pyc

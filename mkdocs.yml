@@ -85,6 +85,7 @@ nav:
   - Install: install.md
   - Quickstart: quickstart.md
   - Preprocessing: preprocessing.md
+  - Nextflow: nextflow.md
   - Tutorial: tutorial.ipynb
   - Formats: formats.md
   - Command line: cli.md
