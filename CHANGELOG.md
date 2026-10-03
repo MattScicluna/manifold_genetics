@@ -56,6 +56,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Exact PHATE refuses a run that cannot fit, before it starts.** Without
+  landmarks (the default of `embed`) PHATE holds dense n × n operators: on UKBB
+  (n = 59,264) the fit peaked at ~1 × 8n² and the transform passed 2.2×; on
+  All of Us (n = 101,142) `embed` was OOM-killed at "Transforming", after the fit
+  had succeeded. The fit now compares 3 × 8n² with the memory actually available
+  — the tightest cgroup limit (a Slurm job or container) or `MemAvailable` — and
+  stops with the remedy (`--n-landmark 10000 --random-landmarking`).
+  Defaults are unchanged; `MANIFOLD_GENETICS_FORCE_EXACT=1` skips the check.
+
 - **3-D plots stack groups like the 2-D ones.** The colormap's first entries
   are drawn on top in 2-D; in 3-D they were drawn first and so buried, leaving
   "More than one population" and "No information" over every All of Us group.
