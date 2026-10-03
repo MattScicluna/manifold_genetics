@@ -179,6 +179,12 @@ When a pipeline run uses `n_components: 3`, the embedding-visualisation step
 writes these HTML figures alongside the PNGs automatically (`<method>_3d_by_<column>.html`),
 provided plotly is installed; otherwise it logs a warning naming the extra.
 
+Beside each HTML, `plot-3d` writes a video of the embedding making one full
+turn (`.mp4`; `--video-format gif` for a GIF), for slides and supplementary
+material. `--fps` (24) and `--seconds` (12) set its length, `--elev` (20°) the
+camera's tilt, and `--no-video` skips it. Points stack as in the other figures:
+the colormap's first entries on top, Unknown underneath.
+
 Hover labels name the sample by default. `--no-hover-ids` leaves the identifiers
 out of the document altogether and shows only the label, which is what you want
 before a figure of a controlled-access cohort leaves the environment holding it.
