@@ -139,9 +139,9 @@ exact for the fit samples; O3, P1, P2 are approximations and need numbers.
 - [x] Harness, runner, summariser; smoke-tested locally.
 - [x] Root cause of the AoU 3-D OOMs identified (no landmarks; batching path).
 - [x] Phase 1 (2026-10-03)
-- [ ] Phase 1L (running)
-- [ ] Phase 2
-- [ ] Phase 3
+- [x] Phase 1L
+- [x] Phase 2
+- [x] Phase 3
 - [ ] Choose optimisations; implement O* on a branch with tests; re-run
 - [ ] Consider P* in phate/graphtools
 
@@ -171,3 +171,37 @@ exact for the fit samples; O3, P1, P2 are approximations and need numbers.
   on 128 GB. The AoU OOMs came from running without landmarks.
 - ⇒ **O1 is a pure ~15× time win**, memory-neutral, and returns the exact fit
   embedding.
+
+### Phase 1L — landmarks (n = 59,264)
+
+| landmarks | fit s | fit peak | transform s | transform adds |
+|---|---|---|---|---|
+| 2,000 | 34 | 3.7 GB | 4 | +0.06 GB |
+| 10,000 | 64 | 7.0 GB | 78 | +3.0 GB |
+| none | 38 | 28.1 GB | — | exceeded 56 GB |
+
+Without landmarks the fit alone holds ~1 × 8n² (26.2 GB here) and the transform
+passes 2.2×. Landmark count drives both fit memory and transform time.
+
+### Phase 3 — fit scaling (10k landmarks)
+
+n = 10k / 20k / 40k / 59k: fit peak 1.5 / 4.0 / 5.3 / 7.0 GB — about linear
+above 20k, ~0.075 GB per 1,000 samples (≈ 10 GB at AoU's 101k).
+
+### Phase 2 — out-of-sample transform (fit 40k, transform 20k held-out)
+
+| batch | knn_max | transform s | peak | Procrustes vs unbatched | kNN kept (k=30) |
+|---|---|---|---|---|---|
+| none | unset | 402 | 4.97 GB | — | — |
+| 10k / 5k / 2k | unset | 405–408 | 4.93 GB | 1.6e-31 | 1.000 |
+| any | 3,000 | 403–410 | 4.90–4.91 GB | 1.1e-06 | 0.997 |
+| any | 1,500 | 401–410 | 4.87–4.95 GB | 1.0e-05 | 0.993 |
+
+- Batching gives **identical** coordinates for new samples and changes neither
+  peak memory nor time at this scale: the peak is computing the embedding, not
+  the per-batch extension (each batch's search ≤ 20k × 3,000 × 16 B).
+- `knn_max` shortens the fit's neighbour search (~15%: 41 s vs 49 s) and
+  slightly changes the embedding (99.3–99.7% of neighbours kept); no effect
+  on transform memory or time.
+- ⇒ `embed_batch_size` does nothing measurable for fit or new samples here:
+  deprecate (#157). `knn_max` is a modest fit-time option, not a memory fix.
