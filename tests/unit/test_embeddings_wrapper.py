@@ -132,17 +132,49 @@ def test_phate_fit_then_transform(phate_model):
     assert fake.transform_calls == [(6, 4)]  # single, unbatched call
 
 
-def test_phate_transform_batches_when_batch_size_smaller_than_data(monkeypatch):
+def test_phate_transform_batches_new_data_when_batch_size_smaller_than_data(monkeypatch):
+    m = PHATE(n_components=2, knn=3, embed_batch_size=2)
+    fake = FakeModel(n_components=2)
+    monkeypatch.setattr(m, "model", fake)
+    m.fit(np.random.rand(8, 3))
+    fake.transform_calls.clear()
+    result = m.transform(np.random.rand(5, 3))
+    # 5 new samples, batch 2 -> slices of 2, 2, 1
+    assert [shape[0] for shape in fake.transform_calls] == [2, 2, 1]
+    assert len(result) == 5
+
+
+def test_phate_transform_never_batches_the_fit_data(monkeypatch):
+    """Sliced, the fit data stops being the fit data to PHATE: every batch is
+    re-extended as new samples -- same peak memory, ~15x the time on UKBB, and
+    approximate coordinates instead of the embedding (#157)."""
     m = PHATE(n_components=2, knn=3, embed_batch_size=2)
     fake = FakeModel(n_components=2)
     monkeypatch.setattr(m, "model", fake)
     X = np.random.rand(5, 3)
     m.fit(X)
     fake.transform_calls.clear()
-    result = m.transform(X)
-    # 5 samples, batch 2 -> slices of 2, 2, 1
-    assert [shape[0] for shape in fake.transform_calls] == [2, 2, 1]
+
+    result = m.transform(X.copy())  # equal values, a different array: as `run` passes it
+
+    assert fake.transform_calls == [(5, 3)]  # one call, the whole fit matrix
     assert len(result) == 5
+
+
+def test_phate_transform_with_real_phate_returns_the_fit_embedding_despite_batching():
+    """End to end with phate itself: the fit samples come back exactly as
+    PHATE embedded them, however small embed_batch_size is."""
+    rng = np.random.default_rng(0)
+    X = np.vstack([rng.normal(c, 1.0, size=(40, 5)) for c in (0.0, 4.0, 8.0)])
+
+    batched = PHATE(n_components=2, knn=5, t=10, embed_batch_size=16, random_state=1)
+    whole = PHATE(n_components=2, knn=5, t=10, random_state=1)
+    batched.fit(X)
+    whole.fit(X)
+
+    a = batched.transform(X)[["dim_1", "dim_2"]].to_numpy()
+    b = whole.transform(X)[["dim_1", "dim_2"]].to_numpy()
+    assert np.allclose(a, b)
 
 
 def test_phate_transform_no_batch_when_data_smaller_than_batch_size(monkeypatch):
