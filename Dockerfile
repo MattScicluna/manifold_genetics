@@ -1,5 +1,5 @@
 # Container for the workflows (main.nf, the WDL workflows): the package with its
-# admixture and interactive extras, plink2 / flashpca / plink 1.9 and the GIAB
+# aou, admixture and interactive extras, plink2 / flashpca / plink 1.9 and the GIAB
 # difficult-regions bed fetched at build time, and the Google Cloud CLI. A run
 # downloads nothing, so it works on networks that reach only Google services.
 #
@@ -31,7 +31,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 # CPU torch keeps the image a fraction of the CUDA build's size; for GPU
 # admixture build with --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu121
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
-ARG EXTRAS=admixture,interactive
+ARG EXTRAS=aou,admixture,interactive
 
 WORKDIR /opt/manifold-genetics
 COPY pyproject.toml uv.lock README.md LICENSE ./
