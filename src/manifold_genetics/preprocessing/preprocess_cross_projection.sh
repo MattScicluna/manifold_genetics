@@ -618,7 +618,10 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
     WRAYNER_SCRIPT="${WRAYNER_DIR}/HRC-1000G-check-bim.pl"
     if [[ ! -f "${WRAYNER_SCRIPT}" ]]; then
         print_status "[5a] Downloading WRayner HRC-1000G-check-bim tools..."
-        curl -sL "https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip" -o "${WRAYNER_DIR}/HRC-1000G-check-bim.zip"
+        # The Python runner installs the bundled copy first; this fallback, for the
+        # shell run on its own, fetches the same file from the Internet Archive
+        # (the original URL, https://www.chg.ox.ac.uk/~wrayner/tools/..., is gone).
+        curl -sfL "https://web.archive.org/web/20240415210219id_/https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip" -o "${WRAYNER_DIR}/HRC-1000G-check-bim.zip"
         unzip -q -o "${WRAYNER_DIR}/HRC-1000G-check-bim.zip" -d "${WRAYNER_DIR}/"
 
         # Comment out the VCF creation line (we don't need VCF output)
@@ -699,7 +702,12 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
             echo "    Running WRayner-generated plink script..."
             bash "Run-plink.sh"
         else
-            print_warning "Run-plink.sh not found, WRayner may not have generated corrections"
+            # The checker exits 0 even when it gives up (a truncated or wrong
+            # reference panel, no gunzip), so its corrections are the only sign it
+            # ran. Carrying on would silently produce unharmonised output reported
+            # as harmonised; stop instead. --skip-wrayner skips the check knowingly.
+            print_error "WRayner wrote no Run-plink.sh, so no corrections were applied; see its output above. Use --skip-wrayner to proceed without the check."
+            exit 1
         fi
         cd "${ORIGINAL_DIR}"
 
@@ -727,6 +735,9 @@ if [[ "$SKIP_WRAYNER" != "true" ]]; then
             cp "${UPDATED_PREFIX}.bim" ${BIOBANK_HARMONIZED}.bim
             cp "${UPDATED_PREFIX}.fam" ${BIOBANK_HARMONIZED}.fam
         else
+            # Run-plink.sh ran but produced nothing: as above, not a silent fallback.
+            print_error "WRayner's Run-plink.sh produced no -updated files; see its output above."
+            exit 1
             echo "    No -updated files found, using filtered data directly..."
             # Rename SNP IDs to chr:pos:ref:alt format
             echo "    Standardizing SNP IDs to chr:pos:ref:alt format..."

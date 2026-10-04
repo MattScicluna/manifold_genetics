@@ -14,7 +14,10 @@ GIAB_URL = (
     "https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/"
     "genome-stratifications/v3.6/GRCh38@all/Union/GRCh38_alldifficultregions.bed.gz"
 )
-WRAYNER_URL = "https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip"
+# The checker ships with the package (vendor/README.md): its upstream URL
+# returns 404, and a bundled copy installs without network access.
+WRAYNER_ZIP = Path(__file__).parent / "vendor" / "HRC-1000G-check-bim-v4.3.0.zip"
+WRAYNER_URL = WRAYNER_ZIP.as_uri()
 TOPMED_URL = (
     "https://www.dropbox.com/scl/fi/jiy6ty8pmrrr2s5eox1nf/"
     "bravo-dbsnp-all.hrc_format.tab.gz?rlkey=aihwmah4uwvazla7yl438odut&st=8gklc135&dl=1"
@@ -41,6 +44,43 @@ def _install_giab(url: str, target: Path, fetch: Callable[[str, Path], None]) ->
     with gzip.open(packed, "rb") as src, open(target, "wb") as dst:
         shutil.copyfileobj(src, dst)
     packed.unlink()
+
+
+def ensure_wrayner(tools_dir: Path) -> Path:
+    """The checker at ``tools_dir``, installed from the bundled copy if absent."""
+    target = Path(tools_dir) / HARMONISATION_REFERENCES["wrayner"][1]
+    if not target.exists():
+        _install_wrayner(WRAYNER_URL, target, fetch_url)
+    return target
+
+
+def check_wrayner_runs(checker: Path) -> None:
+    """Compile the checker with perl, which loads every module it uses.
+
+    Run before the hours-long shell: a machine without perl, or with only a
+    minimal one (Debian's perl-base lacks IO::Uncompress::Gunzip), otherwise
+    fails at the WRayner step, well into the run.
+
+    Raises:
+        RuntimeError: perl is missing or cannot load the checker's modules.
+    """
+    import subprocess
+
+    perl = shutil.which("perl")
+    remedy = (
+        "Install perl with its standard modules (Debian/Ubuntu: `apt install perl`), "
+        "run in the manifold-genetics container, or pass --skip-wrayner to skip the "
+        "check knowingly."
+    )
+    if perl is None:
+        raise RuntimeError(f"WRayner needs perl, which is not on PATH. {remedy}")
+    result = subprocess.run([perl, "-c", str(checker)], capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        raise RuntimeError(
+            f"WRayner's checker does not run with {perl}: "
+            f"{detail[0] if detail else 'perl -c failed'}. {remedy}"
+        )
 
 
 def _install_wrayner(url: str, target: Path, fetch: Callable[[str, Path], None]) -> None:
@@ -114,4 +154,10 @@ def install_harmonisation_references(
     return placed
 
 
-__all__ = ["HARMONISATION_REFERENCES", "default_tools_dir", "install_harmonisation_references"]
+__all__ = [
+    "HARMONISATION_REFERENCES",
+    "default_tools_dir",
+    "check_wrayner_runs",
+    "ensure_wrayner",
+    "install_harmonisation_references",
+]
