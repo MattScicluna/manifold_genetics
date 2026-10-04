@@ -301,14 +301,11 @@ for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
 
-`--preprocessing` also fetches the GIAB, WRayner and TOPMed references that
-`preprocess --preset harmonise` needs (about 2 GB, most of it TOPMed) into the
-cache's `preprocessing/` subdirectory. Every reference is attempted even when
-one fails. The WRayner URL currently returns 404 upstream, so today it places
-GIAB and TOPMed and then exits non-zero, naming the failed URL and the path
-where a hand-placed `HRC-1000G-check-bim.pl` goes;
-[Preprocessing](preprocessing.md#what-needs-internet) has the details.
-Re-running is safe: it fetches only what is still missing.
+`--preprocessing` also places the GIAB, WRayner and TOPMed references that
+`preprocess --preset harmonise` needs (about 4 GB, almost all of it TOPMed) in
+the cache's `preprocessing/` subdirectory. The WRayner checker ships with the
+package; the other two are downloaded. Every reference is attempted even when
+one fails, and re-running fetches only what is still missing.
 
 ## Exit codes and logging
 
