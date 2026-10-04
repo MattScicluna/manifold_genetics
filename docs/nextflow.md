@@ -22,14 +22,23 @@ else goes through `--extra_args`. At biobank scale set `--n_landmark 10000
 ## Container
 
 Runs use a container with the external tools built in, so nothing is downloaded
-during a run. Build it for `linux/amd64` and push it to your registry:
+during a run. It is published on Docker Hub for `linux/amd64` as
+`mattscicluna/manifold-genetics`, tagged by branch (`main`), by commit
+(`sha-<commit>`), and by version (`0.3.0`, `latest`) once a release is tagged:
 
 ```bash
-docker build --platform linux/amd64 -t manifold-genetics:0.3.0 .
-docker push <registry>/manifold-genetics:0.3.0
+nextflow run main.nf -profile no_admixture,docker \
+    --container mattscicluna/manifold-genetics:sha-97ca2ba ...
 ```
 
-then pass `--container <registry>/manifold-genetics:0.3.0`.
+Prefer a commit or release tag to a branch tag: a registry mirror can keep
+serving an old image under a branch name after it has moved. To build your own,
+`docker build --platform linux/amd64 -t <registry>/manifold-genetics .`
 
-Add `docker` to the profile to run in the container locally
-(`-profile no_admixture,docker`), or `local` to use the current environment.
+Add an execution profile to the workflow profile:
+
+- `docker` runs in the container locally (`-profile no_admixture,docker`).
+- `google-batch` runs on Google Batch, as on Verily Workbench
+  (`-profile no_admixture,google-batch`), with `--container` set to an image
+  the workspace can pull.
+- `local` uses the current environment.

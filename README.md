@@ -52,7 +52,9 @@ writing a directory `run` accepts.
 nextflow run main.nf -profile no_admixture --fit_plink data/fit --labels labels.csv --colormap colormap.json
 ```
 
-See [Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/).
+See [Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/). The same
+pipeline is also a set of WDL workflows, including the All of Us ones; see
+[Workflows](https://mattscicluna.github.io/manifold_genetics/workflows/).
 
 ## Documentation and tutorials
 
