@@ -8,7 +8,8 @@ version 1.0
 ## to <output_dir>/prepared/. Step 2 (analyse.wdl) starts from there.
 ##
 ## Acquire and preprocess run on one machine: the release's arrays.bed is
-## ~230 GB for v9, and only the prepared cohort (~12 GB) leaves it.
+## ~230 GB for v9, and only the prepared cohort (~12 GB) leaves it. WRayner
+## needs several copies of it at once, hence the 2 TB disk.
 ##
 ## The reference is a PLINK set of HGDP+1KGP samples with the population in the
 ## FID (`<Pop>` or `forReference<Pop>`). For now it is an internal extract from
@@ -38,7 +39,8 @@ workflow aou_prepare {
         String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
         Int cpu = 32
         Int memory_gb = 128
-        Int disk_gb = 1000
+        # WRayner holds about four ~230 GB copies of the v9 genotypes at once.
+        Int disk_gb = 2000
     }
 
     call prepare {
