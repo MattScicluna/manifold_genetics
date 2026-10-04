@@ -17,6 +17,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cohort's array positions. Example inputs for UK Biobank-style experiments
   (`wdl/analyse.biobank.inputs.json`) and a miniwdl config for running the
   workflows with Apptainer on a cluster (`wdl/miniwdl.apptainer.cfg`).
+  `topmed_reference` turns on WRayner against TOPMed, as in `aou_prepare.wdl`;
+  without it WRayner is skipped, as in the published UK Biobank flow.
 
 - **`acquire custom` uses the published colours.** Label values with a
   published colour (HGDP+1KGP, UK Biobank, All of Us) get it, in the published

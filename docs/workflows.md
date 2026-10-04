@@ -79,6 +79,7 @@ then runs on it unchanged.
 | `reference_bed/bim/fam` | HGDP+1KGP, restricted to the cohort's positions |
 | `reference_labels` | optional CSV: `sample_id`, `Population`, ...; default: population from the FID |
 | `reference_has_chr_prefix` | `true` if the reference's chromosomes are `chr1` |
+| `topmed_reference` | optional `bravo-dbsnp-all.hrc_format.tab.gz`: turns on the WRayner check against TOPMed, as in `aou_prepare`; without it WRayner is skipped, as in the published UK Biobank preprocessing |
 | `cohort_colormap`, `reference_colormap` | optional colormap JSONs that take precedence |
 
 Labels with published colours (HGDP+1KGP populations and regions, UK Biobank

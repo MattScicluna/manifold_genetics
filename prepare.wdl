@@ -18,6 +18,11 @@ version 1.0
 ## get them; any other value gets a generated one. cohort_colormap and
 ## reference_colormap override them.
 ##
+## topmed_reference (bravo-dbsnp-all.hrc_format.tab.gz) turns on the WRayner
+## strand / allele / frequency check against TOPMed, exactly as in
+## aou_prepare.wdl. Without it the check is skipped, as in the published UK
+## Biobank preprocessing.
+##
 ## The cohort's chromosomes are expected as `chr1`, as in the All of Us and
 ## UK Biobank GRCh38 releases; the reference's may be either (see
 ## reference_has_chr_prefix).
@@ -37,6 +42,7 @@ workflow prepare {
         # sample_id plus columns (e.g. Population); default: population from the FID.
         File? reference_labels
         Boolean reference_has_chr_prefix = false
+        File? topmed_reference
         # Optional colormap JSONs (column -> value -> colour) that take precedence.
         File? cohort_colormap
         File? reference_colormap
@@ -58,6 +64,7 @@ workflow prepare {
             reference_fam = reference_fam,
             reference_labels = reference_labels,
             reference_has_chr_prefix = reference_has_chr_prefix,
+            topmed_reference = topmed_reference,
             cohort_colormap = cohort_colormap,
             reference_colormap = reference_colormap,
             docker = docker,
@@ -84,6 +91,7 @@ task prepare_cohort {
         File reference_fam
         File? reference_labels
         Boolean reference_has_chr_prefix
+        File? topmed_reference
         File? cohort_colormap
         File? reference_colormap
         String docker
@@ -120,8 +128,34 @@ task prepare_cohort {
         manifold-genetics acquire custom \
             --fit-plink "$PWD/cohort_raw/cohort" --labels "~{cohort_labels}" \
             ~{"--colormap " + cohort_colormap} --out cohort
+        # WRayner against TOPMed when the panel is given, as aou_prepare.wdl, but
+        # in a tools directory of the task's own: under Apptainer the image is
+        # read-only. It holds the image's GIAB bed (linked), the panel (linked),
+        # and the checker, which preprocess installs there from the package.
+        TOPMED="~{select_first([topmed_reference, ""])}"
+        tools=""
+        if [ -n "${TOPMED}" ]; then
+            image_tools="$(python -c 'from manifold_genetics.preprocessing.references import default_tools_dir; print(default_tools_dir())')"
+            tools_dir="$PWD/tools"
+            mkdir -p "${tools_dir}/topmed"
+            ln -s "${image_tools}/giab" "${tools_dir}/giab"
+            ln -s "${TOPMED}" "${tools_dir}/topmed/bravo-dbsnp-all.hrc_format.tab.gz"
+            tools="--tools-dir ${tools_dir}"
+            # A Dropbox error page or truncated copy would cost hours to find. The
+            # checker reads AF from column 8, so data lines need >= 8 columns.
+            # (pipefail off: gzip exits on SIGPIPE when head has enough.)
+            head_lines="$( (set +o pipefail; gzip -cd "${TOPMED}" | head -5) )"
+            echo "${head_lines}" | awk '!/^#/ { n++; if (NF < 8) bad = 1 } END { exit (n == 0 || bad) }' \
+                || { echo "topmed_reference does not look like bravo-dbsnp-all.hrc_format.tab.gz"; exit 1; }
+            wrayner=""
+            echo "WRayner: on (TOPMed panel ${TOPMED})"
+        else
+            wrayner="--skip-wrayner"
+            echo "WRayner: off (no topmed_reference), as in the published UK Biobank preprocessing."
+        fi
+
         manifold-genetics preprocess ref/config.yaml cohort/config.yaml \
-            --preset harmonise --skip-wrayner --threads ~{cpu} \
+            --preset harmonise ${wrayner} ${tools} --threads ~{cpu} \
             ~{if reference_has_chr_prefix then "--fit-has-chr-prefix" else ""} \
             --memory $(( ~{memory_gb} * 1024 * 3 / 4 )) --cleanup --out prepared
 
