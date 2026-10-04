@@ -104,6 +104,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `--skip-wrayner` — instead of failing at the WRayner step deep into the run.
   Runs that skip WRayner (the UK Biobank flow) are unaffected.
 
+- **The image runs the WRayner checker.** It needs Perl modules
+  (`IO::Uncompress::Gunzip`) that the slim base image's `perl-base` lacks, so
+  in the first All of Us WRayner run it died before checking anything, and
+  `preprocess` stopped as designed. The image now installs full `perl`, and CI
+  compiles the checker inside the image (`perl -c`).
+
 - **WRayner works again, and `aou_prepare` runs it.** The checker's upstream
   URL returns 404, so `--preset harmonise` died at its WRayner step everywhere.
   `HRC-1000G-check-bim` v4.3.0 (MIT, William Rayner) now ships with the package,
