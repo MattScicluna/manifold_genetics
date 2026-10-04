@@ -4,5 +4,6 @@
   "aou_prepare.cdr_storage_path": "gs://vwb-aou-datasets-controlled/v9",
   "aou_prepare.reference_bed": "gs://<reference bucket>/hgdp1kgp_ref.bed",
   "aou_prepare.reference_bim": "gs://<reference bucket>/hgdp1kgp_ref.bim",
-  "aou_prepare.reference_fam": "gs://<reference bucket>/hgdp1kgp_ref.fam"
+  "aou_prepare.reference_fam": "gs://<reference bucket>/hgdp1kgp_ref.fam",
+  "aou_prepare.topmed_reference": "gs://<bucket>/references/bravo-dbsnp-all.hrc_format.tab.gz"
 }

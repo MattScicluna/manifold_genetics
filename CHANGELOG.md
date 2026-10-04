@@ -97,6 +97,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **WRayner works again, and `aou_prepare` runs it.** The checker's upstream
+  URL returns 404, so `--preset harmonise` died at its WRayner step everywhere.
+  `HRC-1000G-check-bim` v4.3.0 (MIT, William Rayner) now ships with the package,
+  from the Internet Archive's copy of the original zip (checksum in
+  `preprocessing/vendor/README.md`), and `preprocess` installs it with no network.
+  If WRayner runs but writes no corrections — the checker exits 0 when it gives
+  up on a truncated or wrong panel — `preprocess` now stops instead of carrying on
+  unharmonised while reporting the step done. `aou_prepare.wdl` takes the TOPMed
+  panel as `topmed_reference` (an input, not part of the public image) and runs
+  WRayner when it is given, matching the published All of Us preprocessing;
+  without it the log says the check was skipped.
+
 - **Exact PHATE refuses a run that cannot fit, before it starts.** Without
   landmarks (the default of `embed`) PHATE holds dense n × n operators: on UKBB
   (n = 59,264) the fit peaked at ~1 × 8n² and the transform passed 2.2×; on

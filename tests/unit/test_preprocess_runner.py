@@ -43,10 +43,15 @@ def _fake_shell(argv):
 
 @pytest.fixture
 def tools(monkeypatch):
+    from manifold_genetics.preprocessing import runner as r
     from manifold_genetics.utils import tools as t
 
     monkeypatch.setattr(t.ToolResolver, "resolve_plink2", lambda self: "/stub/plink2")
     monkeypatch.setattr(t.ToolResolver, "resolve_plink1", lambda self: "/stub/plink")
+    # Recorded, not run: a test must not install into the real tool cache.
+    installed = []
+    monkeypatch.setattr(r, "ensure_wrayner", lambda tools_dir: installed.append(Path(tools_dir)))
+    return installed
 
 
 def test_one_config_keeps_the_cohort_shape(tmp_path, tools):
@@ -380,3 +385,32 @@ def test_a_sentinel_missing_a_key_whose_current_value_is_none_proceeds(tmp_path,
 
     assert len(calls) == 2, "the second run must have proceeded, not been refused"
     assert json.loads(sentinel_path.read_text())["maf"] is None
+
+
+def test_the_checker_is_installed_before_the_shell_when_wrayner_runs(tmp_path, tools):
+    """Bundled with the package, so the shell never reaches its dead download URL."""
+    from manifold_genetics.preprocessing import PreprocessOptions
+
+    acquire_synthetic(tmp_path / "in")
+    preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "out",
+        options=PreprocessOptions(tools_dir=tmp_path / "tools"),
+        runner=_fake_shell,
+    )
+
+    assert tools == [tmp_path / "tools"]
+
+
+def test_the_checker_is_not_installed_when_wrayner_is_skipped(tmp_path, tools):
+    from manifold_genetics.preprocessing import PreprocessOptions
+
+    acquire_synthetic(tmp_path / "in")
+    preprocess(
+        tmp_path / "in/config.yaml",
+        tmp_path / "out",
+        options=PreprocessOptions(skip_wrayner=True, tools_dir=tmp_path / "tools"),
+        runner=_fake_shell,
+    )
+
+    assert tools == []

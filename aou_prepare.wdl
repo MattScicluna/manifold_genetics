@@ -13,6 +13,12 @@ version 1.0
 ## The reference is a PLINK set of HGDP+1KGP samples with the population in the
 ## FID (`<Pop>` or `forReference<Pop>`). For now it is an internal extract from
 ## the published analysis; see issue #172.
+##
+## topmed_reference (bravo-dbsnp-all.hrc_format.tab.gz) turns on the WRayner
+## strand / allele / frequency check against TOPMed, as the published All of Us
+## preprocessing ran it. It is an input, not part of the public image, because
+## the panel is TOPMed-derived. Without it the check is skipped, and the log
+## says the result differs from the published preprocessing.
 
 workflow aou_prepare {
     input {
@@ -27,6 +33,7 @@ workflow aou_prepare {
         File reference_bed
         File reference_bim
         File reference_fam
+        File? topmed_reference
 
         String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
         Int cpu = 32
@@ -42,6 +49,7 @@ workflow aou_prepare {
             reference_bed = reference_bed,
             reference_bim = reference_bim,
             reference_fam = reference_fam,
+            topmed_reference = topmed_reference,
             docker = docker,
             cpu = cpu,
             memory_gb = memory_gb,
@@ -62,6 +70,7 @@ task prepare {
         File reference_bed
         File reference_bim
         File reference_fam
+        File? topmed_reference
         String docker
         Int cpu
         Int memory_gb
@@ -94,8 +103,28 @@ task prepare {
 
         manifold-genetics acquire aou --out aou
 
+        # WRayner against TOPMed when the panel is given, where preprocess looks
+        # for it; the checker itself ships with the package.
+        TOPMED="~{select_first([topmed_reference, ""])}"
+        if [ -n "${TOPMED}" ]; then
+            tools_dir="$(python -c 'from manifold_genetics.preprocessing.references import default_tools_dir; print(default_tools_dir())')"
+            mkdir -p "${tools_dir}/topmed"
+            ln -sf "${TOPMED}" "${tools_dir}/topmed/bravo-dbsnp-all.hrc_format.tab.gz"
+            # A Dropbox error page or truncated copy would cost hours to find. The
+            # checker reads AF from column 8, so data lines need >= 8 columns.
+            # (pipefail off: gzip exits on SIGPIPE when head has enough.)
+            head_lines="$( (set +o pipefail; gzip -cd "${TOPMED}" | head -5) )"
+            echo "${head_lines}" | awk '!/^#/ { n++; if (NF < 8) bad = 1 } END { exit (n == 0 || bad) }' \
+                || { echo "topmed_reference does not look like bravo-dbsnp-all.hrc_format.tab.gz"; exit 1; }
+            wrayner=""
+            echo "WRayner: on (TOPMed panel ${TOPMED})"
+        else
+            wrayner="--skip-wrayner"
+            echo "WARNING: no topmed_reference, so WRayner is skipped; this does not match the published All of Us preprocessing."
+        fi
+
         manifold-genetics preprocess ref/config.yaml aou/config.yaml \
-            --preset harmonise --skip-wrayner --threads ~{cpu} \
+            --preset harmonise ${wrayner} --threads ~{cpu} \
             --memory $(( ~{memory_gb} * 1024 * 3 / 4 )) --cleanup --out prepared
 
         # Publish the prepared cohort: real files, not the links to the download.
