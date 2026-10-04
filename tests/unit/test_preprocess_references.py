@@ -143,3 +143,39 @@ class TestBundledChecker:
         target.write_text("a hand-placed copy")
 
         assert references.ensure_wrayner(tmp_path).read_text() == "a hand-placed copy"
+
+
+class TestCheckerRuns:
+    """A missing perl or module fails in seconds, not an hour into the run.
+
+    The slim container image had only Debian's perl-base, without
+    IO::Uncompress::Gunzip, and the first All of Us run with WRayner failed at
+    that step 75 minutes in.
+    """
+
+    def test_no_perl_is_an_error_naming_the_ways_out(self, tmp_path, monkeypatch):
+        import shutil
+
+        monkeypatch.setattr(shutil, "which", lambda name: None)
+
+        with pytest.raises(RuntimeError, match="perl, which is not on PATH.*--skip-wrayner"):
+            references.check_wrayner_runs(tmp_path / "checker.pl")
+
+    def test_a_missing_module_is_reported_with_perls_own_message(self, tmp_path):
+        import shutil
+
+        if shutil.which("perl") is None:
+            pytest.skip("perl not installed")
+        checker = tmp_path / "checker.pl"
+        checker.write_text("use No::Such::Module::Anywhere;\nprint 1;\n")
+
+        with pytest.raises(RuntimeError, match="Can't locate No/Such/Module/Anywhere.pm"):
+            references.check_wrayner_runs(checker)
+
+    def test_the_bundled_checker_compiles_with_this_perl(self, tmp_path):
+        import shutil
+
+        if shutil.which("perl") is None:
+            pytest.skip("perl not installed")
+
+        references.check_wrayner_runs(references.ensure_wrayner(tmp_path))

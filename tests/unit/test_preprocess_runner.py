@@ -50,7 +50,13 @@ def tools(monkeypatch):
     monkeypatch.setattr(t.ToolResolver, "resolve_plink1", lambda self: "/stub/plink")
     # Recorded, not run: a test must not install into the real tool cache.
     installed = []
-    monkeypatch.setattr(r, "ensure_wrayner", lambda tools_dir: installed.append(Path(tools_dir)))
+
+    def fake_ensure(tools_dir):
+        installed.append(Path(tools_dir))
+        return Path(tools_dir) / "wrayner/HRC-1000G-check-bim.pl"
+
+    monkeypatch.setattr(r, "ensure_wrayner", fake_ensure)
+    monkeypatch.setattr(r, "check_wrayner_runs", lambda checker: installed.append(checker))
     return installed
 
 
@@ -399,7 +405,8 @@ def test_the_checker_is_installed_before_the_shell_when_wrayner_runs(tmp_path, t
         runner=_fake_shell,
     )
 
-    assert tools == [tmp_path / "tools"]
+    # Installed, then checked to run, before the shell.
+    assert tools == [tmp_path / "tools", tmp_path / "tools/wrayner/HRC-1000G-check-bim.pl"]
 
 
 def test_the_checker_is_not_installed_when_wrayner_is_skipped(tmp_path, tools):
