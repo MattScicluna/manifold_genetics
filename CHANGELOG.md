@@ -97,6 +97,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **WRayner's log no longer floods with one warning per X/Y/MT SNP.** The
+  checker expects numeric chromosome codes and printed `Argument "X" isn't
+  numeric` for every sex-chromosome SNP — tens of thousands of lines on a
+  biobank array, burying the lines that matter. That one warning is now
+  counted; everything else the checker prints still appears, and its exit
+  status still stops the run.
+
 - **`analyse.wdl` passes PCA results between its tasks on Google Batch.** Its
   outputs were listed with `read_lines`, which the local Cromwell backend
   honours but Google Batch does not: Cromwell copies back only the outputs it
