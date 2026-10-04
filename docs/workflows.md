@@ -77,4 +77,4 @@ apptainer pull <cache>/docker___mattscicluna_manifold-genetics_<tag>.sif \
 ```
 
 and bind the filesystems holding inputs and `output_dir` with
-`run_options = ["--containall", "--bind", "/lustre06,/lustre07"]` (your paths).
+`run_options = ["--containall", "--bind", "/path/to/data,/path/to/results"]` (your paths).
