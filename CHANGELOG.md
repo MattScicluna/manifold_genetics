@@ -18,6 +18,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`wdl/analyse.biobank.inputs.json`) and a miniwdl config for running the
   workflows with Apptainer on a cluster (`wdl/miniwdl.apptainer.cfg`).
 
+- **`acquire custom` uses the published colours.** Label values with a
+  published colour (HGDP+1KGP, UK Biobank, All of Us) get it, in the published
+  legend order, instead of a generated one; others are still generated.
+  `--colormap FILE` gives colours that take precedence. The UK Biobank palette
+  (`examples/colormaps/ukbb.json`) is now in the package.
+
 - **All of Us workflows: `aou_prepare.wdl` and `analyse.wdl`.** For All of Us
   researchers on Verily Workbench, starting from the release in their own
   workspace. `aou_prepare` (once per release) acquires the release's arrays and

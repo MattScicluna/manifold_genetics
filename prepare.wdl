@@ -14,6 +14,10 @@ version 1.0
 ## read from reference_labels when given, otherwise from the FID (`<Pop>` or
 ## `forReference<Pop>`), as in aou_prepare.wdl.
 ##
+## Colours: labels with published colours (HGDP+1KGP, UK Biobank, All of Us)
+## get them; any other value gets a generated one. cohort_colormap and
+## reference_colormap override them.
+##
 ## The cohort's chromosomes are expected as `chr1`, as in the All of Us and
 ## UK Biobank GRCh38 releases; the reference's may be either (see
 ## reference_has_chr_prefix).
@@ -33,6 +37,9 @@ workflow prepare {
         # sample_id plus columns (e.g. Population); default: population from the FID.
         File? reference_labels
         Boolean reference_has_chr_prefix = false
+        # Optional colormap JSONs (column -> value -> colour) that take precedence.
+        File? cohort_colormap
+        File? reference_colormap
         String docker = "mattscicluna/manifold-genetics:main"
         Int cpu = 32
         Int memory_gb = 128
@@ -51,6 +58,8 @@ workflow prepare {
             reference_fam = reference_fam,
             reference_labels = reference_labels,
             reference_has_chr_prefix = reference_has_chr_prefix,
+            cohort_colormap = cohort_colormap,
+            reference_colormap = reference_colormap,
             docker = docker,
             cpu = cpu,
             memory_gb = memory_gb,
@@ -75,6 +84,8 @@ task prepare_cohort {
         File reference_fam
         File? reference_labels
         Boolean reference_has_chr_prefix
+        File? cohort_colormap
+        File? reference_colormap
         String docker
         Int cpu
         Int memory_gb
@@ -104,9 +115,11 @@ task prepare_cohort {
         fi
 
         manifold-genetics acquire custom \
-            --fit-plink "$PWD/ref_raw/reference" --labels "${ref_labels}" --out ref
+            --fit-plink "$PWD/ref_raw/reference" --labels "${ref_labels}" \
+            ~{"--colormap " + reference_colormap} --out ref
         manifold-genetics acquire custom \
-            --fit-plink "$PWD/cohort_raw/cohort" --labels "~{cohort_labels}" --out cohort
+            --fit-plink "$PWD/cohort_raw/cohort" --labels "~{cohort_labels}" \
+            ~{"--colormap " + cohort_colormap} --out cohort
         manifold-genetics preprocess ref/config.yaml cohort/config.yaml \
             --preset harmonise --skip-wrayner --threads ~{cpu} \
             ~{if reference_has_chr_prefix then "--fit-has-chr-prefix" else ""} \

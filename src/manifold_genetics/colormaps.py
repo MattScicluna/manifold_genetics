@@ -114,3 +114,64 @@ def _write_generated_colormap(
     import json as _json
 
     path.write_text(_json.dumps(colormap, indent=2) + "\n")
+
+
+# The UK Biobank colours of the published figures, verbatim from
+# examples/colormaps/ukbb.json. Order is that file's: it is the legend order,
+# and the first entries are drawn on top.
+_UKBB_ANCESTRY_COLOURS = {
+    "African": "#228B22",
+    "Caribbean": "#66CDAA",
+    "Any other Black background": "#2E8B57",
+    "Black or Black British": "#006400",
+    "White and Black African": "#8FBC8F",
+    "Irish": "#8A2BE2",
+    "White": "#BA55D3",
+    "Any other white background": "#DDA0DD",
+    "British": "#9370DB",
+    "Indian": "#FFA500",
+    "Pakistani": "#FF8C00",
+    "Bangladeshi": "#FFB347",
+    "Chinese": "#1E90FF",
+    "Asian or Asian British": "#4682B4",
+    "White and Black Caribbean": "#D3D3D3",
+    "White and Asian": "#D3D3D3",
+    "Any other mixed background": "#D3D3D3",
+    "Mixed": "#D3D3D3",
+    "Other ethnic group": "#D3D3D3",
+    "Prefer not to answer": "#D3D3D3",
+    "Do not know": "#D3D3D3",
+    "Any other Asian background": "#D3D3D3",
+}
+_UKBB_SUPERPOPULATION_COLOURS = {
+    "AFR": "#228B22",
+    "EUR": "#9370DB",
+    "CSA": "#FFA500",
+    "EAS": "#1E90FF",
+    "MID": "#808080",
+    "AMR": "#FF0000",
+    "Do not know": "#D3D3D3",
+}
+
+
+def published_colours() -> dict:
+    """Every published colour, by label column: HGDP+1KGP, UK Biobank, All of Us.
+
+    `acquire custom` passes these as ``known``, so a cohort labelled the way a
+    published one was is drawn in the published colours without being told to.
+    Columns shared between cohorts (``Population``: HGDP populations, UK Biobank
+    superpopulations) merge, as their values do not overlap.
+    """
+    from .aou import AOU_COLOURS
+    from .hgdp import _HGDP_POPULATION_COLOURS, _HGDP_REGION_COLOURS
+
+    colours: dict = {}
+    for column, mapping in (
+        ("Population", _HGDP_POPULATION_COLOURS),
+        ("Genetic_region_merged", _HGDP_REGION_COLOURS),
+        ("self_described_ancestry", _UKBB_ANCESTRY_COLOURS),
+        ("Population", _UKBB_SUPERPOPULATION_COLOURS),
+        *AOU_COLOURS.items(),
+    ):
+        colours.setdefault(column, {}).update(mapping)
+    return colours

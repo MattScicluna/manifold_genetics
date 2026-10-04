@@ -79,6 +79,11 @@ then runs on it unchanged.
 | `reference_bed/bim/fam` | HGDP+1KGP, restricted to the cohort's positions |
 | `reference_labels` | optional CSV: `sample_id`, `Population`, ...; default: population from the FID |
 | `reference_has_chr_prefix` | `true` if the reference's chromosomes are `chr1` |
+| `cohort_colormap`, `reference_colormap` | optional colormap JSONs that take precedence |
+
+Labels with published colours (HGDP+1KGP populations and regions, UK Biobank
+`self_described_ancestry` and superpopulations, All of Us race and ethnicity)
+are drawn in them; any other value gets a generated colour.
 
 The reference is what differs between biobanks: the same HGDP+1KGP samples,
 restricted to the positions on your array, so the intersection keeps every SNP

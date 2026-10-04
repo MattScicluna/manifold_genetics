@@ -487,6 +487,7 @@ def cmd_acquire(args):
                 preset=args.preset,
                 n_pcs=args.n_pcs,
                 force=args.force,
+                colormap=args.colormap,
             )
         else:
             config = acquire_hgdp(
@@ -1607,6 +1608,11 @@ def main(argv: Optional[List[str]] = None):
     )
     acquire_parser.add_argument(
         "--project-labels", help="custom only: labels for the project set, if they differ"
+    )
+    acquire_parser.add_argument(
+        "--colormap",
+        help="custom only: colormap JSON whose colours take precedence "
+        "(default: the published colours for labels that have them)",
     )
     acquire_parser.add_argument(
         "--preset",
