@@ -171,7 +171,6 @@ task subsample_pca {
             *) mkdir -p "${dest}" && cp -R publish/. "${dest}/" ;;
         esac
 
-        ls "~{name}"/outputs/pca/*.csv > pca_csvs.txt
     >>>
 
     output {
@@ -180,7 +179,11 @@ task subsample_pca {
         File out_colormap_project = "~{name}/colormap_project.json"
         File out_fit_labels = "~{name}/data/fit_labels.csv"
         File out_project_labels = "~{name}/data/project_labels.csv"
-        Array[File] pca_csvs = read_lines("pca_csvs.txt")
+        # glob, not read_lines: on Google Batch, Cromwell copies back only the
+        # outputs it can name before the task runs, and glob is how it names files
+        # known only afterwards. A read_lines list was never copied, so the next
+        # task's inputs did not exist.
+        Array[File] pca_csvs = glob("~{name}/outputs/pca/*.csv")
     }
 
     runtime {
@@ -250,13 +253,16 @@ task phate {
             *) mkdir -p "${dest}" && cp -R publish/. "${dest}/" ;;
         esac
 
-        find exp/outputs/embeddings -name '*.csv' > embeddings.txt
-        find exp/outputs/figures -type f \( -name '*.png' -o -name '*.html' -o -name '*.mp4' \) > figures.txt
     >>>
 
     output {
-        Array[File] embeddings = read_lines("embeddings.txt")
-        Array[File] figures = read_lines("figures.txt")
+        # glob, as in subsample_pca. glob does not recurse, so one per figure folder.
+        Array[File] embeddings = glob("exp/outputs/embeddings/*.csv")
+        Array[File] figures = flatten([
+            glob("exp/outputs/figures/embeddings/*.png"),
+            glob("exp/outputs/figures/pca/*.png"),
+            glob("exp/outputs/figures/embeddings_3d/*")
+        ])
     }
 
     runtime {
