@@ -60,6 +60,44 @@ def test_two_cohorts_intersect_to_the_shared_variants(tmp_path, tools):
     assert _variants(loaded["fit_plink"]) == _variants(loaded["project_plink"])
 
 
+def test_the_biobank_may_name_chromosomes_either_way(tmp_path, tools):
+    """All of Us and UK Biobank write `chr1`, CARTaGENE `1`; prepare.wdl takes
+    any of them, so the harmonise path must come out the same for both."""
+    import shutil
+
+    acquire_synthetic(tmp_path / "ref", seed=1)
+    acquire_synthetic(tmp_path / "bb", seed=2)
+    shutil.copytree(tmp_path / "bb", tmp_path / "bb_chr")
+    for bim in (tmp_path / "bb_chr/data").glob("*.bim"):
+        bim.write_text("".join("chr" + line for line in bim.read_text().splitlines(True)))
+
+    outputs = []
+    for biobank in ("bb", "bb_chr"):
+        config = preprocess(
+            tmp_path / "ref/config.yaml",
+            tmp_path / f"out_{biobank}",
+            project_config=tmp_path / f"{biobank}/config.yaml",
+            options=PreprocessOptions(
+                preset="harmonise",
+                skip_wrayner=True,
+                skip_giab=True,
+                min_common_snps=100,
+                memory=2000,
+                threads=2,
+            ),
+        )
+        loaded = load_config(config)
+        outputs.append(
+            {
+                side: (open(f"{loaded[side]}.bim").read(), _samples(loaded[side]))
+                for side in ("fit_plink", "project_plink")
+            }
+        )
+
+    assert outputs[0] == outputs[1]
+    assert outputs[0]["project_plink"][0], "the intersection should keep variants"
+
+
 def test_the_output_dry_runs(tmp_path, tools):
     from manifold_genetics.cli import main
 

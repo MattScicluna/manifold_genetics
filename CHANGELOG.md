@@ -19,6 +19,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   workflows with Apptainer on a cluster (`wdl/miniwdl.apptainer.cfg`).
   `topmed_reference` turns on WRayner against TOPMed, as in `aou_prepare.wdl`;
   without it WRayner is skipped, as in the published UK Biobank flow.
+  The biobank's chromosomes may be `chr1` or `1` (CARTaGENE); `preprocess`
+  gives the same result for both, now covered by a test.
 
 - **`acquire custom` uses the published colours.** Label values with a
   published colour (HGDP+1KGP, UK Biobank, All of Us) get it, in the published

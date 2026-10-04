@@ -61,17 +61,17 @@ Follow the All of Us dissemination rules before sharing figures or counts.
 
 ## Any biobank (UK Biobank, your own)
 
-`prepare.wdl` replaces step 1 for a cohort you already have as PLINK files
-(chromosomes as `chr1`, GRCh38). It runs the same `preprocess` step as
-`aou_prepare`, writes the same `<output_dir>/prepared/`, and `analyse.wdl`
-then runs on it unchanged.
+`prepare.wdl` replaces step 1 for a cohort you already have as GRCh38 PLINK
+files, with chromosomes as `chr1` or `1`. It runs the same `preprocess` step as
+`aou_prepare`, writes the same `<output_dir>/prepared/`, and `analyse.wdl` then
+runs on it unchanged.
 
 | input | value |
 |---|---|
 | `output_dir` | a bucket or a local path |
 | `cohort_bed/bim/fam` | the biobank's genotypes |
 | `cohort_labels` | CSV: `sample_id` plus the columns to colour by |
-| `reference_bed/bim/fam` | HGDP+1KGP, restricted to the cohort's positions |
+| `reference_bed/bim/fam` | HGDP+1KGP, restricted to the cohort's positions (below) |
 | `reference_labels` | optional CSV: `sample_id`, `Population`, ...; default: population from the FID |
 | `reference_has_chr_prefix` | `true` if the reference's chromosomes are `chr1` |
 | `topmed_reference` | optional `bravo-dbsnp-all.hrc_format.tab.gz`: turns on the WRayner check against TOPMed, as in `aou_prepare`; without it WRayner is skipped, as in the published UK Biobank preprocessing |
@@ -81,19 +81,38 @@ Labels with published colours (HGDP+1KGP populations and regions, UK Biobank
 `self_described_ancestry` and superpopulations, All of Us race and ethnicity)
 are drawn in them; any other value gets a generated colour.
 
-The reference is what differs between biobanks: the same HGDP+1KGP samples,
-restricted to the positions on your array, so the intersection keeps every SNP
-the two share. Restrict by position, since variant IDs often differ (`chr1:...`
-against `1:...`):
+### The reference
+
+The reference is the one input that differs between biobanks: the same
+HGDP+1KGP samples, restricted to the positions on your array **before** any LD
+pruning, so that pruning happens after the intersection. A panel pruned on its
+own first keeps only a sample of positions, and few of them are on any given
+array: CARTaGENE's GSA array shares 18,796 positions with the pruned panel,
+below the 50,000 `preprocess` requires. Restrict an unpruned panel by position,
+since variant IDs often differ (`chr1:...` against `1:...`):
 
 ```bash
 awk '{ sub(/^chr/, "", $1); print $1, $4, $4, $2 }' cohort.bim > positions.txt
-plink --bfile hgdp1kgp --extract range positions.txt --make-bed --out reference
+plink --bfile hgdp1kgp_unpruned --extract range positions.txt --make-bed --out reference
 ```
 
-For `analyse`, choose experiments for your labels. For UK Biobank (as in
-`wdl/analyse.biobank.inputs.json`): 10,000 British, 5,000 Irish and everyone
-else (59,264 samples), and a geometric sketch of 60,000 to match:
+A public build of that panel is
+[#172](https://github.com/MattScicluna/manifold_genetics/issues/172).
+
+### UK Biobank, end to end
+
+The published UK Biobank figures, rerun with these two workflows (miniwdl +
+Apptainer on a cluster, 486,748 samples):
+
+- **`prepare`**: the UK Biobank array with HGDP+1KGP at its positions, 5
+  minutes, giving 3,340 reference samples and 120,849 SNPs, as in the
+  manuscript.
+- **`analyse`**: the experiments in `wdl/analyse.biobank.inputs.json`:
+  `balanced` (10,000 British, 5,000 Irish and everyone else, 59,264 samples) and
+  `geosketch_60k` to match. 3 h 20 on 16 CPUs and 128 GB, with
+  `pca_memory_gb` 100 and `phate_memory_gb` 32; peak memory 118 GB while both
+  experiments ran their PCA at once. `geosketch` takes longer because it runs
+  PCA twice: once on a random 100,000 to choose the sketch, then on the sketch.
 
 ```json
 "analyse.experiments": [
@@ -101,6 +120,9 @@ else (59,264 samples), and a geometric sketch of 60,000 to match:
   {"name": "geosketch_60k", "subsample_args": "--geosketch 60000 --seed 42"}
 ]
 ```
+
+Each experiment's folder has PCA, the 2-D and 3-D PHATE embeddings, their
+figures, and the rotating 3-D video (`outputs/figures/embeddings_3d/*.mp4`).
 
 ## Outside Verily
 
@@ -113,5 +135,22 @@ miniwdl run analyse.wdl -i analyse.json
 ```
 
 On a cluster without Docker, `wdl/miniwdl.apptainer.cfg` runs the same image
-with Apptainer: set its paths, pull the image once as its comments show, and
-run inside a batch job with `MINIWDL_CFG=wdl/miniwdl.apptainer.cfg`.
+with Apptainer. Set its paths, and pull the image once on a node with internet,
+as its comments show. Two of its settings matter:
+
+- `allow_any_input = true`: `analyse.wdl` reads files under `cohort_dir`,
+  which miniwdl otherwise refuses.
+- `cpu_max` and `memory_max`: set them to the job's allocation. miniwdl
+  otherwise schedules tasks against the whole node.
+
+Then run both steps in one batch job, for example with SLURM:
+
+```bash
+#!/bin/bash
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
+#SBATCH --time=12:00:00
+export MINIWDL_CFG=wdl/miniwdl.apptainer.cfg
+miniwdl run prepare.wdl -i prepare.json
+miniwdl run analyse.wdl -i analyse.json
+```

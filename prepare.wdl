@@ -23,8 +23,8 @@ version 1.0
 ## aou_prepare.wdl. Without it the check is skipped, as in the published UK
 ## Biobank preprocessing.
 ##
-## The cohort's chromosomes are expected as `chr1`, as in the All of Us and
-## UK Biobank GRCh38 releases; the reference's may be either (see
+## GRCh38 throughout. The cohort's chromosomes may be `chr1` (All of Us, UK
+## Biobank) or `1` (CARTaGENE); the reference's may be either too (see
 ## reference_has_chr_prefix).
 
 workflow prepare {
