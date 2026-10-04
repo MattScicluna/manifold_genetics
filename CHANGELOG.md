@@ -97,6 +97,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **WRayner's harmonisation fits on disk at biobank scale.** Its generated
+  `Run-plink.sh` writes a full copy of the genotypes at each of five steps,
+  deletes the temporary ones only at the end, then splits the result per
+  chromosome; on All of Us v9 (~230 GB a copy) that peaked near 2 TB and filled
+  `aou_prepare`'s 1 TB disk. The shell now runs the same commands in the same
+  order but removes each temporary copy once the next step has read it, and
+  skips the per-chromosome split nothing reads — byte-identical output, about
+  half the peak. `aou_prepare`'s default disk is now 2 TB.
+
 - **WRayner's log no longer floods with one warning per X/Y/MT SNP.** The
   checker expects numeric chromosome codes and printed `Argument "X" isn't
   numeric` for every sex-chromosome SNP — tens of thousands of lines on a
