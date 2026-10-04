@@ -279,7 +279,8 @@ jobs:
             python -c "import torch, neural_admixture, plotly, imageio_ffmpeg, pandas_gbq; print(\"extras ok\")" &&
             command -v gsutil && command -v bq && command -v gcloud &&
             test -s /opt/manifold-tools/preprocessing/giab/GRCh38_alldifficultregions.bed &&
-            grep -q "version = .4.3" /opt/manifold-tools/preprocessing/wrayner/HRC-1000G-check-bim.pl'
+            grep -q "version = .4.3" /opt/manifold-tools/preprocessing/wrayner/HRC-1000G-check-bim.pl &&
+            perl -c /opt/manifold-tools/preprocessing/wrayner/HRC-1000G-check-bim.pl'
 
   # The WDL version of the workflow (Cromwell, e.g. Verily Workbench) is valid,
   # alone and with its example inputs.
