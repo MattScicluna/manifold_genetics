@@ -13,8 +13,8 @@ For more details see our upcoming publication.
 Below are PHATE embeddings for UK Biobank and All of Us cohorts.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/ukbb_phate.png" width="45%" alt="UK Biobank PHATE embedding coloured by self-described ancestry"/>
-  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/aou_phate.png" width="45%" alt="All of Us PHATE embedding coloured by ancestry"/>
+  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/ukbb_phate_3d.gif" width="45%" alt="Rotating 3D UK Biobank PHATE embedding coloured by self-described ancestry"/>
+  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/aou_phate_3d.gif" width="45%" alt="Rotating 3D All of Us PHATE embedding coloured by race/ethnicity"/>
 </p>
 
 ## This Package Returns the Following Things
