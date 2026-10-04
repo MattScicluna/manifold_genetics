@@ -9,8 +9,8 @@ An end-to-end pipeline from PLINK genotypes to publication figures: PCA →
 admixture → manifold embedding → visualisation → metrics.
 
 <p align="center">
-  <img src="assets/ukbb_phate.png" width="30%" alt="UKBB PHATE embedding coloured by self-described ancestry"/>
-  <img src="assets/aou_phate.png" width="30%" alt="All of Us PHATE embedding coloured by ancestry"/>
+  <img src="assets/ukbb_phate_3d.gif" width="45%" alt="Rotating 3D UKBB PHATE embedding coloured by self-described ancestry"/>
+  <img src="assets/aou_phate_3d.gif" width="45%" alt="Rotating 3D All of Us PHATE embedding coloured by race/ethnicity"/>
 </p>
 
 ## Installation
