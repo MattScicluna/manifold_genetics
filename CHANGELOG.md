@@ -97,6 +97,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **`analyse.wdl` passes PCA results between its tasks on Google Batch.** Its
+  outputs were listed with `read_lines`, which the local Cromwell backend
+  honours but Google Batch does not: Cromwell copies back only the outputs it
+  can name before a task runs, so the PCA CSVs never reached the bucket and the
+  PHATE task failed copying them in. They are `glob`s now.
+
 - **A missing perl fails `preprocess` in seconds, not an hour in.** When
   WRayner will run, `preprocess` now compiles the installed checker with
   `perl -c` (which loads every module it uses) before starting the shell, and
