@@ -29,6 +29,7 @@ of your own for results (Resources → New → Cloud Storage bucket).
     | `workspace_cdr` | `$WORKSPACE_CDR` in any app |
     | `cdr_storage_path` | `$CDR_STORAGE_PATH` (default: v9) |
     | `reference_bed/bim/fam` | the HGDP+1KGP reference, population in the FID |
+    | `topmed_reference` | optional `bravo-dbsnp-all.hrc_format.tab.gz`; turns on the WRayner check against TOPMed, as the published preprocessing ran it |
 
 3. **Run `analyse`** with `cohort_dir` = `<output_dir>/prepared` and the same
    `output_dir`. Each experiment writes `<output_dir>/<name>/`: PCA, embeddings,
@@ -37,14 +38,8 @@ of your own for results (Resources → New → Cloud Storage bucket).
 The default experiments are the manuscript's: `balanced` (10,000 each of the
 four largest groups plus everyone else) and `geosketch_90k`. Each is a name and
 the arguments to [`subsample`](cli.md#subsample); a list of your own replaces
-them. The geosketch size matches the balanced set's, so UK Biobank, whose
-balanced set is 59,264, uses 60,000:
-
-```json
-"analyse.experiments": [
-  {"name": "geosketch_60k", "subsample_args": "--geosketch 60000 --seed 42"}
-]
-```
+them. Keep the geosketch size close to the balanced set's, so the two fit sets
+are comparable.
 
 PHATE is its own task, so with call caching a change to `knn`, `t` or
 `n_landmark` reruns only PHATE and the figures.
