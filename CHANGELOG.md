@@ -97,6 +97,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **A missing perl fails `preprocess` in seconds, not an hour in.** When
+  WRayner will run, `preprocess` now compiles the installed checker with
+  `perl -c` (which loads every module it uses) before starting the shell, and
+  stops with what to do — install perl, use the container, or pass
+  `--skip-wrayner` — instead of failing at the WRayner step deep into the run.
+  Runs that skip WRayner (the UK Biobank flow) are unaffected.
+
 - **WRayner works again, and `aou_prepare` runs it.** The checker's upstream
   URL returns 404, so `--preset harmonise` died at its WRayner step everywhere.
   `HRC-1000G-check-bim` v4.3.0 (MIT, William Rayner) now ships with the package,

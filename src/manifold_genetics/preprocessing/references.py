@@ -54,6 +54,35 @@ def ensure_wrayner(tools_dir: Path) -> Path:
     return target
 
 
+def check_wrayner_runs(checker: Path) -> None:
+    """Compile the checker with perl, which loads every module it uses.
+
+    Run before the hours-long shell: a machine without perl, or with only a
+    minimal one (Debian's perl-base lacks IO::Uncompress::Gunzip), otherwise
+    fails at the WRayner step, well into the run.
+
+    Raises:
+        RuntimeError: perl is missing or cannot load the checker's modules.
+    """
+    import subprocess
+
+    perl = shutil.which("perl")
+    remedy = (
+        "Install perl with its standard modules (Debian/Ubuntu: `apt install perl`), "
+        "run in the manifold-genetics container, or pass --skip-wrayner to skip the "
+        "check knowingly."
+    )
+    if perl is None:
+        raise RuntimeError(f"WRayner needs perl, which is not on PATH. {remedy}")
+    result = subprocess.run([perl, "-c", str(checker)], capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        raise RuntimeError(
+            f"WRayner's checker does not run with {perl}: "
+            f"{detail[0] if detail else 'perl -c failed'}. {remedy}"
+        )
+
+
 def _install_wrayner(url: str, target: Path, fetch: Callable[[str, Path], None]) -> None:
     """Fetch, unzip and patch the checker in a scratch directory, then move it
     into place. The move is the last step and atomic, so an interruption
@@ -128,6 +157,7 @@ def install_harmonisation_references(
 __all__ = [
     "HARMONISATION_REFERENCES",
     "default_tools_dir",
+    "check_wrayner_runs",
     "ensure_wrayner",
     "install_harmonisation_references",
 ]
