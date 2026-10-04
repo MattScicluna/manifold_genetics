@@ -1,0 +1,15 @@
+{
+  "analyse.cohort_dir": "gs://<bucket>/ukbb/prepared",
+  "analyse.output_dir": "gs://<bucket>/ukbb",
+  "analyse.experiments": [
+    {
+      "name": "balanced",
+      "subsample_args": "--group 'self_described_ancestry=^British$:10000' --group 'self_described_ancestry=^Irish$:5000' --include-rest --seed 42"
+    },
+    {
+      "name": "geosketch_60k",
+      "subsample_args": "--geosketch 60000 --seed 42"
+    }
+  ],
+  "analyse.docker": "mattscicluna/manifold-genetics:sha-97ca2ba"
+}

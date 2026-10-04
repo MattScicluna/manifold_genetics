@@ -8,6 +8,7 @@ container](nextflow.md#container).
 |---|---|
 | `manifold_genetics.wdl` | `manifold-genetics pipeline` as one task, for a cohort you already have |
 | `aou_prepare.wdl` | All of Us, step 1: fetch a release and intersect it with HGDP+1KGP |
+| `prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
 | `analyse.wdl` | step 2, any prepared cohort: subsample, PCA, PHATE, 2-D and 3-D figures |
 
 Example inputs are in `wdl/`.
@@ -63,23 +64,53 @@ Follow the All of Us dissemination rules before sharing figures or counts.
     internal extract, so for now the step cannot be reproduced from outside
     ([#172](https://github.com/MattScicluna/manifold_genetics/issues/172)).
 
+## Any biobank (UK Biobank, your own)
+
+`prepare.wdl` replaces step 1 for a cohort you already have as PLINK files
+(chromosomes as `chr1`, GRCh38). It runs the same `preprocess` step as
+`aou_prepare`, writes the same `<output_dir>/prepared/`, and `analyse.wdl`
+then runs on it unchanged.
+
+| input | value |
+|---|---|
+| `output_dir` | a bucket or a local path |
+| `cohort_bed/bim/fam` | the biobank's genotypes |
+| `cohort_labels` | CSV: `sample_id` plus the columns to colour by |
+| `reference_bed/bim/fam` | HGDP+1KGP, restricted to the cohort's positions |
+| `reference_labels` | optional CSV: `sample_id`, `Population`, ...; default: population from the FID |
+| `reference_has_chr_prefix` | `true` if the reference's chromosomes are `chr1` |
+
+The reference is what differs between biobanks: the same HGDP+1KGP samples,
+restricted to the positions on your array, so the intersection keeps every SNP
+the two share. Restrict by position, since variant IDs often differ (`chr1:...`
+against `1:...`):
+
+```bash
+awk '{ sub(/^chr/, "", $1); print $1, $4, $4, $2 }' cohort.bim > positions.txt
+plink --bfile hgdp1kgp --extract range positions.txt --make-bed --out reference
+```
+
+For `analyse`, choose experiments for your labels. For UK Biobank (as in
+`wdl/analyse.biobank.inputs.json`): 10,000 British, 5,000 Irish and everyone
+else (59,264 samples), and a geometric sketch of 60,000 to match:
+
+```json
+"analyse.experiments": [
+  {"name": "balanced", "subsample_args": "--group 'self_described_ancestry=^British$:10000' --group 'self_described_ancestry=^Irish$:5000' --include-rest --seed 42"},
+  {"name": "geosketch_60k", "subsample_args": "--geosketch 60000 --seed 42"}
+]
+```
+
 ## Outside Verily
 
 Any WDL runner works. `output_dir` may be a local path, and the tasks then copy
 results there instead of to a bucket:
 
 ```bash
-miniwdl run analyse.wdl -i inputs.json
+miniwdl run prepare.wdl -i prepare.json
+miniwdl run analyse.wdl -i analyse.json
 ```
 
-On a cluster without Docker, miniwdl's Singularity/Apptainer backend runs the
-same image (`[scheduler] container_backend = singularity`). Pull it once on a
-node with internet, as miniwdl's cache expects it:
-
-```bash
-apptainer pull <cache>/docker___mattscicluna_manifold-genetics_<tag>.sif \
-    docker://mattscicluna/manifold-genetics:<tag>
-```
-
-and bind the filesystems holding inputs and `output_dir` with
-`run_options = ["--containall", "--bind", "/lustre06,/lustre07"]` (your paths).
+On a cluster without Docker, `wdl/miniwdl.apptainer.cfg` runs the same image
+with Apptainer: set its paths, pull the image once as its comments show, and
+run inside a batch job with `MINIWDL_CFG=wdl/miniwdl.apptainer.cfg`.

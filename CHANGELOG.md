@@ -9,6 +9,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Any-biobank workflow: `prepare.wdl`.** Step 1 for a cohort you already
+  have as PLINK files (UK Biobank, or your own), producing the same prepared
+  cohort as `aou_prepare.wdl`, which `analyse.wdl` takes unchanged. It runs the
+  same `preprocess --preset harmonise --skip-wrayner` step; what differs between
+  biobanks is the reference, the same HGDP+1KGP samples restricted to the
+  cohort's array positions. Example inputs for UK Biobank-style experiments
+  (`wdl/analyse.biobank.inputs.json`) and a miniwdl config for running the
+  workflows with Apptainer on a cluster (`wdl/miniwdl.apptainer.cfg`).
+
 - **All of Us workflows: `aou_prepare.wdl` and `analyse.wdl`.** For All of Us
   researchers on Verily Workbench, starting from the release in their own
   workspace. `aou_prepare` (once per release) acquires the release's arrays and
