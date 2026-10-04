@@ -68,8 +68,9 @@ writes is the cohort alone; the manuscript's figures projected it onto HGDP+1KGP
 which is `acquire hgdp --archive gs://…/1KGPHGDP.tar.gz` followed by
 `preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`
 (see [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench)).
-It is a port of the shell script that produced the published figures and has
-not yet been run inside the workbench itself (issue #124).
+It is a port of the shell script that produced the published figures, and has
+run inside the workbench on the v9 release (via the
+[`aou_prepare` workflow](workflows.md#all-of-us-verily-workbench)).
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.
