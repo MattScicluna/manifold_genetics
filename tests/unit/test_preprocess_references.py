@@ -106,3 +106,40 @@ def test_an_interrupted_wrayner_install_leaves_no_checker_behind(tmp_path, monke
 
     assert not (tmp_path / "wrayner/HRC-1000G-check-bim.pl").exists()
     assert list((tmp_path / "wrayner").iterdir()) == [], "the scratch directory is removed"
+
+
+class TestBundledChecker:
+    """The checker ships with the package: its upstream URL returns 404."""
+
+    def test_it_is_the_published_v4_3_0(self):
+        import hashlib
+
+        digest = hashlib.sha256(references.WRAYNER_ZIP.read_bytes()).hexdigest()
+        assert digest == "c9bc5a02f6209ffcf5c0e09e72f6f0f06dd6f2ed97569a89543edbd3d1077549"
+
+    def test_it_installs_with_no_network(self, tmp_path, monkeypatch):
+        import shutil
+        import urllib.request
+
+        real = urllib.request.urlretrieve
+
+        def local_only(url, destination):
+            assert url.startswith("file:"), url
+            return real(url, destination)
+
+        monkeypatch.setattr(urllib.request, "urlretrieve", local_only)
+        monkeypatch.setattr(shutil, "which", lambda name: None)  # no curl/wget fallback
+
+        target = references.ensure_wrayner(tmp_path)
+
+        text = target.read_text()
+        assert target == tmp_path / "wrayner/HRC-1000G-check-bim.pl"
+        assert "my $version = '4.3';" in text
+        assert '"l|plink=s"' in text, "the shell passes -l <plink>"
+        assert "#" + references._VCF_LINE in text, "patched like a shell-fetched copy"
+
+    def test_it_is_left_alone_once_installed(self, tmp_path):
+        target = references.ensure_wrayner(tmp_path)
+        target.write_text("a hand-placed copy")
+
+        assert references.ensure_wrayner(tmp_path).read_text() == "a hand-placed copy"

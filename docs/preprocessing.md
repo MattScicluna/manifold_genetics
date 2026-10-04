@@ -107,34 +107,12 @@ prefetch them on a login node:
 manifold-genetics setup --preprocessing
 ```
 
-**The WRayner download currently fails, everywhere.** Its upstream URL
-(`https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip`)
-returns 404 as of this release. `setup --preprocessing` attempts all three
-references regardless, so today it places GIAB and TOPMed, then exits non-zero
-with a message naming the WRayner URL and the exact path where a hand-placed
-checker goes. The shell itself fetches the same URL when it finds no checker,
-so `--preset harmonise` dies at its WRayner step on any machine, internet or
-not, until the file is in place. Until upstream is back:
-
-1. Place a copy of `HRC-1000G-check-bim.pl` (MIT-licensed; it circulates in
-   many imputation pipelines) at `<tools-dir>/wrayner/HRC-1000G-check-bim.pl`,
-   where `<tools-dir>` is the tool cache's `preprocessing/` subdirectory:
-
-    ```bash
-    python -c "from manifold_genetics.preprocessing.references import default_tools_dir; print(default_tools_dir())"
-    ```
-
-    Comment out its `--recode vcf` line — the one beginning
-    `print SH "$plink --bfile $newfile --real-ref-alleles --recode vcf` — as
-    the fetcher does, so it does not write a VCF nobody reads.
-
-2. Re-run `manifold-genetics setup --preprocessing`. It is idempotent: it
-   leaves GIAB, TOPMed and the hand-placed checker alone and fetches only
-   what is still missing.
-
-Or pass `--tools-dir DIR` to `preprocess` with a directory laid out the same
-way. `--skip-wrayner` sidesteps the whole step, which is what the UK Biobank
-flow does.
+The WRayner checker (v4.3.0, MIT-licensed, by William Rayner) ships with the
+package, because its upstream URL now returns 404: `preprocess` installs the
+bundled copy and needs no network for it. If WRayner runs but writes no
+corrections — a truncated or wrong TOPMed panel, say — `preprocess` stops rather
+than carry on unharmonised. `--skip-wrayner` skips the step, which is what the
+UK Biobank flow does.
 
 ### Resources
 

@@ -23,7 +23,7 @@ from .cohort import (
     write_cohort_config,
 )
 from .flags import PreprocessOptions, intermediate_signature, shell_argv
-from .references import default_tools_dir
+from .references import default_tools_dir, ensure_wrayner
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,9 @@ def preprocess(
 
     if options.tools_dir is None:
         options = dataclasses.replace(options, tools_dir=default_tools_dir())
+    if not options.effective_flags().get("skip_wrayner"):
+        # Bundled with the package, so the shell never needs its dead URL.
+        ensure_wrayner(Path(options.tools_dir))
 
     temp_dir = (
         Path(options.temp_dir).expanduser().resolve() if options.temp_dir else data_dir / "temp"

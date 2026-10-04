@@ -39,6 +39,7 @@ COPY src ./src
 RUN pip install --extra-index-url "${TORCH_INDEX}" ".[${EXTRAS}]" \
  && manifold-genetics setup \
  && python -c "from manifold_genetics.preprocessing.references import GIAB_URL, _install_giab, default_tools_dir; from manifold_genetics.utils.tools import fetch_url; t = default_tools_dir() / 'giab/GRCh38_alldifficultregions.bed'; t.parent.mkdir(parents=True, exist_ok=True); _install_giab(GIAB_URL, t, fetch_url)" \
+ && python -c "from manifold_genetics.preprocessing.references import default_tools_dir, ensure_wrayner; ensure_wrayner(default_tools_dir())" \
  && chmod -R a+rX /opt/manifold-tools \
  && manifold-genetics --help > /dev/null
 
