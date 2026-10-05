@@ -68,8 +68,9 @@ writes is the cohort alone; the manuscript's figures projected it onto HGDP+1KGP
 which is `acquire hgdp --archive gs://…/1KGPHGDP.tar.gz` followed by
 `preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`
 (see [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench)).
-It is a port of the shell script that produced the published figures and has
-not yet been run inside the workbench itself (issue #124).
+It is a port of the shell script that produced the published figures, and has
+run inside the workbench on the v9 release (via the
+[`aou_prepare` workflow](workflows.md#all-of-us-verily-workbench)).
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.
@@ -118,7 +119,7 @@ components.
 | `admixture` | PLINK prefixes | Q matrices per K |
 | `embed` | PCA CSV | embedding CSV (2-D by default, `--n-components 3` for 3-D) |
 | `plot` | embedding CSV + labels + colormap | scatter per label column |
-| `plot-3d` | 3-D embedding CSV + labels + colormap | rotatable HTML per label column |
+| `plot-3d` | 3-D embedding CSV + labels + colormap | rotatable HTML and MP4 per label column |
 | `plot-pca` | PCA CSV | PC-pair grid |
 | `plot-projection` | fit and project embeddings | both cohorts on one figure |
 | `plot-admixture` | Q matrices | stacked bar plots |
@@ -149,13 +150,17 @@ manifold-genetics plot-3d --input out/phate_3d.csv \
 `--n-components` works on `embed` and `pipeline`, for every method. It defaults
 to 2, so existing commands are unchanged.
 
+At biobank scale pass `--n-landmark 10000 --random-landmarking`. Without
+landmarks PHATE needs dense n × n memory, and a run that cannot fit is refused
+before it starts.
+
 ### Three-dimensional embeddings
 
 A 3-D scatter is only useful if you can turn it, so `plot-3d` writes a
 standalone interactive HTML file per label column rather than a PNG — open it in
 a browser and drag to rotate; hovering a point names its sample and label.
 
-It needs the optional `plotly` dependency:
+It needs the optional `interactive` extra (plotly, and ffmpeg for the video):
 
 ```bash
 uv sync --extra interactive     # or: pip install 'manifold-genetics[interactive]'

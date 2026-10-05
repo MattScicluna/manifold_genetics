@@ -98,9 +98,9 @@ and a reproduction has to start from the same one.
 
 `intersect-only` needs nothing beyond `plink2`. `harmonise` needs three
 references — the GIAB difficult-regions bed, the WRayner
-`HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 2 GB
-together, most of it TOPMed) — which the shell downloads into the tool cache
-when they are missing. On a cluster whose compute nodes have no internet,
+`HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 4 GB,
+almost all of it TOPMed). The checker ships with the package; the shell
+downloads the other two into the tool cache when they are missing. On a cluster whose compute nodes have no internet,
 prefetch them on a login node:
 
 ```bash
@@ -222,7 +222,8 @@ UK Biobank is `acquire custom` with your own paths — there is nothing for the
 package to fetch and no label schema to derive; the label CSV needs a
 `sample_id` column plus one column per grouping (see
 [Formats](formats.md#inputs)). Then intersect the two, skipping
-WRayner (no internet on the compute node) and MAF filtering on the biobank side:
+WRayner and MAF filtering on the biobank side, as the published UK Biobank
+preprocessing did:
 
 ```bash
 manifold-genetics acquire custom --fit-plink /path/to/hgdp_tgp --labels hgdp_metadata.csv --out ref/
@@ -237,13 +238,13 @@ on the fit side and 486,748 × 120,849 on the project side. Peak memory was
 
 ### All of Us, in the Researcher Workbench
 
-Four commands, each resumable, in a terminal or a notebook cell prefixed with
-`!`. The workbench has internet, so `harmonise` can fetch GIAB and TOPMed as it
-goes — but not WRayner, whose upstream URL is down (see
-[What needs internet](#what-needs-internet)): place `HRC-1000G-check-bim.pl`
-by hand or pass `--tools-dir` before running `preprocess`, or the run dies at
-that step. `acquire hgdp` writes the workbench's HGDP+1KGP panel with `chr`-prefixed
-chromosome names, as the published flow did, hence `--fit-has-chr-prefix`.
+The [`aou_prepare` workflow](workflows.md#all-of-us-verily-workbench) does this
+step on a workflow machine and is the tested route. By hand, it is four
+commands, each resumable, in a terminal or a notebook cell prefixed with `!`.
+The workbench has internet, so `harmonise` can fetch GIAB and TOPMed as it goes;
+the WRayner checker ships with the package. `acquire hgdp` writes the
+workbench's HGDP+1KGP panel with `chr`-prefixed chromosome names, as the
+published flow did, hence `--fit-has-chr-prefix`.
 
 ```bash
 manifold-genetics acquire hgdp --archive gs://fc-secure-47ccf5a8-b9ba-460a-aa03-dea8d260953b/Data/1KGPHGDP.tar.gz --out ref/
@@ -254,9 +255,8 @@ manifold-genetics run proj/config.yaml
 
 `acquire aou` needs the `aou` extra and checks the workbench environment first
 (`GOOGLE_PROJECT`, `WORKSPACE_CDR`, `gsutil`, `bq`), naming everything missing
-at once. Two honest caveats: it was written against the shell script that
-produced the published figures but has not yet been run inside the workbench
-(issue #124); and because that archive carries no relatedness metadata,
+at once. It has run inside the workbench on the v9 release, as part of
+`aou_prepare`. Because that archive carries no relatedness metadata,
 `acquire hgdp --archive` fits on all of its samples, where the public panel
 fits on the 3,400 unrelated.
 
