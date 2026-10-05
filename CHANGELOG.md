@@ -9,6 +9,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **UMAP and PCA beside PHATE in the workflows; 3-D in `analyse_3d.wdl`.**
+  `analyse.wdl` now draws 2-D PHATE, UMAP (`umap_n_neighbors` 15,
+  `umap_min_dist` 0.5) and PCA (PCs 1-2) of each experiment's fit set, all from
+  its 20 PCs. The 3-D figures move to a workflow of their own, `analyse_3d.wdl`,
+  which reads the PCA `analyse` published and draws PHATE, UMAP and PCs 1-3 as
+  HTML and MP4. `analyse` loses `make_3d`, `knn`, `t` and `n_landmark` (2-D
+  PHATE takes the config's settings, as before), and its `phate_*` resources
+  are now `embed_*`.
+
 - **Any-biobank workflow: `prepare.wdl`.** Step 1 for a cohort you already
   have as PLINK files (UK Biobank, or your own), producing the same prepared
   cohort as `aou_prepare.wdl`, which `analyse.wdl` takes unchanged. It runs the

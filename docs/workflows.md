@@ -9,7 +9,8 @@ container](nextflow.md#container).
 | `manifold_genetics.wdl` | `manifold-genetics pipeline` as one task, for a cohort you already have |
 | `aou_prepare.wdl` | All of Us, step 1: fetch a release and intersect it with HGDP+1KGP |
 | `prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
-| `analyse.wdl` | step 2, any prepared cohort: subsample, PCA, PHATE, 2-D and 3-D figures |
+| `analyse.wdl` | step 2, any prepared cohort: subsample, PCA, then 2-D PHATE, UMAP and PCA figures |
+| `analyse_3d.wdl` | after `analyse`: 3-D PHATE, UMAP and PCA (HTML and MP4) from its PCA |
 
 Example inputs are in `wdl/`.
 
@@ -20,7 +21,7 @@ of your own for results (Resources → New → Cloud Storage bucket).
 
 1. **Add the workflows.** Workflows → Add workflow → WDL →
    `https://github.com/MattScicluna/manifold_genetics`, then pick
-   `aou_prepare.wdl`; add again for `analyse.wdl`.
+   `aou_prepare.wdl`; add again for `analyse.wdl` and `analyse_3d.wdl`.
 2. **Run `aou_prepare` once per release.** It writes the prepared cohort to
    `<output_dir>/prepared/`.
 
@@ -34,7 +35,9 @@ of your own for results (Resources → New → Cloud Storage bucket).
 
 3. **Run `analyse`** with `cohort_dir` = `<output_dir>/prepared` and the same
    `output_dir`. Each experiment writes `<output_dir>/<name>/`: PCA, embeddings,
-   2-D figures, the 3-D HTML and MP4, metrics and logs.
+   2-D figures, metrics and logs.
+4. **Run `analyse_3d`** with the same `output_dir` for the 3-D figures. It
+   reads each experiment's PCA, so `experiments` must name those folders.
 
 The default experiments are the manuscript's: `balanced` (10,000 each of the
 four largest groups plus everyone else) and `geosketch_90k`. Each is a name and
@@ -42,8 +45,10 @@ the arguments to [`subsample`](cli.md#subsample); a list of your own replaces
 them. Keep the geosketch size close to the balanced set's, so the two fit sets
 are comparable.
 
-PHATE is its own task, so with call caching a change to `knn`, `t` or
-`n_landmark` reruns only PHATE and the figures.
+The embeddings are their own task, so with call caching a change to their
+settings reruns only them and the figures. PHATE and UMAP are fit on the fit
+set's 20 PCs, and the PCA figures show its first two (`analyse`) or three
+(`analyse_3d`).
 
 Workflow machines pull the image through the All of Us Docker Hub mirror
 (`us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:<tag>`).
@@ -110,7 +115,7 @@ Apptainer on a cluster, 486,748 samples):
 - **`analyse`**: the experiments in `wdl/analyse.biobank.inputs.json`:
   `balanced` (10,000 British, 5,000 Irish and everyone else, 59,264 samples) and
   `geosketch_60k` to match. 3 h 20 on 16 CPUs and 128 GB, with
-  `pca_memory_gb` 100 and `phate_memory_gb` 32; peak memory 118 GB while both
+  `pca_memory_gb` 100 and `embed_memory_gb` 32; peak memory 118 GB while both
   experiments ran their PCA at once. `geosketch` takes longer because it runs
   PCA twice: once on a random 100,000 to choose the sketch, then on the sketch.
 
@@ -121,8 +126,9 @@ Apptainer on a cluster, 486,748 samples):
 ]
 ```
 
-Each experiment's folder has PCA, the 2-D and 3-D PHATE embeddings, their
-figures, and the rotating 3-D video (`outputs/figures/embeddings_3d/*.mp4`).
+Each experiment's folder has PCA, the 2-D PHATE and UMAP embeddings and their
+figures; `analyse_3d` with `wdl/analyse_3d.biobank.inputs.json` adds the 3-D
+ones and the rotating videos (`outputs/figures/embeddings_3d/*.mp4`).
 
 ## Outside Verily
 
@@ -132,13 +138,15 @@ results there instead of to a bucket:
 ```bash
 miniwdl run prepare.wdl -i prepare.json
 miniwdl run analyse.wdl -i analyse.json
+miniwdl run analyse_3d.wdl -i analyse_3d.json
 ```
 
 On a cluster without Docker, `wdl/miniwdl.apptainer.cfg` runs the same image
 with Apptainer. Set its paths, and pull the image once on a node with internet,
 as its comments show. Two of its settings matter:
 
-- `allow_any_input = true`: `analyse.wdl` reads files under `cohort_dir`,
+- `allow_any_input = true`: `analyse.wdl` reads files under `cohort_dir`
+  (and `analyse_3d.wdl` under `output_dir`),
   which miniwdl otherwise refuses.
 - `cpu_max` and `memory_max`: set them to the job's allocation. miniwdl
   otherwise schedules tasks against the whole node.
@@ -153,4 +161,5 @@ Then run both steps in one batch job, for example with SLURM:
 export MINIWDL_CFG=wdl/miniwdl.apptainer.cfg
 miniwdl run prepare.wdl -i prepare.json
 miniwdl run analyse.wdl -i analyse.json
+miniwdl run analyse_3d.wdl -i analyse_3d.json
 ```
