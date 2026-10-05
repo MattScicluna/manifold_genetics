@@ -9,6 +9,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Any-biobank workflow: `prepare.wdl`.** Step 1 for a cohort you already
+  have as PLINK files (UK Biobank, or your own), producing the same prepared
+  cohort as `aou_prepare.wdl`, which `analyse.wdl` takes unchanged. It runs the
+  same `preprocess --preset harmonise --skip-wrayner` step; what differs between
+  biobanks is the reference, the same HGDP+1KGP samples restricted to the
+  cohort's array positions. Example inputs for UK Biobank-style experiments
+  (`wdl/analyse.biobank.inputs.json`) and a miniwdl config for running the
+  workflows with Apptainer on a cluster (`wdl/miniwdl.apptainer.cfg`).
+  `topmed_reference` turns on WRayner against TOPMed, as in `aou_prepare.wdl`;
+  without it WRayner is skipped, as in the published UK Biobank flow.
+  The biobank's chromosomes may be `chr1` or `1` (CARTaGENE); `preprocess`
+  gives the same result for both, now covered by a test.
+
+- **`acquire custom` uses the published colours.** Label values with a
+  published colour (HGDP+1KGP, UK Biobank, All of Us) get it, in the published
+  legend order, instead of a generated one; others are still generated.
+  `--colormap FILE` gives colours that take precedence. The UK Biobank palette
+  (`examples/colormaps/ukbb.json`) is now in the package.
+
 - **All of Us workflows: `aou_prepare.wdl` and `analyse.wdl`.** For All of Us
   researchers on Verily Workbench, starting from the release in their own
   workspace. `aou_prepare` (once per release) acquires the release's arrays and

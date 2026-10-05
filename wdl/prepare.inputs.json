@@ -1,0 +1,12 @@
+{
+  "prepare.output_dir": "gs://<bucket>/ukbb",
+  "prepare.cohort_bed": "<cohort>.bed",
+  "prepare.cohort_bim": "<cohort>.bim",
+  "prepare.cohort_fam": "<cohort>.fam",
+  "prepare.cohort_labels": "<labels.csv: sample_id, self_described_ancestry, ...>",
+  "prepare.reference_bed": "<HGDP+1KGP at the cohort's positions>.bed",
+  "prepare.reference_bim": "<HGDP+1KGP at the cohort's positions>.bim",
+  "prepare.reference_fam": "<HGDP+1KGP at the cohort's positions>.fam",
+  "prepare.reference_labels": "<labels.csv: sample_id, Population, ...>",
+  "prepare.docker": "mattscicluna/manifold-genetics:sha-97ca2ba"
+}

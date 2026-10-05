@@ -16,6 +16,7 @@ Two targets, because they answer different questions:
   figures were made from.
 """
 
+import json
 import logging
 import shutil
 import subprocess
@@ -70,6 +71,7 @@ from .colormaps import (  # noqa: E402,F401
     _PALETTE_EXTENDED,
     _distinct_colours,
     _write_generated_colormap,
+    published_colours,
 )
 
 # PLINK 1 .bed codes, by A1 dosage. 01 is missing and is never written here.
@@ -599,6 +601,7 @@ def acquire_custom(
     n_pcs: int = 20,
     force: bool = False,
     min_overlap: float = MIN_LABEL_COVERAGE,
+    colormap: Optional[PathLike] = None,
 ) -> Path:
     """Write a config and colormap for genotypes you already have.
 
@@ -625,6 +628,10 @@ def acquire_custom(
         min_overlap: Refuse if fewer than this fraction of genotyped samples
             appear in the label file. The default is the rule every command
             applies (``preprocessing.cohort.MIN_LABEL_COVERAGE``).
+        colormap: A colormap JSON (column -> value -> colour) whose colours take
+            precedence. Without one, values with a published colour (HGDP+1KGP,
+            UK Biobank, All of Us; ``colormaps.published_colours``) get it.
+            Either way every other value gets a generated colour.
 
     Returns:
         The path of the config file written.
@@ -668,8 +675,13 @@ def acquire_custom(
         frames.append(_checked_labels(label_path, plink, min_overlap))
     label_frame = pd.concat(frames, ignore_index=True)
 
+    known = published_colours()
+    if colormap:
+        for column, mapping in json.loads(Path(colormap).read_text()).items():
+            known[column] = mapping
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    _write_generated_colormap(label_frame, out_dir / "colormap.json")
+    _write_generated_colormap(label_frame, out_dir / "colormap.json", known=known)
 
     if fit_labels and project_labels:
         label_lines = f"  fit_labels: {fit_labels}\n  project_labels: {project_labels}"
