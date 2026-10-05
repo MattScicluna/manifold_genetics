@@ -117,6 +117,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **PCA reads genotypes 4-6x faster, with identical results.** The python
+  backend's streaming fit re-reads the cohort about 40 times, and nearly all
+  its time went to decoding and standardising each chunk on one core. Each
+  variant's four standardised values are now computed once and the chunk is
+  filled by table lookup on up to 8 threads; the output is bit-for-bit the same.
+
 - **`geosketch` is a core dependency.** `subsample --geosketch` works on any
   install; the `geosketch` extra is kept, empty, so existing install commands
   still resolve. The package is pure Python and its dependencies were already

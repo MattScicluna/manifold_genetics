@@ -16,7 +16,12 @@ is pinned here rather than left implicit in the backend.
 import numpy as np
 import pytest
 
-from manifold_genetics.pca.standardize import binom2_stats, standardize_dosages
+from manifold_genetics.pca.plink import read_bed_bytes, read_bed_dosages
+from manifold_genetics.pca.standardize import (
+    binom2_stats,
+    standardize_bed_bytes,
+    standardize_dosages,
+)
 
 
 class TestBinom2Stats:
@@ -109,3 +114,36 @@ class TestStandardizeDosages:
 
         with pytest.raises(ValueError, match="variant"):
             standardize_dosages(dosages, bad, bad)
+
+
+class TestStandardizeBedBytes:
+    @pytest.mark.parametrize("threads", [1, 4])
+    @pytest.mark.parametrize("n_samples", [5, 4097])
+    def test_equals_standardize_dosages_bit_for_bit(self, tmp_path, threads, n_samples):
+        # The PCA's results must not change with the faster reader, so equality
+        # is exact: random codes (missing included), a monomorphic variant, a
+        # sample count that leaves padding in the last byte, and enough variants
+        # for several lookup blocks.
+        n_variants = 600
+        rng = np.random.default_rng(0)
+        bytes_per_variant = (n_samples + 3) // 4
+        raw = rng.integers(0, 256, (n_variants, bytes_per_variant), dtype=np.uint8)
+        raw[3] = 0  # every sample homozygous A1
+        (tmp_path / "t.bed").write_bytes(b"\x6c\x1b\x01" + raw.tobytes())
+        prefix = tmp_path / "t"
+
+        dosages = read_bed_dosages(prefix, n_samples=n_samples, n_variants=n_variants)
+        mean, sd = binom2_stats(dosages)
+        mean[7] = np.nan  # a variant with no called genotypes
+        expected = standardize_dosages(dosages, mean, sd, copy=False)
+
+        got = standardize_bed_bytes(
+            read_bed_bytes(prefix, n_samples=n_samples, n_variants=n_variants),
+            n_samples,
+            mean,
+            sd,
+            threads=threads,
+        )
+
+        assert got.shape == expected.shape
+        np.testing.assert_array_equal(got, expected)
