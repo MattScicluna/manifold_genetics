@@ -1,0 +1,5 @@
+{
+  "analyse_3d.output_dir": "gs://<bucket>/ukbb",
+  "analyse_3d.experiments": ["balanced", "geosketch_60k"],
+  "analyse_3d.docker": "mattscicluna/manifold-genetics:sha-97ca2ba"
+}

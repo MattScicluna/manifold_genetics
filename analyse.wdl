@@ -4,10 +4,11 @@ version 1.0
 ## the <output_dir>/prepared/ that aou_prepare.wdl writes).
 ##
 ## Each experiment chooses a fit set with `manifold-genetics subsample` and runs
-## two tasks: subsample + PCA (fit on the subset, project everyone), then PHATE
-## and figures (2-D, and 3-D HTML + rotating MP4 when make_3d). Experiments run
-## side by side; each publishes to <output_dir>/<name>/. PHATE is its own task
-## so changing its settings does not redo the PCA (with call caching).
+## two tasks: subsample + PCA (fit on the subset, project everyone), then the
+## 2-D PHATE, UMAP and PCA figures of the fit set. Experiments run side by side;
+## each publishes to <output_dir>/<name>/. The embeddings are their own task so
+## changing their settings does not redo the PCA (with call caching).
+## analyse_3d.wdl draws the 3-D versions from the PCA published here.
 ##
 ## The default experiments are the manuscript's All of Us fit sets.
 
@@ -34,19 +35,17 @@ workflow analyse {
             }
         ]
 
-        # PHATE for the 3-D figures (the subsample preset's settings).
-        Boolean make_3d = true
-        Int knn = 500
-        Int t = 50
-        Int n_landmark = 10000
+        # UMAP (PHATE takes the subsample preset's settings from the config).
+        Int umap_n_neighbors = 15
+        Float umap_min_dist = 0.5
 
         String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
         Int pca_cpu = 16
         Int pca_memory_gb = 128
         Int pca_disk_gb = 200
-        Int phate_cpu = 8
-        Int phate_memory_gb = 64
-        Int phate_disk_gb = 50
+        Int embed_cpu = 8
+        Int embed_memory_gb = 64
+        Int embed_disk_gb = 50
     }
 
     scatter (experiment in experiments) {
@@ -72,7 +71,7 @@ workflow analyse {
                 disk_gb = pca_disk_gb
         }
 
-        call phate {
+        call embed {
             input:
                 name = experiment.name,
                 config = subsample_pca.out_config,
@@ -81,22 +80,20 @@ workflow analyse {
                 fit_labels = subsample_pca.out_fit_labels,
                 project_labels = subsample_pca.out_project_labels,
                 pca_csvs = subsample_pca.pca_csvs,
-                make_3d = make_3d,
-                knn = knn,
-                t = t,
-                n_landmark = n_landmark,
+                umap_n_neighbors = umap_n_neighbors,
+                umap_min_dist = umap_min_dist,
                 output_dir = output_dir,
                 docker = docker,
-                cpu = phate_cpu,
-                memory_gb = phate_memory_gb,
-                disk_gb = phate_disk_gb
+                cpu = embed_cpu,
+                memory_gb = embed_memory_gb,
+                disk_gb = embed_disk_gb
         }
     }
 
     output {
         Array[File] pca = flatten(subsample_pca.pca_csvs)
-        Array[File] embeddings = flatten(phate.embeddings)
-        Array[File] figures = flatten(phate.figures)
+        Array[File] embeddings = flatten(embed.embeddings)
+        Array[File] figures = flatten(embed.figures)
     }
 }
 
@@ -195,7 +192,7 @@ task subsample_pca {
     }
 }
 
-task phate {
+task embed {
     input {
         String name
         File config
@@ -204,10 +201,8 @@ task phate {
         File fit_labels
         File project_labels
         Array[File] pca_csvs
-        Boolean make_3d
-        Int knn
-        Int t
-        Int n_landmark
+        Int umap_n_neighbors
+        Float umap_min_dist
         String output_dir
         String docker
         Int cpu
@@ -217,7 +212,7 @@ task phate {
 
     command <<<
         set -euo pipefail
-        exec > >(tee phate.log) 2>&1
+        exec > >(tee embed.log) 2>&1
 
         mkdir -p exp/data exp/outputs/pca
         cp "~{config}" exp/config.yaml
@@ -230,23 +225,23 @@ task phate {
         # 2-D embedding, figures and metrics from the PCA (no genotypes needed).
         manifold-genetics run exp/config.yaml --skip-pca --skip-admixture
 
-        if [ "~{make_3d}" = "true" ]; then
-            fit_pca=$(ls exp/outputs/pca/fit_pca_*.csv | head -1)
-            landmarks=""
-            if [ ~{n_landmark} -gt 0 ]; then landmarks="--n-landmark ~{n_landmark} --random-landmarking"; fi
-            manifold-genetics embed --input "${fit_pca}" --method phate \
-                --knn ~{knn} --t ~{t} --n-components 3 ${landmarks} \
-                --output exp/outputs/embeddings/phate_3d_fit.csv
-            manifold-genetics plot-3d --input exp/outputs/embeddings/phate_3d_fit.csv \
+        # UMAP and PCA of the same samples and PCs as PHATE (the fit set).
+        fit_pca=$(ls exp/outputs/pca/fit_pca_*.csv | head -1)
+        manifold-genetics embed --input "${fit_pca}" --method umap \
+            --n-neighbors ~{umap_n_neighbors} --min-dist ~{umap_min_dist} \
+            --output exp/outputs/embeddings/umap_2d.csv
+        cut -d, -f1-3 "${fit_pca}" > exp/outputs/embeddings/pca_2d.csv
+        for method in umap pca; do
+            manifold-genetics plot --input "exp/outputs/embeddings/${method}_2d.csv" \
                 --labels exp/data/fit_labels.csv --colormap exp/colormap_fit.json \
-                --output exp/outputs/figures/embeddings_3d --max-points 0 --no-hover-ids
-        fi
+                --output "exp/outputs/figures/embeddings/${method}.png"
+        done
 
         mkdir -p publish/outputs
         for d in embeddings figures metrics; do
             if [ -d "exp/outputs/${d}" ]; then cp -r "exp/outputs/${d}" publish/outputs/; fi
         done
-        cp phate.log publish/
+        cp embed.log publish/
         dest="~{output_dir}/~{name}"
         case "${dest}" in
             gs://*) gcloud storage rsync --recursive publish "${dest}" ;;
@@ -260,8 +255,7 @@ task phate {
         Array[File] embeddings = glob("exp/outputs/embeddings/*.csv")
         Array[File] figures = flatten([
             glob("exp/outputs/figures/embeddings/*.png"),
-            glob("exp/outputs/figures/pca/*.png"),
-            glob("exp/outputs/figures/embeddings_3d/*")
+            glob("exp/outputs/figures/pca/*.png")
         ])
     }
 

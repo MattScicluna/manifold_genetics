@@ -309,4 +309,6 @@ jobs:
           java -jar womtool.jar validate aou_prepare.wdl -i wdl/aou_prepare.inputs.json
           java -jar womtool.jar validate analyse.wdl -i wdl/analyse.inputs.json
           java -jar womtool.jar validate analyse.wdl -i wdl/analyse.biobank.inputs.json
+          java -jar womtool.jar validate analyse_3d.wdl -i wdl/analyse_3d.inputs.json
+          java -jar womtool.jar validate analyse_3d.wdl -i wdl/analyse_3d.biobank.inputs.json
           java -jar womtool.jar validate prepare.wdl -i wdl/prepare.inputs.json
