@@ -15,9 +15,12 @@ HGDP variants rather than taken from documentation:
 See tests/unit/test_pca_standardize.py, which pins both.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple
 
 import numpy as np
+
+from .plink import _CODE_TO_A1
 
 __all__ = ["binom2_stats", "standardize_dosages"]
 
@@ -131,3 +134,67 @@ def standardize_dosages(
         np.nan_to_num(block, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
     return out
+
+
+# The four 2-bit genotype codes of every possible .bed byte, low bits first.
+_BYTE_CODES = (np.arange(256)[:, None] >> (2 * np.arange(4))) & 0b11
+
+# Variants per lookup-table block: the gather's temporary is about this many
+# variants x samples x 8 bytes per thread, so it stays small next to the chunk.
+_LUT_BLOCK_BYTES = 16 * 1024**2
+
+
+def standardize_bed_bytes(
+    raw: np.ndarray, n_samples: int, mean: np.ndarray, sd: np.ndarray, threads: int = 1
+) -> np.ndarray:
+    """``standardize_dosages`` of packed ``.bed`` bytes, without the dosages.
+
+    Equal to ``standardize_dosages(read_bed_dosages(...), mean, sd, copy=False)``
+    bit for bit, and several times faster: a variant has only four possible
+    standardised values, so each is computed once, with the same operations in
+    the same order, and the matrix is filled by one table lookup per byte rather
+    than by decoding, centring and scaling every element. Blocks of variants
+    are filled on ``threads`` threads (numpy releases the GIL for the lookup);
+    the streaming PCA re-reads the cohort about 40 times, and this was its time.
+
+    Args:
+        raw: ``(n_variants, ceil(n_samples / 4))`` bytes from ``read_bed_bytes``.
+        n_samples: Samples in the file; the padding codes of the last byte are dropped.
+        mean, sd: ``(n_variants,)`` reference means and SDs.
+        threads: Threads filling the matrix.
+
+    Returns:
+        ``(n_samples, n_variants)`` standardised float64 array.
+    """
+    n_variants, bytes_per_variant = raw.shape
+    mean = np.asarray(mean, dtype=np.float64)
+    sd = np.asarray(sd, dtype=np.float64)
+    if mean.shape != (n_variants,) or sd.shape != (n_variants,):
+        raise ValueError(
+            f"mean and sd must have one entry per variant ({n_variants}); "
+            f"got mean{mean.shape} and sd{sd.shape}"
+        )
+
+    out = np.empty((n_variants, bytes_per_variant * 4), dtype=np.float64)
+    block = max(1, _LUT_BLOCK_BYTES // max(1, bytes_per_variant * 4 * 8))
+
+    def fill(start):
+        stop = min(start + block, n_variants)
+        # The standardised value of each code, as standardize_dosages computes it.
+        values = _CODE_TO_A1[None, :] - mean[start:stop, None]
+        ok = sd[start:stop] > 0
+        np.divide(values, sd[start:stop, None], out=values, where=ok[:, None])
+        values[~ok] = 0.0
+        np.nan_to_num(values, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        rows = np.arange(stop - start)[:, None]
+        out[start:stop] = values[:, _BYTE_CODES][rows, raw[start:stop]].reshape(stop - start, -1)
+
+    starts = range(0, n_variants, block)
+    if threads > 1 and len(starts) > 1:
+        with ThreadPoolExecutor(threads) as pool:
+            list(pool.map(fill, starts))
+    else:
+        for start in starts:
+            fill(start)
+
+    return out[:, :n_samples].T

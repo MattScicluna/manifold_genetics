@@ -44,30 +44,17 @@ class PlinkFormatError(ValueError):
     """A .bed file is not the SNP-major PLINK 1 layout we can read."""
 
 
-def read_bed_dosages(
+def read_bed_bytes(
     prefix: PathLike,
     *,
     n_samples: int,
     n_variants: int,
     variants: Optional[slice] = None,
 ) -> np.ndarray:
-    """Read A1 dosages from ``<prefix>.bed``.
+    """The packed ``.bed`` bytes of a contiguous run of variants.
 
-    Args:
-        prefix: Path prefix; ``.bed`` is appended.
-        n_samples: Sample count, from the ``.fam`` file.
-        n_variants: Variant count in the file, from the ``.bim`` file.
-        variants: Optional contiguous slice of variants to read. Only the bytes
-            for those variants are read, so a large cohort can be processed in
-            chunks without materialising the whole matrix.
-
-    Returns:
-        ``(n_samples, n_selected_variants)`` float64 array of A1 dosages, with
-        NaN where the genotype is missing.
-
-    Raises:
-        PlinkFormatError: wrong magic number, individual-major layout, or a file
-            shorter than ``n_samples``/``n_variants`` imply.
+    ``(n_selected_variants, ceil(n_samples / 4))`` uint8, four 2-bit genotype
+    codes per byte, low bits first. Arguments and errors as ``read_bed_dosages``.
     """
     path = Path(f"{prefix}.bed")
     bytes_per_variant = (n_samples + 3) // 4
@@ -104,7 +91,36 @@ def read_bed_dosages(
             f"{n_selected} variants x {n_samples} samples, found {raw.size}"
         )
 
-    raw = raw.reshape(n_selected, bytes_per_variant)
+    return raw.reshape(n_selected, bytes_per_variant)
+
+
+def read_bed_dosages(
+    prefix: PathLike,
+    *,
+    n_samples: int,
+    n_variants: int,
+    variants: Optional[slice] = None,
+) -> np.ndarray:
+    """Read A1 dosages from ``<prefix>.bed``.
+
+    Args:
+        prefix: Path prefix; ``.bed`` is appended.
+        n_samples: Sample count, from the ``.fam`` file.
+        n_variants: Variant count in the file, from the ``.bim`` file.
+        variants: Optional contiguous slice of variants to read. Only the bytes
+            for those variants are read, so a large cohort can be processed in
+            chunks without materialising the whole matrix.
+
+    Returns:
+        ``(n_samples, n_selected_variants)`` float64 array of A1 dosages, with
+        NaN where the genotype is missing.
+
+    Raises:
+        PlinkFormatError: wrong magic number, individual-major layout, or a file
+            shorter than ``n_samples``/``n_variants`` imply.
+    """
+    raw = read_bed_bytes(prefix, n_samples=n_samples, n_variants=n_variants, variants=variants)
+    n_selected, bytes_per_variant = raw.shape
 
     # Unpack the four 2-bit codes per byte. Padding bits in the final byte decode
     # as 0b00 (homozygous A1) and must be dropped, not returned as real samples.
