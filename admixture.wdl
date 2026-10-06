@@ -8,6 +8,9 @@ version 1.0
 ## Figures: the bar chart, and every embedding already published under
 ## outputs/embeddings/ coloured by admixture (analyse's 2-D, analyse_3d's 3-D);
 ## nothing is re-embedded.
+##
+## Runs on a GPU, in the -gpu image (Neural Admixture on CPU takes days at
+## biobank size); the workspace needs GPU quota for gpu_type.
 
 workflow admixture {
     input {
@@ -20,8 +23,10 @@ workflow admixture {
         Int k_min = 2
         Int k_max = 10
 
-        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
-        Int cpu = 16
+        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow-gpu"
+        Int gpus = 1
+        String gpu_type = "nvidia-tesla-t4"
+        Int cpu = 8
         Int memory_gb = 64
         Int disk_gb = 200
     }
@@ -46,6 +51,8 @@ workflow admixture {
                 k_max = k_max,
                 output_dir = output_dir,
                 docker = docker,
+                gpus = gpus,
+                gpu_type = gpu_type,
                 cpu = cpu,
                 memory_gb = memory_gb,
                 disk_gb = disk_gb
@@ -77,6 +84,8 @@ task admixture_task {
         Int k_max
         String output_dir
         String docker
+        Int gpus
+        String gpu_type
         Int cpu
         Int memory_gb
         Int disk_gb
@@ -106,7 +115,8 @@ task admixture_task {
         a=exp/outputs/admixture
         manifold-genetics admixture --fit-plink exp/data/fit_subset --project-plink exp/data/project_subset \
             --neuraladmixture-output-dir "${a}/checkpoints" --fit-output "${a}/fit" --project-output "${a}/project" \
-            --k-min ~{k_min} --k-max ~{k_max} --threads ~{cpu} --neuraladmixture-batch-size 400
+            --k-min ~{k_min} --k-max ~{k_max} --threads ~{cpu} --num-gpus ~{gpus} \
+            --neuraladmixture-batch-size 400
 
         # Figures: the bar chart of the project set (300 per group), as the
         # pipeline draws it, then each published embedding coloured by the fit
@@ -154,5 +164,9 @@ task admixture_task {
         memory: "~{memory_gb} GB"
         disks: "local-disk ~{disk_gb} SSD"
         preemptible: 0
+        # Cromwell (Google Batch) reads gpuCount/gpuType; miniwdl reads gpu.
+        gpuCount: gpus
+        gpuType: gpu_type
+        gpu: true
     }
 }

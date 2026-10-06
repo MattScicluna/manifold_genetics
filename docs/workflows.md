@@ -42,7 +42,9 @@ of your own for results (Resources → New → Cloud Storage bucket).
    reads each experiment's PCA, so `experiments` must name those folders.
 5. **Run `admixture`** (optional) with the same `cohort_dir` and `output_dir`.
    It writes `outputs/admixture/` (Q matrices for K = 2 to 10) and colours
-   every embedding already in `outputs/embeddings/` by admixture.
+   every embedding already in `outputs/embeddings/` by admixture. It runs on a
+   GPU (`gpu_type`, default `nvidia-tesla-t4`) in the `-gpu` image, so the
+   workspace needs GPU quota.
 
 The default experiments are the manuscript's: `balanced` (10,000 each of the
 four largest groups plus everyone else) and `geosketch_90k`. Each is a name and

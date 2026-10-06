@@ -8,15 +8,28 @@
 #   docker push us-central1-docker.pkg.dev/<project>/<repo>/manifold-genetics:<version>
 #
 # linux/amd64: flashpca is published only for Linux x86-64 (and Google Batch is amd64).
-FROM --platform=linux/amd64 python:3.11-slim
+#
+# GPU variant (for admixture.wdl): a CUDA *devel* base, because neural-admixture
+# compiles a small CUDA extension with nvcc on first use, and the CUDA torch:
+#   docker build --build-arg BASE=nvidia/cuda:12.1.1-devel-ubuntu22.04 \
+#                --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu121 .
+ARG BASE=python:3.11-slim
+FROM --platform=linux/amd64 ${BASE}
 
 # procps: Nextflow reads task metrics with `ps`.
 # perl: the WRayner checker needs modules (IO::Uncompress::Gunzip) that the
 # slim image's perl-base lacks; without them it dies before checking anything.
 # google-cloud-cli: gsutil / bq / gcloud storage, which `acquire aou` and the
 # All of Us workflows use to read the release and publish results.
+# A base without Python (the CUDA one) gets the system Python, with the headers
+# and compiler the CUDA extension build needs.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends procps ca-certificates curl gnupg perl \
+ && if ! command -v python > /dev/null; then \
+      apt-get install -y --no-install-recommends python3 python3-pip python3-dev g++ \
+      && ln -s /usr/bin/python3 /usr/local/bin/python \
+      && ln -s /usr/bin/pip3 /usr/local/bin/pip; \
+    fi \
  && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
       | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
  && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
@@ -30,8 +43,8 @@ ENV PIP_NO_CACHE_DIR=1 \
     MPLBACKEND=Agg \
     MANIFOLD_GENETICS_TOOL_DIR=/opt/manifold-tools
 
-# CPU torch keeps the image a fraction of the CUDA build's size; for GPU
-# admixture build with --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu121
+# CPU torch keeps the image a fraction of the CUDA build's size; the GPU variant
+# above passes the CUDA index.
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 ARG EXTRAS=aou,admixture,interactive
 
