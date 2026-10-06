@@ -46,7 +46,10 @@ them. Keep the geosketch size close to the balanced set's, so the two fit sets
 are comparable.
 
 The embeddings are their own task, so with call caching a change to their
-settings reruns only them and the figures. PHATE and UMAP are fit on the fit
+settings reruns only them and the figures. Tick **Run options → Enable call
+caching** when you start the job: the `wb` CLI's `--write-to-cache` and
+`--read-from-cache` are ignored at present
+([#186](https://github.com/MattScicluna/manifold_genetics/issues/186)). PHATE and UMAP are fit on the fit
 set's 20 PCs, and the PCA figures show its first two (`analyse`) or three
 (`analyse_3d`).
 
