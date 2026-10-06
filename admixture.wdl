@@ -2,9 +2,10 @@ version 1.0
 
 ## Admixture for experiments analyse.wdl has run (optional; run after it).
 ## Each experiment's fit set is rebuilt from its published data/fit_samples.txt,
-## Neural Admixture is trained on it for K in [k_min, k_max] and inferred on the
-## fit and project sets, and the Q matrices go to
-## <output_dir>/<name>/outputs/admixture/ (fit.<K>.csv, project.<K>.csv).
+## Neural Admixture is trained on it for K in [k_min, k_max], and the Q matrices
+## go to <output_dir>/<name>/outputs/admixture/ (fit.<K>.csv; project.<K>.csv too
+## with infer_project, which needs ~1 byte per genotype of the whole cohort in
+## memory, e.g. 75 GB for UK Biobank).
 ## Figures: the bar chart, and every embedding already published under
 ## outputs/embeddings/ coloured by admixture (analyse's 2-D, analyse_3d's 3-D);
 ## nothing is re-embedded.
@@ -22,6 +23,8 @@ workflow admixture {
         Array[String] experiments = ["balanced", "geosketch_90k"]
         Int k_min = 2
         Int k_max = 10
+        # Also infer the project set (the whole cohort); see memory above.
+        Boolean infer_project = false
 
         String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow-gpu"
         Int gpus = 1
@@ -49,6 +52,7 @@ workflow admixture {
                 fit_samples = output_dir + "/" + name + "/data/fit_samples.txt",
                 k_min = k_min,
                 k_max = k_max,
+                infer_project = infer_project,
                 output_dir = output_dir,
                 docker = docker,
                 gpus = gpus,
@@ -82,6 +86,7 @@ task admixture_task {
         File fit_samples
         Int k_min
         Int k_max
+        Boolean infer_project
         String output_dir
         String docker
         Int gpus
@@ -113,20 +118,28 @@ task admixture_task {
         manifold-genetics subsample cohort/config.yaml --out exp --fit-samples "~{fit_samples}"
 
         a=exp/outputs/admixture
-        manifold-genetics admixture --fit-plink exp/data/fit_subset --project-plink exp/data/project_subset \
-            --neuraladmixture-output-dir "${a}/checkpoints" --fit-output "${a}/fit" --project-output "${a}/project" \
+        if [ "~{infer_project}" = "true" ]; then
+            project=(--project-plink exp/data/project_subset --project-output "${a}/project")
+            bars_q="${a}/project"; bars_labels=exp/data/project_labels.csv; bars_cmap=exp/colormap_project.json
+        else
+            # The CLI always infers a second set; without the project set, that is the fit set again, unpublished.
+            project=(--project-plink exp/data/fit_subset --project-output scratch/fit_again)
+            bars_q="${a}/fit"; bars_labels=exp/data/fit_labels.csv; bars_cmap=exp/colormap_fit.json
+        fi
+        manifold-genetics admixture --fit-plink exp/data/fit_subset "${project[@]}" \
+            --neuraladmixture-output-dir "${a}/checkpoints" --fit-output "${a}/fit" \
             --k-min ~{k_min} --k-max ~{k_max} --threads ~{cpu} --num-gpus ~{gpus} \
             --neuraladmixture-batch-size 400
 
-        # Figures: the bar chart of the project set (300 per group), as the
-        # pipeline draws it, then each published embedding coloured by the fit
-        # set's proportions (the embeddings are of the fit set).
+        # Figures: the bar chart (300 per group, as the pipeline draws it; of the
+        # project set when inferred), then each published embedding coloured by
+        # the fit set's proportions (the embeddings are of the fit set).
         f=exp/outputs/figures/admixture
         mkdir -p "${f}" exp/embeddings
-        group=$(python3 -c "import json; print(next(iter(json.load(open('exp/colormap_project.json')))))")
-        manifold-genetics plot-admixture --q-prefix "${a}/project" --labels exp/data/project_labels.csv \
-            --group-column "${group}" --colormap exp/colormap_project.json --k-min ~{k_min} --k-max ~{k_max} \
-            --subsample-per-group 300 --output "${f}/project_bars.png" \
+        group=$(python3 -c "import json,sys; print(next(iter(json.load(open(sys.argv[1])))))" "${bars_cmap}")
+        manifold-genetics plot-admixture --q-prefix "${bars_q}" --labels "${bars_labels}" \
+            --group-column "${group}" --colormap "${bars_cmap}" --k-min ~{k_min} --k-max ~{k_max} \
+            --subsample-per-group 300 --output "${f}/$(basename "${bars_q}")_bars.png" \
             --component-colors-output "${a}/component_colors.json"
         src="~{output_dir}/~{name}/outputs/embeddings"
         case "${src}" in

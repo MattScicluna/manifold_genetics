@@ -41,7 +41,9 @@ of your own for results (Resources → New → Cloud Storage bucket).
 4. **Run `analyse_3d`** with the same `output_dir` for the 3-D figures. It
    reads each experiment's PCA, so `experiments` must name those folders.
 5. **Run `admixture`** (optional) with the same `cohort_dir` and `output_dir`.
-   It writes `outputs/admixture/` (Q matrices for K = 2 to 10) and colours
+   It writes `outputs/admixture/` (Q matrices of the fit set for K = 2 to 10;
+   of the whole cohort too with `infer_project`, which needs about one byte per
+   genotype of the cohort in memory) and colours
    every embedding already in `outputs/embeddings/` by admixture. It runs on a
    GPU (`gpu_type`, default `nvidia-tesla-t4`) in the `-gpu` image, so the
    workspace needs GPU quota.
