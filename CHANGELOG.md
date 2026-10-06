@@ -9,6 +9,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
+  after `analyse`. Rebuilds each experiment's fit set from its published
+  `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)
+  and draws the bar chart and every published embedding coloured by admixture,
+  2-D and 3-D, without re-embedding. `analyse` and `analyse_3d` are unchanged.
+
 - **UMAP and PCA beside PHATE in the workflows; 3-D in `analyse_3d.wdl`.**
   `analyse.wdl` now draws 2-D PHATE, UMAP (`umap_n_neighbors` 15,
   `umap_min_dist` 0.5) and PCA (PCs 1-2) of each experiment's fit set, all from

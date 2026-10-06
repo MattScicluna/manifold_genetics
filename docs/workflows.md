@@ -11,6 +11,7 @@ container](nextflow.md#container).
 | `prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
 | `analyse.wdl` | step 2, any prepared cohort: subsample, PCA, then 2-D PHATE, UMAP and PCA figures |
 | `analyse_3d.wdl` | after `analyse`: 3-D PHATE, UMAP and PCA (HTML and MP4) from its PCA |
+| `admixture.wdl` | after `analyse`, optional: Neural Admixture per experiment, and its figures on the published embeddings |
 
 Example inputs are in `wdl/`.
 
@@ -21,7 +22,8 @@ of your own for results (Resources → New → Cloud Storage bucket).
 
 1. **Add the workflows.** Workflows → Add workflow → WDL →
    `https://github.com/MattScicluna/manifold_genetics`, then pick
-   `aou_prepare.wdl`; add again for `analyse.wdl` and `analyse_3d.wdl`.
+   `aou_prepare.wdl`; add again for `analyse.wdl`, `analyse_3d.wdl` and
+   `admixture.wdl`.
 2. **Run `aou_prepare` once per release.** It writes the prepared cohort to
    `<output_dir>/prepared/`.
 
@@ -38,6 +40,9 @@ of your own for results (Resources → New → Cloud Storage bucket).
    2-D figures, metrics and logs.
 4. **Run `analyse_3d`** with the same `output_dir` for the 3-D figures. It
    reads each experiment's PCA, so `experiments` must name those folders.
+5. **Run `admixture`** (optional) with the same `cohort_dir` and `output_dir`.
+   It writes `outputs/admixture/` (Q matrices for K = 2 to 10) and colours
+   every embedding already in `outputs/embeddings/` by admixture.
 
 The default experiments are the manuscript's: `balanced` (10,000 each of the
 four largest groups plus everyone else) and `geosketch_90k`. Each is a name and

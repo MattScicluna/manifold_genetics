@@ -1,0 +1,6 @@
+{
+  "admixture.cohort_dir": "gs://<bucket>/ukbb/prepared",
+  "admixture.output_dir": "gs://<bucket>/ukbb",
+  "admixture.experiments": ["balanced", "geosketch_60k"],
+  "admixture.docker": "mattscicluna/manifold-genetics:sha-97ca2ba"
+}
