@@ -139,6 +139,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **PCA pair grids fill the figure.** `plot-pca` drew every figure on a
+  5 x 5 grid and hid the unused panels, so 20 PCs (10 pairs) filled two rows
+  and left three blank, with the legend centred on the empty space. The grid
+  now takes as many rows as the pairs need (at most 5 columns, spread evenly):
+  20 PCs give 2 x 5, 14 give 2 x 4.
+
 - **WRayner's harmonisation fits on disk at biobank scale.** Its generated
   `Run-plink.sh` writes a full copy of the genotypes at each of five steps,
   deletes the temporary ones only at the end, then splits the result per
