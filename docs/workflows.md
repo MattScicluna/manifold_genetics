@@ -45,13 +45,13 @@ the arguments to [`subsample`](cli.md#subsample); a list of your own replaces
 them. Keep the geosketch size close to the balanced set's, so the two fit sets
 are comparable.
 
-The embeddings are their own task, so with call caching a change to their
-settings reruns only them and the figures. Tick **Run options → Enable call
-caching** when you start the job: the `wb` CLI's `--write-to-cache` and
-`--read-from-cache` are ignored at present
-([#186](https://github.com/MattScicluna/manifold_genetics/issues/186)). PHATE and UMAP are fit on the fit
-set's 20 PCs, and the PCA figures show its first two (`analyse`) or three
-(`analyse_3d`).
+The embeddings are their own task, so with call caching on, a change to their
+settings reruns only them and the figures. Turn it on in the Workbench run
+dialog: tick **Run options → Enable call caching** when you start the job. The
+`wb` CLI's `--write-to-cache` and `--read-from-cache` flags currently have no
+effect, so launch from the Workbench to use caching. PHATE and UMAP are fit on
+the fit set's 20 PCs, and the PCA figures show its first two (`analyse`) or
+three (`analyse_3d`).
 
 Workflow machines pull the image through the All of Us Docker Hub mirror
 (`us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:<tag>`).
@@ -64,8 +64,9 @@ Follow the All of Us dissemination rules before sharing figures or counts.
     `aou_prepare` needs an HGDP+1KGP reference restricted to the array's
     positions. The public `acquire hgdp` panel is LD-pruned before
     intersection and keeps too few array SNPs, and the one used so far is an
-    internal extract, so for now the step cannot be reproduced from outside
-    ([#172](https://github.com/MattScicluna/manifold_genetics/issues/172)).
+    internal extract, so for now the step cannot be reproduced from outside.
+    [The reference](#the-reference) below says how to build a suitable panel
+    from an unpruned one.
 
 ## Any biobank (UK Biobank, your own)
 
@@ -104,8 +105,7 @@ awk '{ sub(/^chr/, "", $1); print $1, $4, $4, $2 }' cohort.bim > positions.txt
 plink --bfile hgdp1kgp_unpruned --extract range positions.txt --make-bed --out reference
 ```
 
-A public build of that panel is
-[#172](https://github.com/MattScicluna/manifold_genetics/issues/172).
+A public build of that panel is not available yet.
 
 ### UK Biobank, end to end
 
