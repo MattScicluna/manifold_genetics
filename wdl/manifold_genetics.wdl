@@ -106,7 +106,8 @@ task pipeline {
         # Admixture's torch shares memory through a Unix socket under TMPDIR,
         # and a socket path is limited to ~104 bytes. Cromwell's per-task TMPDIR
         # can be longer, which fails as "no response from torch_shm_manager".
-        if [ "${#TMPDIR}" -gt 60 ]; then
+        # miniwdl leaves TMPDIR unset, which set -u would otherwise reject.
+        if [ -n "${TMPDIR:-}" ] && [ "${#TMPDIR}" -gt 60 ]; then
             TMPDIR="$(mktemp -d /tmp/mg.XXXXXX)"
             export TMPDIR
         fi
