@@ -233,8 +233,8 @@ jobs:
       - name: Install the package and Nextflow
         run: |
           uv sync --frozen --extra dev
-          curl -s https://get.nextflow.io | bash
-          sudo mv nextflow /usr/local/bin/
+          # The installer writes ./nextflow, which the nextflow/ directory blocks.
+          (cd /tmp && curl -s https://get.nextflow.io | bash && sudo mv nextflow /usr/local/bin/)
 
       - name: Synthetic cohort
         run: uv run manifold-genetics acquire synthetic --out /tmp/syn
