@@ -298,7 +298,7 @@ jobs:
             labels=/tmp/syn/data/labels.csv colormap=/tmp/syn/colormap.json \
             docker=manifold-genetics:ci cpu=2 memory_gb=6 \
             n_pcs=10 knn=15 t=20 n_landmark=0 \
-            --dir /tmp/wdl_run
+            --dir /tmp/wdl_run --verbose
           results=$(jq -r '.["manifold_genetics.results"]' /tmp/wdl_run/_LAST/outputs.json)
           tar -tzf "$results" > /tmp/wdl_results.txt
           grep -qx 'results/pca/fit_pca_10.csv' /tmp/wdl_results.txt

@@ -148,6 +148,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **`manifold_genetics.wdl` runs under miniwdl with Docker.** Its command
+  measured `TMPDIR` under `set -u`; miniwdl leaves it unset, so the task
+  stopped at once with "unbound variable". The new CI run found it.
+
 - **WRayner's harmonisation fits on disk at biobank scale.** Its generated
   `Run-plink.sh` writes a full copy of the genotypes at each of five steps,
   deletes the temporary ones only at the end, then splits the result per
