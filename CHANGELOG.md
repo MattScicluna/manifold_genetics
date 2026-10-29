@@ -142,6 +142,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   here or tiny (`fbpca`), so making it optional saved nothing and left
   `--geosketch` failing with an `ImportError` on a default install.
 
+- **CI runs a WDL workflow, not only validates it.** The `container` job runs
+  `wdl/manifold_genetics.wdl` with miniwdl on the synthetic cohort, in the
+  image it just built, and checks the PCA, embedding and figures come back.
+
 ### Fixed
 
 - **WRayner's harmonisation fits on disk at biobank scale.** Its generated
