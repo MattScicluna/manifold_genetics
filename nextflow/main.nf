@@ -2,8 +2,8 @@
 /*
  * manifold-genetics as a Nextflow workflow (Verily Workbench, Google Batch, or local).
  *
- *   nextflow run main.nf -profile full         --fit_plink ... --labels ... --colormap ...
- *   nextflow run main.nf -profile no_admixture --fit_plink ... --labels ... --colormap ...
+ *   nextflow run nextflow/main.nf -profile full         --fit_plink ... --labels ... --colormap ...
+ *   nextflow run nextflow/main.nf -profile no_admixture --fit_plink ... --labels ... --colormap ...
  *
  * One workflow, two profiles: `full` runs everything; `no_admixture` sets
  * params.run_admixture = false, which passes --skip-admixture and so leaves out
@@ -30,7 +30,7 @@ def plinkTriple(String prefix, String what) {
 
 /* An optional input: the file, or a placeholder the script recognises as absent. */
 def optionalFile(value, String name) {
-    value ? file(value, checkIfExists: true) : file("${projectDir}/assets/nextflow/NO_FILE_${name}")
+    value ? file(value, checkIfExists: true) : file("${projectDir}/assets/NO_FILE_${name}")
 }
 
 /* Staged under stageAs 'dir/*', a file's name includes that dir, so look for the marker anywhere. */
