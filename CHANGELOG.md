@@ -125,6 +125,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The Nextflow workflow moved into `nextflow/`**: `main.nf`,
+  `nextflow.config` and the optional-input placeholders (from
+  `assets/nextflow/`). Run it as `nextflow run nextflow/main.nf ...`; the
+  config beside it is still picked up.
+
 - **The WDL workflows moved from the repository root into `wdl/`**, beside
   their example inputs. Run them as `miniwdl run wdl/analyse.wdl ...`; on
   Verily Workbench, add them again with the `wdl/` path, since workflows added
