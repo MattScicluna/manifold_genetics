@@ -125,6 +125,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The WDL workflows moved from the repository root into `wdl/`**, beside
+  their example inputs. Run them as `miniwdl run wdl/analyse.wdl ...`; on
+  Verily Workbench, add them again with the `wdl/` path, since workflows added
+  from the old root path no longer resolve.
+
 - **PCA reads genotypes 4-6x faster, with identical results.** The python
   backend's streaming fit re-reads the cohort about 40 times, and nearly all
   its time went to decoding and standardising each chunk on one core. Each
