@@ -4,16 +4,16 @@ The same pipeline as WDL workflows, for Cromwell (as on Verily Workbench) or
 miniwdl. Each runs `manifold-genetics` in the [published
 container](nextflow.md#container).
 
+All of them, and their example inputs, are in `wdl/`.
+
 | file | what it does |
 |---|---|
-| `manifold_genetics.wdl` | `manifold-genetics pipeline` as one task, for a cohort you already have |
-| `aou_prepare.wdl` | All of Us, step 1: fetch a release and intersect it with HGDP+1KGP |
-| `prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
-| `analyse.wdl` | step 2, any prepared cohort: subsample, PCA, then 2-D PHATE, UMAP and PCA figures |
-| `analyse_3d.wdl` | after `analyse`: 3-D PHATE, UMAP and PCA (HTML and MP4) from its PCA |
-| `admixture.wdl` | after `analyse`, optional: Neural Admixture per experiment, and its figures on the published embeddings |
-
-Example inputs are in `wdl/`.
+| `wdl/manifold_genetics.wdl` | `manifold-genetics pipeline` as one task, for a cohort you already have |
+| `wdl/aou_prepare.wdl` | All of Us, step 1: fetch a release and intersect it with HGDP+1KGP |
+| `wdl/prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
+| `wdl/analyse.wdl` | step 2, any prepared cohort: subsample, PCA, then 2-D PHATE, UMAP and PCA figures |
+| `wdl/analyse_3d.wdl` | after `analyse`: 3-D PHATE, UMAP and PCA (HTML and MP4) from its PCA |
+| `wdl/admixture.wdl` | after `analyse`, optional: Neural Admixture per experiment, and its figures on the published embeddings |
 
 ## All of Us (Verily Workbench)
 
@@ -22,8 +22,9 @@ of your own for results (Resources → New → Cloud Storage bucket).
 
 1. **Add the workflows.** Workflows → Add workflow → WDL →
    `https://github.com/MattScicluna/manifold_genetics`, then pick
-   `aou_prepare.wdl`; add again for `analyse.wdl`, `analyse_3d.wdl` and
-   `admixture.wdl`.
+   `wdl/aou_prepare.wdl`; add again for `wdl/analyse.wdl`, `wdl/analyse_3d.wdl`
+   and `wdl/admixture.wdl`. (Workflows added before they moved into `wdl/`
+   point at the old root path; add them again.)
 2. **Run `aou_prepare` once per release.** It writes the prepared cohort to
    `<output_dir>/prepared/`.
 
@@ -145,9 +146,9 @@ Any WDL runner works. `output_dir` may be a local path, and the tasks then copy
 results there instead of to a bucket:
 
 ```bash
-miniwdl run prepare.wdl -i prepare.json
-miniwdl run analyse.wdl -i analyse.json
-miniwdl run analyse_3d.wdl -i analyse_3d.json
+miniwdl run wdl/prepare.wdl -i prepare.json
+miniwdl run wdl/analyse.wdl -i analyse.json
+miniwdl run wdl/analyse_3d.wdl -i analyse_3d.json
 ```
 
 On a cluster without Docker, `wdl/miniwdl.apptainer.cfg` runs the same image
@@ -168,7 +169,7 @@ Then run both steps in one batch job, for example with SLURM:
 #SBATCH --mem=128G
 #SBATCH --time=12:00:00
 export MINIWDL_CFG=wdl/miniwdl.apptainer.cfg
-miniwdl run prepare.wdl -i prepare.json
-miniwdl run analyse.wdl -i analyse.json
-miniwdl run analyse_3d.wdl -i analyse_3d.json
+miniwdl run wdl/prepare.wdl -i prepare.json
+miniwdl run wdl/analyse.wdl -i analyse.json
+miniwdl run wdl/analyse_3d.wdl -i analyse_3d.json
 ```
