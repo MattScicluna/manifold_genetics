@@ -287,17 +287,18 @@ jobs:
       - name: WDL run on the synthetic cohort
         run: |
           pip install miniwdl==1.15.0
-          mkdir -p /tmp/syn
+          mkdir -p /tmp/syn /tmp/wdl_run
           docker run --rm -v /tmp/syn:/syn manifold-genetics:ci \
             manifold-genetics acquire synthetic --out /syn
-          miniwdl run wdl/manifold_genetics.wdl --dir /tmp/wdl_run \
+          miniwdl run wdl/manifold_genetics.wdl \
             fit_bed=/tmp/syn/data/fit_subset.bed fit_bim=/tmp/syn/data/fit_subset.bim \
             fit_fam=/tmp/syn/data/fit_subset.fam \
             project_bed=/tmp/syn/data/project_subset.bed project_bim=/tmp/syn/data/project_subset.bim \
             project_fam=/tmp/syn/data/project_subset.fam \
             labels=/tmp/syn/data/labels.csv colormap=/tmp/syn/colormap.json \
             docker=manifold-genetics:ci cpu=2 memory_gb=6 \
-            n_pcs=10 knn=15 t=20 n_landmark=0
+            n_pcs=10 knn=15 t=20 n_landmark=0 \
+            --dir /tmp/wdl_run
           results=$(jq -r '.["manifold_genetics.results"]' /tmp/wdl_run/_LAST/outputs.json)
           tar -tzf "$results" > /tmp/wdl_results.txt
           grep -qx 'results/pca/fit_pca_10.csv' /tmp/wdl_results.txt
