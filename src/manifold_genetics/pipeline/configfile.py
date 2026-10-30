@@ -138,6 +138,9 @@ _VIZ_KEYS = {
     "admix_within_group_order": "admix_within_group_order",
     "projection_plot_fit_column": "projection_plot_fit_column",
     "projection_plot_project_column": "projection_plot_project_column",
+    # Comparison figures; validated by build_configs' validate_* helpers.
+    "method_grid": "method_grid",
+    "phate_grid": "phate_grid",
 }
 _SKIP_KEYS = {
     "pca": "skip_pca",

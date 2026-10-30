@@ -45,6 +45,18 @@ def embedding_output_paths(io: IOConfig, emb: EmbeddingConfig) -> Dict[str, Path
     return paths
 
 
+def embedding_grid_output_paths(io: IOConfig) -> Dict[str, Path]:
+    """Where the comparison grids keep their embeddings and figures.
+
+    Separate from ``embeddings/<method>_<n>d.csv`` so a grid panel never
+    overwrites, or is mistaken for, the run's own embedding.
+    """
+    return {
+        "embeddings": io.output_dir / "embeddings" / "grids",
+        "figures": io.output_dir / "figures" / "embeddings" / "grids",
+    }
+
+
 def metrics_output_paths(io: IOConfig) -> Dict[str, Path]:
     d = io.output_dir / "metrics"
     return {"geographic": d / "geographic.json", "admixture": d / "admixture.json"}

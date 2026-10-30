@@ -15,6 +15,15 @@ _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 
+# What each method's model takes, as build_embedding_model reads it. The grids
+# are always 2-D figures, so n_components is not settable in them.
+GRID_METHOD_PARAMS = {
+    "phate": ("knn", "t", "n_landmark", "random_landmarking", "embed_batch_size", "gamma"),
+    "umap": ("n_neighbors", "min_dist"),
+    "tsne": ("perplexity",),
+    "diffusion_map": ("knn",),
+}
+
 
 @dataclass(frozen=True)
 class IOConfig:
@@ -75,6 +84,12 @@ class VizConfig:
     admix_within_group_order: Optional[str] = "chron"
     projection_plot_fit_column: Optional[str] = None
     projection_plot_project_column: Optional[str] = None
+    # {method: params}: one column per method, each embedded with its own
+    # parameters. Treated read-only.
+    method_grid: Optional[dict] = None
+    # {param: [values]} for up to two PHATE parameters, rows then columns;
+    # scalar entries are fixed overrides. Treated read-only.
+    phate_grid: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +115,46 @@ class PipelineConfigs:
 
 def _as_path(value) -> Optional[Path]:
     return None if value is None else Path(value)
+
+
+def _check_grid_params(method: str, params, where: str) -> None:
+    unknown = sorted(set(params) - set(GRID_METHOD_PARAMS[method]))
+    if unknown:
+        raise ValueError(
+            f"Unknown {method} parameter(s) in {where}: {', '.join(unknown)}. "
+            f"Choose from: {', '.join(GRID_METHOD_PARAMS[method])}"
+        )
+
+
+def validate_method_grid(method_grid) -> None:
+    """``{method: params or None}`` naming known methods and their parameters."""
+    if not isinstance(method_grid, dict) or not method_grid:
+        raise ValueError("method_grid must map at least one method to its parameters")
+    for method, params in method_grid.items():
+        if method not in GRID_METHOD_PARAMS:
+            raise ValueError(
+                f"Unknown method in method_grid: {method!r}. "
+                f"Choose from: {', '.join(_EMBEDDING_METHODS)}"
+            )
+        if params is not None and not isinstance(params, dict):
+            raise ValueError(f"method_grid[{method!r}] must be a mapping of parameters")
+        _check_grid_params(method, params or {}, "method_grid")
+
+
+def validate_phate_grid(phate_grid) -> None:
+    """``{param: [values] | value}`` with one or two swept (list-valued) parameters."""
+    if not isinstance(phate_grid, dict) or not phate_grid:
+        raise ValueError("phate_grid must map PHATE parameters to lists of values")
+    _check_grid_params("phate", phate_grid, "phate_grid")
+    swept = [k for k, v in phate_grid.items() if isinstance(v, list)]
+    if not 1 <= len(swept) <= 2:
+        raise ValueError(
+            "phate_grid must give a list of values for one or two parameters "
+            f"(the rows, then the columns); got {len(swept)}: {', '.join(swept) or 'none'}"
+        )
+    for key in swept:
+        if not phate_grid[key]:
+            raise ValueError(f"phate_grid[{key!r}] is an empty list")
 
 
 def build_configs(
@@ -128,6 +183,8 @@ def build_configs(
     admix_within_group_order: Optional[str] = "chron",
     projection_plot_fit_column: Optional[str] = None,
     projection_plot_project_column: Optional[str] = None,
+    method_grid: Optional[dict] = None,
+    phate_grid: Optional[dict] = None,
     skip_pca: bool = False,
     skip_admixture: bool = False,
     skip_embedding: bool = False,
@@ -186,6 +243,10 @@ def build_configs(
         raise ValueError(f"k_min ({k_min}) must be <= k_max ({k_max})")
     if n_pcs <= 0:
         raise ValueError(f"n_pcs must be a positive integer, got {n_pcs}")
+    if method_grid is not None:
+        validate_method_grid(method_grid)
+    if phate_grid is not None:
+        validate_phate_grid(phate_grid)
 
     io = IOConfig(
         fit_plink=Path(fit_plink),
@@ -217,6 +278,8 @@ def build_configs(
             admix_within_group_order=admix_within_group_order,
             projection_plot_fit_column=projection_plot_fit_column,
             projection_plot_project_column=projection_plot_project_column,
+            method_grid=method_grid,
+            phate_grid=phate_grid,
         ),
         skips=SkipConfig(
             skip_pca=skip_pca,

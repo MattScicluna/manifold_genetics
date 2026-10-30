@@ -471,6 +471,181 @@ def visualize(
     return output_paths
 
 
+def plot_embedding_grid(
+    embeddings: Sequence[Sequence[Optional[Union[pd.DataFrame, str, Path]]]],
+    labels: Union[pd.DataFrame, str, Path],
+    colormap: Union[Dict, str, Path],
+    output_path: Union[str, Path],
+    label_column: Optional[str] = None,
+    row_titles: Optional[Sequence[str]] = None,
+    col_titles: Optional[Sequence[str]] = None,
+    axis_names: Optional[Sequence[Sequence[str]]] = None,
+    title: Optional[str] = None,
+    panel_size: tuple = (6, 5),
+    point_size: float = 10.0,
+    alpha: float = 0.9,
+) -> Path:
+    """
+    Plot a rows x columns grid of 2-D embeddings sharing one legend.
+
+    Built for comparisons: one method per column, or one parameter value per
+    row and column. Every panel is coloured by the same ``label_column`` and
+    the legend is drawn once, to the right of the grid, so the panels stay the
+    same size.
+
+    Args:
+        embeddings: Rows of cells; each cell a DataFrame or path to an embedding
+            CSV (sample_id, dim_1, dim_2), or None for a panel that could not be
+            computed, which is drawn empty and marked as such.
+        labels: DataFrame or path to labels CSV
+        colormap: Dict or path to colormap JSON {label_col: {value: color}}
+        output_path: Path to save figure
+        label_column: Colormap column to colour by (default: the first one)
+        row_titles: One title per row, drawn left of the first column
+        col_titles: One title per column, drawn above the first row
+        axis_names: Per-cell axis prefix, same shape as ``embeddings``
+            (e.g. "PHATE" gives "PHATE 1" / "PHATE 2"); default none
+        title: Optional figure title
+        panel_size: Size of one panel (width, height)
+        point_size: Size of scatter plot points
+        alpha: Transparency of points
+
+    Returns:
+        Path to saved figure
+    """
+    rows = [list(row) for row in embeddings]
+    if not rows or not rows[0] or any(len(row) != len(rows[0]) for row in rows):
+        raise ValueError("embeddings must be a non-empty rectangular grid")
+    n_rows, n_cols = len(rows), len(rows[0])
+
+    labels_df = read_labels_csv(labels) if isinstance(labels, (str, Path)) else labels
+    if labels_df.index.name == "sample_id":
+        labels_df = labels_df.reset_index()
+
+    colormap_dict = read_colormap(colormap) if isinstance(colormap, (str, Path)) else colormap
+    if label_column is None:
+        label_column = next(iter(colormap_dict))
+    if label_column not in colormap_dict:
+        raise ValueError(f"Column '{label_column}' not found in colormap")
+    if label_column not in labels_df.columns:
+        raise ValueError(f"Column '{label_column}' not found in labels")
+    color_dict = colormap_dict[label_column]
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(panel_size[0] * n_cols, panel_size[1] * n_rows),
+        squeeze=False,
+    )
+
+    present = set()
+    any_missing = False
+    warned = False
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            ax = axes[i][j]
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            if cell is None:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "not computed",
+                    ha="center",
+                    va="center",
+                    color="gray",
+                    transform=ax.transAxes,
+                )
+            else:
+                embedding_df = read_embedding_csv(cell) if isinstance(cell, (str, Path)) else cell
+                merged = embedding_df.merge(
+                    labels_df[["sample_id", label_column]], on="sample_id", how="inner"
+                )
+                if not warned:
+                    warn_about_unmatched_labels(merged[label_column], color_dict, label_column)
+                    warned = True
+
+                # Same layering as plot_embedding: missing labels underneath,
+                # then the colormap in reverse so its first entries end up on top.
+                missing = merged[label_column].isna()
+                if missing.any():
+                    any_missing = True
+                    ax.scatter(
+                        merged.loc[missing, "dim_1"],
+                        merged.loc[missing, "dim_2"],
+                        s=point_size,
+                        alpha=alpha * 0.5,
+                        color="lightgray",
+                        edgecolors="none",
+                        rasterized=True,
+                        zorder=1,
+                    )
+                values = set(merged[label_column].dropna())
+                present |= values
+                for value in reversed([k for k in color_dict if k in values]):
+                    mask = merged[label_column] == value
+                    ax.scatter(
+                        merged.loc[mask, "dim_1"],
+                        merged.loc[mask, "dim_2"],
+                        s=point_size,
+                        alpha=alpha,
+                        color=color_dict[value],
+                        edgecolors="none",
+                        rasterized=True,
+                        zorder=2,
+                    )
+
+            if axis_names is not None and axis_names[i][j]:
+                ax.set_xlabel(f"{axis_names[i][j]} 1", fontsize=8)
+                ax.set_ylabel(f"{axis_names[i][j]} 2", fontsize=8)
+            if i == 0 and col_titles is not None:
+                ax.set_title(col_titles[j], fontsize=13)
+
+        if row_titles is not None:
+            # On its own line left of the axis label, so the two never overlap.
+            axes[i][0].annotate(
+                row_titles[i],
+                xy=(0, 0.5),
+                xycoords="axes fraction",
+                xytext=(-28, 0),
+                textcoords="offset points",
+                ha="right",
+                va="center",
+                rotation=90,
+                fontsize=12,
+            )
+
+    legend_elements = [Patch(facecolor=color_dict[g], label=g) for g in color_dict if g in present]
+    if any_missing:
+        legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
+    if 0 < len(legend_elements) <= 50:
+        fig.legend(
+            handles=legend_elements,
+            title=label_column,
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            frameon=False,
+            fontsize=14,
+            title_fontsize=16,
+        )
+
+    if title:
+        fig.suptitle(title, fontsize=16)
+        # Leave room above the column titles, which tight_layout alone overlaps.
+        plt.tight_layout(rect=(0, 0, 1, 0.97))
+    else:
+        plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    logger.info(f"Saved embedding grid: {output_path}")
+    return output_path
+
+
 # --------------------------------------------------------------------------- #
 # Interactive 3-D embeddings
 # --------------------------------------------------------------------------- #

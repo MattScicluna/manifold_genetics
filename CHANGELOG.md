@@ -9,6 +9,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Comparison grids in a pipeline run.** Two optional keys in the config's
+  `visualization` section. `method_grid` maps methods to their parameters
+  (`phate: {knn: 25}`, `umap: {n_neighbors: 15}`, `tsne: {perplexity: 30}`)
+  and draws them side by side; `phate_grid` sweeps PHATE over one or two
+  parameters (`knn: [5, 25, 100]`, `t: [3, 10, auto]`) as rows and columns.
+  Each panel embeds the same PCA coordinates as the run, the grid shares one
+  legend, and one figure is written per colormap column to
+  `figures/embeddings/grids/`, with the panel embeddings in
+  `embeddings/grids/`. A failed panel is drawn empty and reported, not fatal.
+  Library users get `plot_embedding_grid`.
 - **Embeddings can be three-dimensional.** `--n-components` on `embed` and
   `pipeline` sets the embedding dimensionality for every method (PHATE, UMAP,
   t-SNE, diffusion maps). It defaults to 2, so nothing that does not pass it

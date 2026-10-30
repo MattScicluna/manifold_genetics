@@ -26,6 +26,7 @@ from ...visualization import (
     plot_admixture_bar_grid,
     plot_admixture_embedding_3d,
     plot_admixture_embedding_grid,
+    plot_embedding_grid,
     plot_pca_pairs,
     plot_projection,
     visualize,
@@ -33,8 +34,9 @@ from ...visualization import (
 )
 from ..config import IOConfig, VizConfig
 from .admixture import AdmixtureStepResult
-from .embedding import EmbeddingStepResult
-from .paths import figure_output_paths
+from .embedding import EmbeddingStepResult, run_embedding, select_embedding_inputs
+from .paths import embedding_grid_output_paths, figure_output_paths
+from .pca import PCAStepResult
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,7 @@ __all__ = [
     "plot_pca_pair_grids",
     "run_admixture_embedding_viz_step",
     "run_admixture_viz_step",
+    "run_embedding_grid_viz_step",
     "run_embedding_viz_step",
     "run_pca_viz_step",
 ]
@@ -88,6 +91,8 @@ class VizStepResult:
     """Typed outputs of a visualization step: the figures it produced."""
 
     figures: Tuple[Path, ...] = ()
+    # Parts of the step that failed without failing it, e.g. one grid panel.
+    failed_substeps: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -263,6 +268,136 @@ def run_embedding_viz_step(
         projection_plot=projection_plot_path,
         failed_substeps=tuple(failed_substeps),
     )
+
+
+_AXIS_NAMES = {"phate": "PHATE", "umap": "UMAP", "tsne": "t-SNE", "diffusion_map": "DM"}
+
+
+def _embed_grid_cell(name, inputs, output_dir, method, params, failed) -> Optional[Path]:
+    """Embed one grid panel, or record it as failed and return None.
+
+    One panel failing -- a perplexity too large for the cohort, say -- leaves
+    that panel empty rather than losing the whole comparison.
+    """
+    output = output_dir / f"{name}.csv"
+    fit_input, project_input = inputs
+    try:
+        run_embedding(
+            fit_input,
+            project_input,
+            project_output=output,
+            method=method,
+            params={**params, "n_components": 2},
+        )
+    except Exception as e:
+        logger.warning(f"Embedding grid panel {name!r} failed: {e}", exc_info=True)
+        failed.append(name)
+        return None
+    return output
+
+
+def _plot_grid_per_column(grid, labels, colormap_path, output_dir, stem, **kwargs) -> List[Path]:
+    """One grid figure per colormap column, as ``visualize`` does for single plots."""
+    figures = []
+    for label_col in read_colormap(colormap_path):
+        figures.append(
+            plot_embedding_grid(
+                embeddings=grid,
+                labels=labels,
+                colormap=colormap_path,
+                label_column=label_col,
+                output_path=output_dir / f"{stem}_by_{label_col}.png",
+                **kwargs,
+            )
+        )
+    return figures
+
+
+def run_embedding_grid_viz_step(
+    io: IOConfig,
+    viz: VizConfig,
+    *,
+    pca: PCAStepResult,
+    input_mode: str,
+    base_params: Optional[Mapping] = None,
+) -> VizStepResult:
+    """Embed and plot the method-comparison and PHATE-parameter grids.
+
+    Each panel embeds the same PCA coordinates as the run's own embedding
+    (``input_mode``), and is written to ``embeddings/grids/`` before it is
+    drawn. ``base_params`` are the run's PHATE parameters, which the PHATE grid
+    varies around, so a preset's landmarking carries into every panel.
+    """
+    if not viz.method_grid and not viz.phate_grid:
+        return VizStepResult()
+
+    inputs = select_embedding_inputs(input_mode, pca)
+    labels, colormap = (
+        (io.fit_labels, io.fit_colormap)
+        if input_mode == "fit"
+        else (io.project_labels, io.project_colormap)
+    )
+    paths = embedding_grid_output_paths(io)
+    paths["embeddings"].mkdir(parents=True, exist_ok=True)
+    figures, failed = [], []
+
+    if viz.method_grid:
+        methods = list(viz.method_grid)
+        row = [
+            _embed_grid_cell(
+                f"method_grid_{method}",
+                inputs,
+                paths["embeddings"],
+                method,
+                dict(viz.method_grid[method] or {}),
+                failed,
+            )
+            for method in methods
+        ]
+        figures += _plot_grid_per_column(
+            [row],
+            labels,
+            colormap,
+            paths["figures"],
+            "method_grid",
+            col_titles=[_AXIS_NAMES[m] for m in methods],
+            axis_names=[[_AXIS_NAMES[m] for m in methods]],
+        )
+
+    if viz.phate_grid:
+        fixed = {k: v for k, v in (base_params or {}).items() if k != "n_components"}
+        fixed.update({k: v for k, v in viz.phate_grid.items() if not isinstance(v, list)})
+        swept = [(k, v) for k, v in viz.phate_grid.items() if isinstance(v, list)]
+        # One swept parameter reads best as a single row of columns.
+        (row_key, row_values), (col_key, col_values) = (
+            swept if len(swept) == 2 else [(None, [None]), swept[0]]
+        )
+        grid = []
+        for rv in row_values:
+            cells = []
+            for cv in col_values:
+                params = {**fixed, col_key: cv}
+                name = f"phate_grid_{col_key}-{cv}"
+                if row_key is not None:
+                    params[row_key] = rv
+                    name = f"phate_grid_{row_key}-{rv}_{col_key}-{cv}"
+                cells.append(
+                    _embed_grid_cell(name, inputs, paths["embeddings"], "phate", params, failed)
+                )
+            grid.append(cells)
+        figures += _plot_grid_per_column(
+            grid,
+            labels,
+            colormap,
+            paths["figures"],
+            "phate_grid",
+            row_titles=None if row_key is None else [f"{row_key} = {v}" for v in row_values],
+            col_titles=[f"{col_key} = {v}" for v in col_values],
+            axis_names=[["PHATE"] * len(col_values)] * len(row_values),
+            title="PHATE parameter grid",
+        )
+
+    return VizStepResult(figures=tuple(figures), failed_substeps=tuple(failed))
 
 
 def run_admixture_viz_step(

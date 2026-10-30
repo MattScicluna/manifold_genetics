@@ -31,6 +31,7 @@ __all__ = [
     "embedding_output_paths",
     "run_embedding",
     "run_embedding_step",
+    "select_embedding_inputs",
 ]
 
 PathLike = Union[str, Path]
@@ -135,6 +136,40 @@ def run_embedding(
     return embedding
 
 
+def select_embedding_inputs(input_mode: str, pca: PCAStepResult):
+    """The ``(fit_input, project_input)`` pair ``input_mode`` embeds.
+
+    Shared by the embedding step and the embedding-grid figures, so a grid
+    always shows the same data as the run's own embedding.
+
+    Raises:
+        RuntimeError: the PCA coordinates the mode needs were not produced or
+            found on disk.
+    """
+    if input_mode == "fit":
+        logger.info("Embedding fit PCA coordinates only (mode: fit-only)")
+        fit_input, project_input = pca.fit_pca, None
+    elif input_mode == "project":
+        logger.info("Embedding project PCA coordinates only (mode: project-only)")
+        fit_input, project_input = pca.project_pca, None
+    else:  # "both"
+        logger.info("Embedding: fit on fit PCA, apply to project PCA (mode: both)")
+        fit_input, project_input = pca.fit_pca, pca.project_pca
+
+    if fit_input is None:
+        raise RuntimeError(
+            f"Embedding mode {input_mode!r} requires the "
+            f"{'project' if input_mode == 'project' else 'fit'} PCA coordinates, "
+            "but they were not produced or found on disk."
+        )
+    if input_mode == "both" and project_input is None:
+        raise RuntimeError(
+            f"Embedding mode {input_mode!r} requires the project PCA coordinates, "
+            "but they were not produced or found on disk."
+        )
+    return fit_input, project_input
+
+
 def run_embedding_step(
     io: IOConfig, emb: EmbeddingConfig, *, pca: PCAStepResult
 ) -> EmbeddingStepResult:
@@ -154,27 +189,7 @@ def run_embedding_step(
     paths = embedding_output_paths(io, emb)
     embedding_file = paths["embedding"]
 
-    if emb.input_mode == "fit":
-        logger.info("Embedding fit PCA coordinates only (mode: fit-only)")
-        fit_input, project_input = pca.fit_pca, None
-    elif emb.input_mode == "project":
-        logger.info("Embedding project PCA coordinates only (mode: project-only)")
-        fit_input, project_input = pca.project_pca, None
-    else:  # "both"
-        logger.info("Embedding: fit on fit PCA, apply to project PCA (mode: both)")
-        fit_input, project_input = pca.fit_pca, pca.project_pca
-
-    if fit_input is None:
-        raise RuntimeError(
-            f"Embedding mode {emb.input_mode!r} requires the "
-            f"{'project' if emb.input_mode == 'project' else 'fit'} PCA coordinates, "
-            "but they were not produced or found on disk."
-        )
-    if emb.input_mode == "both" and project_input is None:
-        raise RuntimeError(
-            f"Embedding mode {emb.input_mode!r} requires the project PCA coordinates, "
-            "but they were not produced or found on disk."
-        )
+    fit_input, project_input = select_embedding_inputs(emb.input_mode, pca)
 
     fit_embedding_file = paths.get("fit_embedding") if project_input is not None else None
 

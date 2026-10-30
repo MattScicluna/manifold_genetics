@@ -92,9 +92,26 @@ embedding:
   knn: 100                    # method-specific parameters pass straight through
   t: 3
 
+visualization:
+  method_grid:                # optional: methods side by side, each with its own parameters
+    phate: {knn: 25, t: auto}
+    umap: {n_neighbors: 15, min_dist: 0.1}
+    tsne: {perplexity: 30}
+  phate_grid:                 # optional: PHATE over one or two parameters (rows, then columns)
+    knn: [5, 25, 100]
+    t: [3, 10, auto]
+
 skip:
   admixture: true
 ```
+
+The two grids are comparison figures: every panel is its own 2-D embedding of
+the same PCA coordinates the run embeds, with one legend for the whole grid and
+one figure per colormap column. `phate_grid` starts from the run's own PHATE
+settings, so a preset's landmarking applies to every panel; a scalar entry
+(`gamma: 0`) fixes a parameter across the grid. Each panel is a full embedding,
+so a 3×3 grid costs nine. A panel that fails is left empty and named in the
+run's failed steps rather than losing the figure.
 
 The preset supplies the embedding settings that follow from it, so most files
 are shorter than this. An unknown key is rejected with a suggestion rather than
@@ -115,9 +132,11 @@ outputs/
 ├── embeddings/
 │   └── phate_2d.csv             sample_id, dim_1, dim_2
 │                                (phate_3d.csv when n_components: 3)
+│   └── grids/                   one CSV per grid panel, when a grid is configured
 ├── figures/
 │   ├── pca/                     PC-pair grids
 │   └── embeddings/              one scatter per colormap column
+│       └── grids/               method_grid_by_<col>.png, phate_grid_by_<col>.png
 ├── admixture/                   only when the admixture stage runs
 │   ├── fit.2.csv … fit.10.csv   ancestry proportions, one file per K
 │   └── project.2.csv … project.10.csv
