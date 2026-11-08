@@ -58,6 +58,8 @@ def run_pipeline(
     admix_within_group_order: Optional[str] = "chron",
     projection_plot_fit_column: Optional[str] = None,
     projection_plot_project_column: Optional[str] = None,
+    method_grid: Optional[Dict] = None,
+    phate_grid: Optional[Dict] = None,
     # Skip flags
     skip_pca: bool = False,
     skip_admixture: bool = False,
@@ -131,6 +133,12 @@ def run_pipeline(
         admix_within_group_order: Method for ordering samples within groups ('chron', 'tree', or None)
         projection_plot_fit_column: Column from fit colormap to use for projection plot
         projection_plot_project_column: Column from project colormap to use for projection plot
+        method_grid: Optional {method: params}, e.g. ``{"phate": {"knn": 25},
+            "umap": {"n_neighbors": 15}, "tsne": {"perplexity": 30}}``. Writes
+            one figure per colormap column comparing the methods side by side.
+        phate_grid: Optional {param: [values]} for one or two PHATE parameters,
+            e.g. ``{"knn": [5, 25, 100], "t": [3, 10, "auto"]}``: rows are the
+            first, columns the second. Scalar entries are fixed overrides.
         skip_pca: Skip PCA step
         skip_admixture: Skip admixture step
         skip_embedding: Skip embedding step
@@ -239,6 +247,8 @@ def run_pipeline(
         force_painting=force_painting,
         painting_missing=painting_missing,
         painting_pbwt_dir=painting_pbwt_dir,
+        method_grid=method_grid,
+        phate_grid=phate_grid,
     )
 
     logger.info("Pipeline execution complete")
