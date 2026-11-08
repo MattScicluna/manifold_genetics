@@ -207,6 +207,8 @@ class Pipeline:
         painting_method: str = "hc",
         painting_chromosomes: Optional[Union[str, int, List]] = None,
         force_painting: bool = False,
+        painting_missing: str = "error",
+        painting_pbwt_dir: Optional[Union[str, Path]] = None,
     ) -> PipelineResult:
         """
         Run full pipeline.
@@ -244,6 +246,11 @@ class Pipeline:
                 that turns the painting into PCA features (see docs/painting.md)
             painting_chromosomes: Chromosomes substituted for ``{chr}`` (default 1-22)
             force_painting: Repaint chromosomes whose pbwt output is cached
+            painting_missing: 'error' (default) stops before painting when a
+                fit or project sample is not in the phased VCFs. 'drop' leaves
+                it out of its cohort with a warning.
+            painting_pbwt_dir: Where pbwt's per-chromosome output goes (default
+                ``<output_dir>/painting/pbwt``)
 
         Returns:
             PipelineResult: The typed outputs of every stage that ran. Fields
@@ -268,6 +275,8 @@ class Pipeline:
             method=painting_method,
             chromosomes=painting_chromosomes,
             force=force_painting,
+            missing=painting_missing,
+            pbwt_dir=painting_pbwt_dir,
         )
         # Painting stands in for PCA: its coordinates go wherever the PCA's
         # would, so the PCA figures and the embedding read them unchanged.

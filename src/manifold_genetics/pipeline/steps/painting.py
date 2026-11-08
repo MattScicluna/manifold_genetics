@@ -29,6 +29,7 @@ from ...painting.matrix import (
 )
 from ...painting.pbwt import expand_phased_vcf, paint_chromosome
 from ...painting.reduce import match_cohort, painting_pca
+from ...painting.vcfheader import read_vcf_samples
 from ...pca.plink import read_fam
 from ..config import IOConfig, PaintingConfig, PCAConfig
 from .paths import painting_output_paths
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "PaintingStepResult",
+    "check_samples",
     "painting_output_paths",
     "run_painting",
     "run_painting_step",
@@ -93,12 +95,78 @@ def _paint_all(
     return sample_ids, summed
 
 
-def _cohort_rows(sample_ids: Sequence[str], plink: Optional[PathLike], cohort: str):
+def _describe_difference(ids: Sequence[str], first: Sequence[str]) -> str:
+    in_ids, in_first = set(ids), set(first)
+    extra = [s for s in ids if s not in in_first]
+    lacking = [s for s in first if s not in in_ids]
+    if not extra and not lacking:
+        return "It has the same samples in a different order."
+    parts = [f"It has {len(ids)} samples and the first has {len(first)}."]
+    if extra:
+        parts.append(f"{len(extra)} only in it, for example {', '.join(extra[:5])}.")
+    if lacking:
+        parts.append(f"{len(lacking)} missing from it, for example {', '.join(lacking[:5])}.")
+    return " ".join(parts)
+
+
+def _cohort_rows(
+    sample_ids: Sequence[str],
+    plink: Optional[PathLike],
+    cohort: str,
+    missing: str,
+    source: str,
+):
     """``(rows, ids)`` for a cohort: every painted sample when ``plink`` is None."""
     if plink is None:
         return list(range(len(sample_ids))), list(sample_ids)
     fids, iids = read_fam(plink)
-    return match_cohort(sample_ids, fids, iids, cohort=cohort), list(iids)
+    return match_cohort(sample_ids, fids, iids, cohort=cohort, missing=missing, source=source)
+
+
+def check_samples(
+    vcfs: Mapping[str, Path],
+    *,
+    fit_plink: Optional[PathLike] = None,
+    project_plink: Optional[PathLike] = None,
+    missing: str = "error",
+):
+    """Check the phased VCFs' samples against each other and the cohorts, before painting.
+
+    Reads only the VCF headers, so a mismatch is reported in seconds rather than
+    after every chromosome has been painted.
+
+    Returns:
+        ``(sample_ids, (fit_rows, fit_ids), (project_rows, project_ids))``, where
+        the rows index ``sample_ids``, the VCF's samples in file order.
+
+    Raises:
+        FileNotFoundError: a chromosome's VCF does not exist.
+        ValueError: the chromosomes list different samples, or a cohort sample
+            is not in the VCF and ``missing`` is ``error``.
+    """
+    sample_ids, first = None, None
+    for chrom, vcf in vcfs.items():
+        ids = read_vcf_samples(vcf)
+        if sample_ids is None:
+            sample_ids, first = ids, chrom
+        elif ids != sample_ids:
+            raise ValueError(
+                f"The phased VCF for chromosome {chrom} ({vcf}) does not list the same "
+                f"samples in the same order as chromosome {first}. "
+                f"{_describe_difference(ids, sample_ids)} Painting matrices can only be "
+                "summed when every chromosome has identical samples."
+            )
+    source = f"the phased VCFs ({vcfs[first]} and the other chromosomes)"
+    fit = _cohort_rows(sample_ids, fit_plink, "fit", missing, source)
+    if project_plink is None:
+        project = fit
+    else:
+        project = _cohort_rows(sample_ids, project_plink, "project", missing, source)
+    logger.info(
+        f"Phased VCFs list {len(sample_ids)} samples on {len(vcfs)} chromosome(s): "
+        f"{len(fit[0])} fit, {len(project[0])} project"
+    )
+    return sample_ids, fit, project
 
 
 def run_painting(
@@ -115,6 +183,7 @@ def run_painting(
     n_pcs: int = 50,
     force: bool = False,
     pbwt: Optional[str] = None,
+    missing: str = "error",
 ) -> pd.DataFrame:
     """Paint each chromosome, build coancestry features and reduce them by PCA.
 
@@ -135,6 +204,9 @@ def run_painting(
         n_pcs: Principal components to keep (capped by the fit cohort's size).
         force: Repaint chromosomes even when their outputs are cached.
         pbwt: The pbwt executable. Resolved with ``ToolResolver`` when ``None``.
+        missing: ``error`` (the default) stops before painting when a cohort
+            sample is not in the VCFs. ``drop`` leaves such samples out of
+            their cohort with a warning.
 
     Returns:
         DataFrame written to ``project_output`` (sample_id, dim_1, ..., dim_k).
@@ -146,9 +218,19 @@ def run_painting(
 
     method_matrix(method)  # an unknown method fails before any painting
     vcfs = expand_phased_vcf(phased_vcf, chromosomes)
+    # Every check that needs only the VCF headers and the .fam files runs here,
+    # before pbwt, which takes most of an hour on a genome.
+    vcf_ids, (fit_rows, fit_ids), (project_rows, project_ids) = check_samples(
+        vcfs, fit_plink=fit_plink, project_plink=project_plink, missing=missing
+    )
     pbwt_dir = Path(pbwt_dir)
     roots = {c: pbwt_dir / f"chr{c}" for c in chromosomes}
     sample_ids, summed = _paint_all(pbwt, vcfs, roots, method, force)
+    if sample_ids != vcf_ids:
+        raise ValueError(
+            f"pbwt listed {len(sample_ids)} samples but the VCF headers list {len(vcf_ids)}, "
+            f"or in another order. Delete {pbwt_dir} or set force to repaint."
+        )
     features = features_from_sum(summed, method, labels=sample_ids)
     logger.info(f"Painted {len(sample_ids)} samples on {len(vcfs)} chromosome(s)")
 
@@ -161,12 +243,6 @@ def run_painting(
 
     # Coordinates are written under the .fam's IIDs, which is what the labels
     # file is keyed on, even when the VCF names samples FID_IID.
-    fit_rows, fit_ids = _cohort_rows(sample_ids, fit_plink, "fit")
-    if project_plink is None:
-        project_rows, project_ids = fit_rows, fit_ids
-    else:
-        project_rows, project_ids = _cohort_rows(sample_ids, project_plink, "project")
-
     fit_df, project_df = painting_pca(
         features,
         sample_ids,
@@ -209,6 +285,7 @@ def run_painting_step(
         n_pcs=pca.n_pcs,
         force=painting.force,
         pbwt=pbwt,
+        missing=painting.missing,
     )
     return PaintingStepResult(
         fit_pca=paths["fit_pca"],

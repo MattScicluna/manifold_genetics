@@ -31,6 +31,8 @@ A config looks like::
     painting:                  # optional; replaces genotype PCA as the embedding input
       enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
       method: hc               # or finestructure
+      missing: error           # or drop: leave out cohort samples the VCFs lack
+      pbwt_dir: shared/pbwt    # optional; share pbwt's output between runs
 
 Two decisions worth knowing:
 
@@ -145,7 +147,11 @@ _PAINTING_KEYS = {
     "method": "painting_method",
     "chromosomes": "painting_chromosomes",
     "force": "force_painting",
+    "missing": "painting_missing",
+    "pbwt_dir": "painting_pbwt_dir",
 }
+# Resolved against the config file's directory, like the data section's paths.
+_PAINTING_PATH_KEYS = {"pbwt_dir"}
 _VIZ_KEYS = {
     "admix_group_column": "admix_group_column",
     "admix_within_group_order": "admix_within_group_order",
@@ -281,6 +287,8 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
         section = data.get(name) or {}
         _reject_unknown(section, mapping, f"key(s) in the {name!r} section")
         for key, value in section.items():
+            if name == "painting" and key in _PAINTING_PATH_KEYS and value is not None:
+                value = _resolve(value, base)
             kwargs[mapping[key]] = value
 
     for key, arg in _SKIP_KEYS.items():

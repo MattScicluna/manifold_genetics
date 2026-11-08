@@ -222,6 +222,7 @@ def cmd_paint(args):
         method=args.method,
         n_pcs=args.n_pcs,
         force=args.force,
+        missing=args.missing,
     )
     print(f"Painting coordinates: {args.output}")
     if args.fit_output:
@@ -1185,6 +1186,16 @@ def main(argv: Optional[List[str]] = None):
             "How the painting becomes PCA features: finestructure (chunk counts, "
             "Lawson et al. 2012) or hc (chunk lengths, Yang et al. 2025) "
             "(default: hc)"
+        ),
+    )
+    paint_parser.add_argument(
+        "--missing",
+        choices=["error", "drop"],
+        default="error",
+        help=(
+            "What to do with a fit or project sample the phased VCFs lack: stop before "
+            "painting (error) or leave it out of its cohort with a warning (drop) "
+            "(default: error)"
         ),
     )
     paint_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")

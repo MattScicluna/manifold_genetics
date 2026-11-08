@@ -133,18 +133,92 @@ def test_vcf_names_of_the_form_fid_iid_match_the_fam(tmp_path):
     assert list(coords["sample_id"]) == SAMPLES  # written under the IID
 
 
-def test_a_cohort_sample_missing_from_the_vcf_is_an_error(painted):
+def test_a_cohort_sample_missing_from_the_vcf_fails_before_painting(painted):
     tmp_path, pbwt = painted
     write_fam(tmp_path / "fit", ["A1", "A2", "ZZ9"])
-    with pytest.raises(ValueError, match="1 of 3 fit samples.*ZZ9"):
+    with pytest.raises(ValueError, match="1 of 3 fit samples.*ZZ9") as err:
         paint(tmp_path, pbwt, fit_plink=tmp_path / "fit")
+    assert "1 is absent from the VCF" in str(err.value)
+    assert "ID format mismatch" not in str(err.value)
+    assert "missing: drop" in str(err.value)  # says how to proceed
+    assert calls(tmp_path / "bin") == []  # pbwt never ran
 
 
-def test_chromosomes_with_different_samples_are_refused(painted):
+def test_a_project_sample_missing_from_the_vcf_fails_before_painting(painted):
+    tmp_path, pbwt = painted
+    write_fam(tmp_path / "fit", ["A1", "B1"])
+    write_fam(tmp_path / "project", SAMPLES + ["ZZ9"])
+    with pytest.raises(ValueError, match="1 of 7 project samples"):
+        paint(tmp_path, pbwt, fit_plink=tmp_path / "fit", project_plink=tmp_path / "project")
+    assert calls(tmp_path / "bin") == []
+
+
+def test_an_id_format_mismatch_is_told_apart_from_absent_samples(tmp_path):
+    pbwt = install_fake_pbwt(tmp_path / "bin")
+    # The VCF prefixes each name with a batch, not the FID, and one sample is gone.
+    write_vcf(tmp_path / "data" / "chr1.vcf", [f"batch1_{s}" for s in SAMPLES[:-1]])
+    write_fam(tmp_path / "fit", SAMPLES)
+    with pytest.raises(ValueError) as err:
+        paint(tmp_path, str(pbwt), chromosomes=["1"], fit_plink=tmp_path / "fit")
+    message = str(err.value)
+    assert "6 of 6 fit samples" in message
+    assert "5 of them look like an ID format mismatch" in message
+    assert "A1 vs batch1_A1" in message
+    assert "1 is absent from the VCF under any naming, for example B3" in message
+
+
+def test_an_iid_that_is_itself_fid_iid_is_a_format_mismatch(tmp_path):
+    pbwt = install_fake_pbwt(tmp_path / "bin")
+    write_vcf(tmp_path / "data" / "chr1.vcf", SAMPLES)
+    write_fam(tmp_path / "fit", [f"fam_{s}" for s in SAMPLES], fids=["x"] * 6)
+    with pytest.raises(ValueError, match="fam_A1 vs A1"):
+        paint(tmp_path, str(pbwt), chromosomes=["1"], fit_plink=tmp_path / "fit")
+
+
+def test_missing_drop_leaves_the_sample_out_with_a_warning(painted, caplog):
+    tmp_path, pbwt = painted
+    write_fam(tmp_path / "fit", ["A1", "A2", "B1", "B2", "ZZ9"])
+    write_fam(tmp_path / "project", SAMPLES + ["ZZ8"])
+    with caplog.at_level("WARNING"):
+        project = paint(
+            tmp_path,
+            pbwt,
+            fit_plink=tmp_path / "fit",
+            project_plink=tmp_path / "project",
+            fit_output=tmp_path / "fit.csv",
+            missing="drop",
+            n_pcs=2,
+        )
+    assert list(project["sample_id"]) == SAMPLES
+    assert list(pd.read_csv(tmp_path / "fit.csv")["sample_id"]) == ["A1", "A2", "B1", "B2"]
+    assert "left out of the fit cohort" in caplog.text
+    assert "left out of the project cohort" in caplog.text
+
+
+def test_missing_drop_still_refuses_an_empty_cohort(painted):
+    tmp_path, pbwt = painted
+    write_fam(tmp_path / "fit", ["ZZ8", "ZZ9"])
+    with pytest.raises(ValueError, match="No fit sample is left"):
+        paint(tmp_path, pbwt, fit_plink=tmp_path / "fit", missing="drop")
+
+
+def test_chromosomes_with_different_samples_are_refused_before_painting(painted):
     tmp_path, pbwt = painted
     write_vcf(tmp_path / "data" / "chr2.vcf", list(reversed(SAMPLES)), "2")
-    with pytest.raises(ValueError, match="chromosome 2 does not list the same samples"):
+    with pytest.raises(ValueError, match="chromosome 2 .* does not list the same samples"):
         paint(tmp_path, pbwt)
+    assert calls(tmp_path / "bin") == []
+
+    write_vcf(tmp_path / "data" / "chr2.vcf", SAMPLES[:-1], "2")
+    with pytest.raises(ValueError, match="1 missing from it, for example B3"):
+        paint(tmp_path, pbwt)
+
+
+def test_a_missing_chromosome_vcf_fails_before_painting(painted):
+    tmp_path, pbwt = painted
+    with pytest.raises(FileNotFoundError, match="chr3.vcf"):
+        paint(tmp_path, pbwt, chromosomes=["1", "2", "3"])
+    assert calls(tmp_path / "bin") == []
 
 
 def test_n_pcs_is_capped_by_the_fit_cohort(painted, caplog):
@@ -174,7 +248,7 @@ def test_step_writes_where_painting_output_paths_says(painted):
     result = run_painting_step(io, pca, painting, pbwt=pbwt)
     paths = painting_output_paths(io, pca, painting)
 
-    assert result.fit_pca == paths["fit_pca"] == tmp_path / "out/painting/fit_painting_pca_2.csv"
+    assert result.fit_pca == paths["fit_pca"] == tmp_path / "out/painting/fit_painting_hc_pca_2.csv"
     assert result.project_pca == paths["project_pca"]
     assert result.coancestry == tmp_path / "out/painting/coancestry_hc.csv"
     assert all(p.exists() for p in (result.fit_pca, result.project_pca, result.coancestry))
@@ -287,8 +361,8 @@ def test_painting_replaces_pca_as_the_embedding_input(painted, monkeypatch):
     )
 
     out = tmp_path / "out" / "painting"
-    assert seen["pca"].fit_pca == out / "fit_painting_pca_2.csv"
-    assert seen["pca"].project_pca == out / "project_painting_pca_2.csv"
+    assert seen["pca"].fit_pca == out / "fit_painting_hc_pca_2.csv"
+    assert seen["pca"].project_pca == out / "project_painting_hc_pca_2.csv"
     assert result.painting is not None and result.pca.project_pca == result.painting.project_pca
 
     # skip_pca reuses the cached painting coordinates rather than repainting.
@@ -309,7 +383,121 @@ def test_painting_replaces_pca_as_the_embedding_input(painted, monkeypatch):
         skip_visualization=True,
         skip_metrics=True,
     )
-    assert seen["pca"].skipped and seen["pca"].project_pca == out / "project_painting_pca_2.csv"
+    assert seen["pca"].skipped and seen["pca"].project_pca == out / "project_painting_hc_pca_2.csv"
+
+
+def _run_painting_pipeline(tmp_path, **kwargs):
+    from manifold_genetics.pipeline.runner import run_pipeline
+
+    defaults = dict(
+        fit_plink=tmp_path / "fit",
+        project_plink=tmp_path / "project",
+        output_dir=tmp_path / "out",
+        labels=tmp_path / "labels.csv",
+        colormap=tmp_path / "cmap.json",
+        phased_vcf=tmp_path / "data" / "chr{chr}.vcf",
+        painting=True,
+        painting_chromosomes=["1", "2"],
+        n_pcs=2,
+        skip_admixture=True,
+        skip_pca_visualization=True,
+        skip_visualization=True,
+        skip_metrics=True,
+    )
+    defaults.update(kwargs)
+    return run_pipeline(**defaults)
+
+
+def test_switching_method_keeps_both_outputs_and_skip_reads_only_its_own(painted, monkeypatch):
+    import manifold_genetics.pipeline.orchestrator as orch
+
+    tmp_path, _ = painted
+    monkeypatch.setenv("MANIFOLD_GENETICS_TOOL_DIR", str(tmp_path / "bin"))
+    write_fam(tmp_path / "fit", ["A1", "A2", "B1", "B2"])
+    write_fam(tmp_path / "project", SAMPLES)
+    seen = {}
+    monkeypatch.setattr(
+        orch, "run_embedding_step", lambda io, emb, *, pca: seen.__setitem__("pca", pca)
+    )
+
+    _run_painting_pipeline(tmp_path, painting_method="hc")
+    out = tmp_path / "out" / "painting"
+    hc = pd.read_csv(out / "project_painting_hc_pca_2.csv")
+
+    # skip: pca with a method that has never run finds nothing, and says so,
+    # rather than embedding the hc coordinates.
+    with pytest.raises(RuntimeError, match="project_painting_finestructure_pca_2.csv"):
+        _run_painting_pipeline(tmp_path, painting_method="finestructure", skip_pca=True)
+
+    _run_painting_pipeline(tmp_path, painting_method="finestructure")
+    assert seen["pca"].project_pca == out / "project_painting_finestructure_pca_2.csv"
+    # The second method reused pbwt's output and left the first one's alone.
+    assert len(calls(tmp_path / "bin")) == 2
+    pd.testing.assert_frame_equal(pd.read_csv(out / "project_painting_hc_pca_2.csv"), hc)
+
+    _run_painting_pipeline(tmp_path, painting_method="hc", skip_pca=True)
+    assert seen["pca"].project_pca == out / "project_painting_hc_pca_2.csv"
+
+
+def test_pbwt_dir_is_shared_between_output_dirs(painted, monkeypatch):
+    import manifold_genetics.pipeline.orchestrator as orch
+
+    tmp_path, _ = painted
+    monkeypatch.setenv("MANIFOLD_GENETICS_TOOL_DIR", str(tmp_path / "bin"))
+    write_fam(tmp_path / "fit", ["A1", "A2", "B1", "B2"])
+    write_fam(tmp_path / "project", SAMPLES)
+    monkeypatch.setattr(orch, "run_embedding_step", lambda io, emb, *, pca: None)
+    shared = tmp_path / "shared" / "pbwt"
+
+    _run_painting_pipeline(tmp_path, output_dir=tmp_path / "hc", painting_pbwt_dir=shared)
+    _run_painting_pipeline(
+        tmp_path,
+        output_dir=tmp_path / "fs",
+        painting_method="finestructure",
+        painting_pbwt_dir=shared,
+    )
+
+    assert (shared / "chr1.chunkcounts.out").exists()
+    assert not (tmp_path / "hc" / "painting" / "pbwt").exists()
+    assert len(calls(tmp_path / "bin")) == 2  # painted once, for the first run
+    assert (tmp_path / "fs/painting/project_painting_finestructure_pca_2.csv").exists()
+
+
+def test_painting_output_paths_name_the_method(tmp_path):
+    io = IOConfig(
+        fit_plink=tmp_path / "f",
+        project_plink=tmp_path / "p",
+        output_dir=tmp_path / "out",
+        fit_labels=tmp_path / "l.csv",
+        project_labels=tmp_path / "l.csv",
+        fit_colormap=tmp_path / "c.json",
+        project_colormap=tmp_path / "c.json",
+    )
+    pca = PCAConfig(n_pcs=4)
+    hc = painting_output_paths(io, pca, PaintingConfig(method="hc"))
+    fs = painting_output_paths(io, pca, PaintingConfig(method="finestructure"))
+    for key in ("fit_pca", "project_pca", "coancestry"):
+        assert hc[key] != fs[key]
+    assert hc["pbwt_dir"] == fs["pbwt_dir"] == tmp_path / "out/painting/pbwt"
+    shared = painting_output_paths(io, pca, PaintingConfig(pbwt_dir=tmp_path / "s"))
+    assert shared["pbwt_roots"]["1"] == tmp_path / "s" / "chr1"
+
+
+def test_config_file_painting_missing_and_pbwt_dir(tmp_path):
+    config = {
+        "data": {"output_dir": "o", "phased_vcf": "chr{chr}.vcf"},
+        "painting": {"missing": "drop", "pbwt_dir": "shared/pbwt"},
+    }
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(config))
+    kwargs = load_config(path)
+    assert kwargs["painting_missing"] == "drop"
+    assert kwargs["painting_pbwt_dir"] == (tmp_path / "shared" / "pbwt").resolve()
+
+    cfg = build_painting_config(missing="drop", pbwt_dir="x/pbwt")
+    assert cfg.missing == "drop" and str(cfg.pbwt_dir) == "x/pbwt"
+    with pytest.raises(ValueError, match="Unknown painting missing policy"):
+        build_painting_config(missing="warn")
 
 
 # --- tool resolution -------------------------------------------------------

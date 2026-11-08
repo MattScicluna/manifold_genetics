@@ -378,6 +378,22 @@ def test_a_relative_phased_vcf_and_painting_carry_forward_to_the_same_files(
     assert "painting uses them as given" in messages
 
 
+def test_a_relative_pbwt_dir_carries_forward_to_the_same_directory(cohort, tmp_path):
+    based_on = _with_painting(cohort, "phased/chr{chr}.vcf.gz")
+    based_on.raw["painting"] = {"enabled": True, "pbwt_dir": "shared/pbwt"}
+    out = tmp_path / "next"
+    out.mkdir()
+    path = write_cohort_config(
+        out,
+        based_on=based_on,
+        preset="subsample",
+        data=_SUBSAMPLE_OUTPUT_DATA,
+        written_by="manifold-genetics subsample",
+    )
+    loaded = load_config(path)
+    assert loaded["painting_pbwt_dir"] == (cohort.path.parent / "shared/pbwt").resolve()
+
+
 def test_an_absolute_phased_vcf_is_carried_verbatim(cohort, tmp_path):
     vcf = str(tmp_path / "elsewhere/chr{chr}.vcf.gz")
     out = tmp_path / "next"

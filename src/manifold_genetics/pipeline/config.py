@@ -15,6 +15,7 @@ _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 _PAINTING_METHODS = ("finestructure", "hc")
+_PAINTING_MISSING = ("error", "drop")
 
 
 @dataclass(frozen=True)
@@ -47,12 +48,21 @@ class PaintingConfig:
     (Yang et al. 2025, chunk lengths). The number of components is
     the PCA section's ``n_pcs``, so switching painting on changes nothing else
     about the run's shape.
+
+    ``missing`` says what happens to a fit or project sample that the phased
+    VCFs lack: ``error`` stops before painting, ``drop`` leaves it out of its
+    cohort with a warning. ``pbwt_dir`` is where pbwt's per-chromosome output
+    goes, ``<output_dir>/painting/pbwt`` when ``None``. pbwt's output does not
+    depend on the method, so runs with different methods or output
+    directories can share one.
     """
 
     enabled: bool = False
     method: str = "hc"
     chromosomes: Tuple[str, ...] = tuple(str(c) for c in range(1, 23))
     force: bool = False
+    missing: str = "error"
+    pbwt_dir: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +151,8 @@ def build_configs(
     painting_method: str = "hc",
     painting_chromosomes=None,
     force_painting: bool = False,
+    painting_missing: str = "error",
+    painting_pbwt_dir=None,
     n_pcs: int = 50,
     force_pca: bool = False,
     k_min: int = 2,
@@ -219,6 +231,8 @@ def build_configs(
         method=painting_method,
         chromosomes=painting_chromosomes,
         force=force_painting,
+        missing=painting_missing,
+        pbwt_dir=painting_pbwt_dir,
     )
 
     io = IOConfig(
@@ -273,12 +287,14 @@ def build_painting_config(
     method: str = "hc",
     chromosomes=None,
     force: bool = False,
+    missing: str = "error",
+    pbwt_dir=None,
 ) -> PaintingConfig:
     """Validate the painting settings into a ``PaintingConfig``. No filesystem access.
 
     Raises:
-        ValueError: an unknown method, an ``hc`` run on a chromosome with no known
-            genetic length, an unparseable chromosome list, or painting
+        ValueError: an unknown method or ``missing`` policy, an ``hc`` run on a
+            chromosome with no known genetic length, an unparseable chromosome list, or painting
             enabled without a ``phased_vcf`` containing ``{chr}``.
     """
     # Imported here: the painting package pulls in sklearn, which the rest of
@@ -289,6 +305,11 @@ def build_painting_config(
     if method not in _PAINTING_METHODS:
         raise ValueError(
             f"Unknown painting method: {method!r}. Choose from: {', '.join(_PAINTING_METHODS)}"
+        )
+    if missing not in _PAINTING_MISSING:
+        raise ValueError(
+            f"Unknown painting missing policy: {missing!r}. Choose from: "
+            f"{', '.join(_PAINTING_MISSING)}"
         )
     names = tuple(parse_chromosomes(chromosomes))
     if method == "hc":
@@ -307,5 +328,10 @@ def build_painting_config(
             )
         expand_phased_vcf(phased_vcf, names)  # raises when {chr} is missing
     return PaintingConfig(
-        enabled=bool(enabled), method=method, chromosomes=names, force=bool(force)
+        enabled=bool(enabled),
+        method=method,
+        chromosomes=names,
+        force=bool(force),
+        missing=missing,
+        pbwt_dir=_as_path(pbwt_dir),
     )

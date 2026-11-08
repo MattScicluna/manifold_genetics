@@ -248,6 +248,21 @@ def _carried_phased_vcf(based_on: CohortConfig, out_dir: Path) -> Optional[str]:
         return target
 
 
+def _rebased(value, based_on: CohortConfig, out_dir: Path) -> str:
+    """A path from the input config, rewritten to name the same place from ``out_dir``.
+
+    Absolute paths are copied as written. ``painting.pbwt_dir`` goes through
+    this, so a rerun from the new config reuses the same pbwt output.
+    """
+    if Path(str(value)).expanduser().is_absolute():
+        return str(value)
+    target = os.path.normpath(based_on.path.parent / Path(str(value)).expanduser())
+    try:
+        return os.path.relpath(target, out_dir)
+    except ValueError:  # pragma: no cover - different drives on Windows
+        return target
+
+
 # Dropped from a carried `embedding` section when the output's preset differs
 # from the input's: each is either the preset's own dataset-role choice
 # (`input_mode`) or a landmarking/knn default the preset sets (see PRESETS in
@@ -294,6 +309,8 @@ def write_cohort_config(
     for section in _CARRIED_SECTIONS:
         if section in based_on.raw and based_on.raw[section]:
             carried = dict(based_on.raw[section])
+            if section == "painting" and carried.get("pbwt_dir") is not None:
+                carried["pbwt_dir"] = _rebased(carried["pbwt_dir"], based_on, Path(out_dir))
             if section == "embedding" and preset != based_on.preset:
                 for key in _DROPPED_ON_PRESET_CHANGE:
                     if key in carried:

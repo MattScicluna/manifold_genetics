@@ -20,12 +20,14 @@ from .matrix import (
     sum_matrices,
 )
 from .pbwt import expand_phased_vcf, paint_chromosome, parse_chromosomes
-from .reduce import match_cohort, painting_pca
+from .reduce import MISSING_POLICIES, match_cohort, painting_pca
+from .vcfheader import read_vcf_samples
 
 __all__ = [
     "CHROMOSOME_CM",
     "MATRIX_FOR_METHOD",
     "METHODS",
+    "MISSING_POLICIES",
     "build_features",
     "centimorgan_weight",
     "chromosome_weight",
@@ -40,5 +42,6 @@ __all__ = [
     "parse_chromosomes",
     "read_paint_matrix",
     "read_pbwt_samples",
+    "read_vcf_samples",
     "sum_matrices",
 ]
