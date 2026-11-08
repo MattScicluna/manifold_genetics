@@ -51,12 +51,13 @@ manifold-genetics acquire hgdp --archive hgdp_1kgp_full.tar.gz
 `--no-download` means never fetch: it still unpacks an archive already present.
 
 `custom` takes `--fit-plink` and labels, plus optionally `--project-plink`,
-`--preset` and `--n-pcs`. Labels are either one `--labels` describing both sets,
+`--preset`, `--n-pcs` and `--colormap`. Labels are either one `--labels` describing both sets,
 or `--fit-labels` and `--project-labels` when they differ, as in every UK
 Biobank config. It writes a colour for every label value -- 22 of them
 for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
+`--colormap` names a colormap JSON whose colors take precedence over the published ones. Values it does not cover still get a generated color.
 
 `aou` fetches the All of Us array genotypes of the release attached to the
 workspace (from `$CDR_STORAGE_PATH/microarray/plink`, or `--bucket-root`) and labels
@@ -78,7 +79,7 @@ without `--force`.
 ## Running a whole pipeline
 
 ```bash
-manifold-genetics run config.yaml [--dry-run] [--output DIR] [--skip-...] [-v]
+manifold-genetics run config.yaml [--dry-run] [--output DIR] [--skip-...] [--verbose]
 ```
 
 The entry point for real work. Reads a [config file](formats.md#the-config-file), applies
@@ -92,9 +93,9 @@ a few command-line overrides, runs the pipeline.
   the budget the fit streams: bounded memory, about nineteen times the wall
   clock. Lower it if a run is killed; raise it on a large node to keep a big
   cohort in memory.
-- `--skip-pca`, `--skip-admixture`, `--skip-metrics` add to the config's own
-  skip settings.
-- `-v` enables debug logging for this package only. It does not turn on debug
+- `--skip-pca`, `--skip-admixture`, `--skip-embedding`, `--skip-metrics` add to
+  the config's own skip settings.
+- `--verbose` enables debug logging for this package only. It does not turn on debug
   for numba and every other library in the process, which is what it used to do.
 
 ```bash
@@ -247,8 +248,8 @@ produced the published figures, shipped inside the package, and needs `bash`,
 - `--fit-has-chr-prefix` when the fit set's chromosomes are already `chr1`,
   not `1` — true of the workbench HGDP+1KGP panel `acquire hgdp --archive`
   writes.
-- `--threads`, `--memory` (MB, default 100000), `--temp-dir`, `--cleanup` for
-  resources; `--tools-dir` for where the `harmonise` references live;
+- `--threads` (default: `SLURM_CPUS_PER_TASK`, or 4), `--memory` (MB, default
+  100000), `--temp-dir` (default: `OUT/data/temp`), `--cleanup` for resources; `--tools-dir` for where the `harmonise` references live;
   `--min-common-snps` (50,000) is the floor below which the run aborts.
 
 `harmonise` downloads its references at run time unless
@@ -289,6 +290,9 @@ Choose the fit samples by exactly one of:
   `.fam` first. `--n-pcs` limits how many of the CSV's columns are used
   (default: all).
 
+`--seed` (default 42) fixes the random draws: the samples taken for each group, the sketch pool and the sketch itself.
+`--force` overwrites an existing `config.yaml` in `--out`.
+
 ## Setup
 
 ```bash
@@ -314,5 +318,5 @@ Commands return 0 on success and non-zero on failure, with the reason on stderr
 rather than a traceback for the errors a user can actually act on — a missing
 config, an unknown key, absent input files.
 
-Logging goes to stderr at INFO by default and DEBUG under `-v`, scoped to the
+Logging goes to stderr at INFO by default and DEBUG under `--verbose`, scoped to the
 `manifold_genetics` logger.
