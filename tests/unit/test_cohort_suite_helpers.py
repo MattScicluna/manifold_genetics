@@ -32,7 +32,8 @@ def test_all_digit_sample_ids_are_read_as_strings(tmp_path):
 
     df, dims = _coords(path)
 
-    assert df["sample_id"].dtype == object
+    # object under pandas 2, the str dtype under pandas 3: either is a string.
+    assert pd.api.types.is_string_dtype(df["sample_id"])
     assert list(df["sample_id"]) == ["1000017", "1000024"]
     assert dims == ["dim_1", "dim_2"]
 
