@@ -125,15 +125,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The workflows on `main` default to the `main` image.** `aou_prepare`,
+  `analyse`, `analyse_3d` and `admixture` defaulted to the `verily-workflow`
+  image, which is built from another branch. They now default to `main`
+  (`main-gpu` for admixture), and `prepare.inputs.json`, `inputs.full.json`
+  and `inputs.no_admixture.json` pin `main` instead of tags that do not
+  exist or predate `--colormap`.
+
 - **The Nextflow workflow moved into `nextflow/`**: `main.nf`,
   `nextflow.config` and the optional-input placeholders (from
   `assets/nextflow/`). Run it as `nextflow run nextflow/main.nf ...`; the
   config beside it is still picked up.
 
 - **The WDL workflows moved from the repository root into `wdl/`**, beside
-  their example inputs. Run them as `miniwdl run wdl/analyse.wdl ...`; on
-  Verily Workbench, add them again with the `wdl/` path, since workflows added
-  from the old root path no longer resolve.
+  their example inputs. Run them as `miniwdl run wdl/analyse.wdl ...`. On
+  Verily Workbench, add new workflows with the `wdl/` path. Workflows already
+  registered at the root path keep working: they run from the `verily-workflow`
+  branch, which keeps the old layout until release 0.4.0.
 
 - **PCA reads genotypes 4-6x faster, with identical results.** The python
   backend's streaming fit re-reads the cohort about 40 times, and nearly all

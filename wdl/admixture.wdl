@@ -26,7 +26,7 @@ workflow admixture {
         # Also infer the project set (the whole cohort); see memory above.
         Boolean infer_project = false
 
-        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow-gpu"
+        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:main-gpu"
         Int gpus = 1
         String gpu_type = "nvidia-tesla-t4"
         Int cpu = 8

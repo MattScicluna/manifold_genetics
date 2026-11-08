@@ -21,7 +21,7 @@ workflow analyse_3d {
         Int umap_n_neighbors = 15
         Float umap_min_dist = 0.5
 
-        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
+        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:main"
         Int cpu = 8
         Int memory_gb = 64
         Int disk_gb = 50
