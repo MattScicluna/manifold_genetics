@@ -23,12 +23,17 @@ What `acquire` writes and what `preprocess`, `subsample` and `run` read:
 ```
 <dir>/
   config.yaml            names every file below, relative to <dir>
-  colormap.json          whole_cohort   (or colormap_fit.json + colormap_project.json for projection)
+  colormap.json          one colormap for both sets (or colormap_fit.json + colormap_project.json)
+  sketch_pca.csv         subsample --geosketch without --pca: the PCs it sketched in
   data/
     fit_subset.{bed,bim,fam}
     project_subset.{bed,bim,fam}
-    labels.csv           whole_cohort   (or fit_labels.csv + project_labels.csv for projection)
+    labels.csv           one label file for both sets (or fit_labels.csv + project_labels.csv)
+    geographic.csv       only when the input names a geographic_coords file
 ```
+
+The split files, one per set, are written by every `subsample`, and by a
+`preprocess` given two configs or an input that already has split files.
 
 A `geographic_coords` file, when the input names one, is carried through both
 commands -- filtered to the output's project `.fam` -- since neither removes a
@@ -64,12 +69,15 @@ Under the hood this runs `preprocess_cross_projection.sh`, the shell script
 that produced the published figures, shipped inside the package. It needs
 `bash`, `plink2` and `plink` v1.9 — both binaries are fetched by
 `manifold-genetics setup`, or on first use where there is internet.
+Whenever the WRayner step runs, which is under `harmonise` and with no preset,
+it also needs a full `perl`. `preprocess` compiles the checker with `perl -c`
+before the shell starts, and stops if that fails.
 
 ### Presets
 
 | preset | what runs | reproduces |
 |---|---|---|
-| `--preset intersect-only` | indel removal, missingness (`--geno`), position intersection | the `examples/generic` flows |
+| `--preset intersect-only` | indel removal, missingness (`--geno`), position intersection | the generic-cohort flows |
 | `--preset harmonise` | WRayner/TOPMed allele checks, GIAB difficult regions, HLA, deduplication, MAF on the reference side only (`--skip-project-maf`), LD pruning, intersection; `--cleanup` | the All of Us flow |
 | *(none)* | the shell's defaults: every step on, MAF on both sides; add `--skip-*` flags | the UK Biobank flow is `--skip-wrayner --skip-project-maf` — `harmonise` minus WRayner, without `--cleanup` |
 
@@ -130,7 +138,7 @@ skipped. After an out-of-memory kill, a truncated `.bed` under
 `OUT/data/temp/` is not mistaken for a finished output — an incomplete
 intermediate is detected and redone on the next run. Every run also checks
 `OUT/data/temp/preprocess-inputs.json`, a sentinel recording the genotype
-prefixes and every flag that changes what gets filtered (`--preset`, `--maf`,
+prefixes and every flag that changes what gets filtered (the steps `--preset` turns off, `--maf`,
 `--geno`, the LD settings, the `--skip-*` flags, `--fit-has-chr-prefix`); if it
 disagrees with this run, `preprocess` refuses rather than mix intermediates
 made under different settings — `--force` does not override this, since it
@@ -189,9 +197,9 @@ Choose the samples by exactly one of:
     1. PCA is fitted on `--sketch-pool` samples drawn at random (default
        100,000, or everyone if the cohort is smaller) and every sample is
        projected in — `--n-pcs` PCs, default 20. Being random, the pool is as
-       imbalanced as the cohort, and so are these PCs.
-    2. N samples are sketched in those PCs. They are saved as
-       `OUT/sketch_pca.csv`; a rerun reuses them rather than fitting again.
+       imbalanced as the cohort, and so are these PCs. They are saved as
+       `OUT/sketch_pca.csv`, and a rerun reuses them rather than fitting again.
+    2. N samples are sketched in those PCs.
     3. `run` fits a fresh PCA on the N chosen samples, as for any subsample,
        and embeds them. The imbalanced PCs from step 1 are used for nothing
        but the choice.
