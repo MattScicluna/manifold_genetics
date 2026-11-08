@@ -9,7 +9,7 @@
 #
 # linux/amd64: flashpca is published only for Linux x86-64 (and Google Batch is amd64).
 #
-# GPU variant (for admixture.wdl): a CUDA *devel* base, because neural-admixture
+# GPU variant (for wdl/admixture.wdl): a CUDA *devel* base, because neural-admixture
 # compiles a small CUDA extension with nvcc on first use, and the CUDA torch:
 #   docker build --build-arg BASE=nvidia/cuda:12.1.1-devel-ubuntu22.04 \
 #                --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu121 .

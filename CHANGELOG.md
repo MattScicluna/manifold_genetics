@@ -464,8 +464,7 @@ not yet been verified end to end -- so expect further breaking changes before
 
 ### Added
 
-- **Guardrails against committing controlled-access data**
-  ([archive/working-with-agents.md](archive/working-with-agents.md)). A pre-commit hook and
+- **Guardrails against committing controlled-access data.** A pre-commit hook and
   a CI job run `scripts/check_sensitive_files.py`, written against this
   repository's own two incidents rather than as a generic secret scanner: it
   flags files whose header declares them private, genotype containers, long
