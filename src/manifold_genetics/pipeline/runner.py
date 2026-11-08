@@ -32,8 +32,7 @@ def run_pipeline(
     # Haplotype painting, in place of genotype PCA
     phased_vcf: Optional[Union[str, Path]] = None,
     painting: bool = False,
-    painting_matrix: str = "chunkcounts",
-    painting_log: bool = True,
+    painting_method: str = "finestructure",
     painting_chromosomes: Optional[Union[str, int, List]] = None,
     force_painting: bool = False,
     # PCA parameters
@@ -96,8 +95,8 @@ def run_pipeline(
         phased_vcf: Phased VCF per chromosome, a path containing ``{chr}``
         painting: Paint ``phased_vcf`` with pbwt and embed the coancestry PCA
             instead of the genotype PCA. ``skip_pca`` then skips the painting.
-        painting_matrix: 'chunkcounts' (default) or 'chunklengths'
-        painting_log: Log-transform the row-normalised coancestry matrix
+        painting_method: 'finestructure' (default) or 'hc', the published recipe
+            that turns the painting into PCA features (see docs/painting.md)
         painting_chromosomes: Chromosomes substituted for ``{chr}`` (default 1-22)
         force_painting: Repaint chromosomes whose pbwt output is cached
         n_pcs: Number of principal components (default: 50)
@@ -228,8 +227,7 @@ def run_pipeline(
         admix_gpus=admix_gpus,
         admix_batch_size=admix_batch_size,
         painting=painting,
-        painting_matrix=painting_matrix,
-        painting_log=painting_log,
+        painting_method=painting_method,
         painting_chromosomes=painting_chromosomes,
         force_painting=force_painting,
     )

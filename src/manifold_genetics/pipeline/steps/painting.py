@@ -21,10 +21,10 @@ from typing import Mapping, Optional, Sequence, Union
 import pandas as pd
 
 from ...painting.matrix import (
-    coancestry_features,
+    build_features,
+    method_matrix,
     read_paint_matrix,
     read_pbwt_samples,
-    sum_matrices,
 )
 from ...painting.pbwt import expand_phased_vcf, paint_chromosome
 from ...painting.reduce import match_cohort, painting_pca
@@ -62,9 +62,9 @@ class PaintingStepResult:
 def _paint_all(
     pbwt: str, vcfs: Mapping[str, Path], roots: Mapping[str, Path], matrix: str, force: bool
 ):
-    """Paint every chromosome and sum the chosen matrix. Returns ``(sample_ids, matrix)``."""
+    """Paint every chromosome. Returns ``(sample_ids, {chromosome: matrix})``."""
     sample_ids = None
-    matrices = []
+    matrices = {}
     for chrom, vcf in vcfs.items():
         outputs = paint_chromosome(pbwt, vcf, roots[chrom], force=force)
         ids = read_pbwt_samples(outputs["samples"])
@@ -82,8 +82,8 @@ def _paint_all(
                 f"{outputs[matrix]} has {len(labels)} rows but pbwt listed {len(ids)} samples. "
                 "Painting assumes diploid samples."
             )
-        matrices.append(values)
-    return sample_ids, sum_matrices(matrices)
+        matrices[chrom] = values
+    return sample_ids, matrices
 
 
 def _cohort_rows(sample_ids: Sequence[str], plink: Optional[PathLike], cohort: str):
@@ -104,8 +104,7 @@ def run_painting(
     coancestry_output: Optional[PathLike] = None,
     fit_plink: Optional[PathLike] = None,
     project_plink: Optional[PathLike] = None,
-    matrix: str = "chunkcounts",
-    log: bool = True,
+    method: str = "finestructure",
     n_pcs: int = 50,
     force: bool = False,
     pbwt: Optional[str] = None,
@@ -118,13 +117,14 @@ def run_painting(
         pbwt_dir: Where pbwt's per-chromosome outputs go (reused on a rerun).
         project_output: CSV for the project cohort's coordinates.
         fit_output: Optional CSV for the fit cohort's coordinates.
-        coancestry_output: Optional CSV for the summed matrix, recipients by donors.
+        coancestry_output: Optional CSV for the summed matrix, recipients by donors:
+            chunk counts for ``finestructure``, chunk lengths in centimorgans for ``hc``.
         fit_plink: PLINK prefix whose ``.fam`` names the fit cohort. ``None`` fits
             on every painted sample.
         project_plink: PLINK prefix whose ``.fam`` names the project cohort.
             ``None`` projects the fit cohort itself.
-        matrix: ``chunkcounts`` or ``chunklengths``.
-        log: Apply ``log(1 + n * p)`` after row-normalising.
+        method: ``finestructure`` (Lawson et al. 2012, chunk counts) or ``hc``
+            (Yang et al. 2025, chunk lengths). See ``painting.matrix``.
         n_pcs: Principal components to keep (capped by the fit cohort's size).
         force: Repaint chromosomes even when their outputs are cached.
         pbwt: The pbwt executable. Resolved with ``ToolResolver`` when ``None``.
@@ -137,10 +137,13 @@ def run_painting(
 
         pbwt = ToolResolver().resolve_pbwt()
 
+    matrix = method_matrix(method)
     vcfs = expand_phased_vcf(phased_vcf, chromosomes)
     pbwt_dir = Path(pbwt_dir)
     roots = {c: pbwt_dir / f"chr{c}" for c in chromosomes}
-    sample_ids, summed = _paint_all(pbwt, vcfs, roots, matrix, force)
+    sample_ids, per_chromosome = _paint_all(pbwt, vcfs, roots, matrix, force)
+    summed, features = build_features(per_chromosome, method, labels=sample_ids)
+    del per_chromosome
     logger.info(f"Painted {len(sample_ids)} samples on {len(vcfs)} chromosome(s)")
 
     if coancestry_output:
@@ -149,8 +152,6 @@ def run_painting(
         frame = pd.DataFrame(summed, index=sample_ids, columns=sample_ids)
         frame.index.name = "sample_id"
         frame.to_csv(coancestry_output)
-
-    features = coancestry_features(summed, log=log, labels=sample_ids)
 
     # Coordinates are written under the .fam's IIDs, which is what the labels
     # file is keyed on, even when the VCF names samples FID_IID.
@@ -161,7 +162,12 @@ def run_painting(
         project_rows, project_ids = _cohort_rows(sample_ids, project_plink, "project")
 
     fit_df, project_df = painting_pca(
-        features, sample_ids, fit_rows=fit_rows, project_rows=project_rows, n_components=n_pcs
+        features,
+        sample_ids,
+        fit_rows=fit_rows,
+        project_rows=project_rows,
+        n_components=n_pcs,
+        method=method,
     )
     fit_df["sample_id"] = fit_ids
     project_df["sample_id"] = project_ids
@@ -182,7 +188,7 @@ def run_painting_step(
     paths = painting_output_paths(io, pca, painting)
     logger.info(
         f"Painting {io.phased_vcf} ({len(painting.chromosomes)} chromosomes, "
-        f"matrix: {painting.matrix}, log: {painting.log})"
+        f"method: {painting.method})"
     )
     coords = run_painting(
         io.phased_vcf,
@@ -193,8 +199,7 @@ def run_painting_step(
         coancestry_output=paths["coancestry"],
         fit_plink=io.fit_plink,
         project_plink=io.project_plink,
-        matrix=painting.matrix,
-        log=painting.log,
+        method=painting.method,
         n_pcs=pca.n_pcs,
         force=painting.force,
         pbwt=pbwt,

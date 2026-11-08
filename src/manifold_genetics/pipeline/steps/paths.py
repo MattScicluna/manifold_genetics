@@ -32,7 +32,7 @@ def painting_output_paths(io: IOConfig, pca: PCAConfig, painting: PaintingConfig
         "dir": d,
         "pbwt_dir": pbwt_dir,
         "pbwt_roots": {c: pbwt_dir / f"chr{c}" for c in painting.chromosomes},
-        "coancestry": d / f"coancestry_{painting.matrix}.csv",
+        "coancestry": d / f"coancestry_{painting.method}.csv",
         "fit_pca": d / f"fit_painting_pca_{pca.n_pcs}.csv",
         "project_pca": d / f"project_painting_pca_{pca.n_pcs}.csv",
     }

@@ -13,32 +13,65 @@ Verified against pbwtPaint.c at commit 50fd6be:
 * Sample IDs never appear. ``IND<i>`` is the i-th sample of the VCF, so the
   names come from ``pbwt -writeSamples``, which writes them in the same order.
 * The diagonal is zero: a haplotype never copies from its own individual.
-* ``chunklengths`` rows are rescaled by pbwt to sum to ``n_sites * ploidy``, so
-  summed across chromosomes each chromosome is weighted by its number of sites.
+* ``chunklengths`` rows are rescaled by pbwt to sum to ``n_sites * ploidy``.
+
+The features follow one of two published recipes, chosen by ``method``:
+
+``finestructure``
+    Lawson et al. (2012), PLoS Genet 8:e1002453, as implemented by ``mypca`` in
+    the fineSTRUCTURE R library (``FinestructureLibrary.R``). The chunk counts
+    are summed over chromosomes, the zero diagonal is set to the row's
+    off-diagonal mean, each row is centered on its mean, and the PCA is the
+    eigendecomposition of ``X X^T`` (no column centering, no log).
+``hc``
+    The haplotype components of Yang, Durbin, Iversen and Lawson (2025), Nat
+    Commun 16:2742, the recipe pbwt's README points to for ``-paint`` output.
+    Each chromosome's chunk lengths are converted from sites to centimorgans
+    (weight ``g_c / K_c``), summed, transformed by ``log10(A + 1)`` and reduced
+    by an uncentered SVD. The components are ``U sqrt(D)``.
 
 Nothing here touches the filesystem except the two ``read_*`` functions.
 """
 
 from pathlib import Path
-from typing import List, Sequence, Tuple, Union
+from typing import Dict, List, Mapping, Sequence, Tuple, Union
 
 import numpy as np
 
 __all__ = [
-    "MATRIX_KINDS",
-    "coancestry_features",
-    "fill_self_copying",
-    "log_transform",
+    "CHROMOSOME_CM",
+    "METHODS",
+    "MATRIX_FOR_METHOD",
+    "build_features",
+    "centimorgan_weight",
+    "check_rows",
+    "finestructure_features",
+    "hc_features",
+    "method_matrix",
     "read_paint_matrix",
     "read_pbwt_samples",
-    "row_normalise",
     "sum_matrices",
 ]
 
 PathLike = Union[str, Path]
 
-#: The two dense matrices ``pbwt -paint`` writes that can feed the PCA.
-MATRIX_KINDS = ("chunkcounts", "chunklengths")
+#: The two feature recipes, by name. Each fixes which pbwt matrix it reads.
+MATRIX_FOR_METHOD: Dict[str, str] = {"finestructure": "chunkcounts", "hc": "chunklengths"}
+METHODS = tuple(MATRIX_FOR_METHOD)
+
+#: Genetic length of each autosome in centimorgans, as used for the UK Biobank
+#: haplotype components (SparsePainter painting-pipeline,
+#: ``combine_chunklength.cpp``, commit e1d07b7).
+CHROMOSOME_CM: Dict[str, float] = dict(
+    zip(
+        (str(c) for c in range(1, 23)),
+        (
+            286.28, 268.83, 223.26, 214.54, 204.09, 192.03, 187.16, 168.00,
+            166.35, 180.91, 158.22, 174.68, 125.70, 120.20, 141.35, 134.05,
+            128.78, 117.71, 107.73, 108.28, 62.79, 74.10,
+        ),
+    )
+)  # fmt: skip
 
 
 def read_paint_matrix(path: PathLike) -> Tuple[List[str], np.ndarray]:
@@ -100,77 +133,123 @@ def read_pbwt_samples(path: PathLike) -> List[str]:
     return ids
 
 
-def sum_matrices(matrices: Sequence[np.ndarray]) -> np.ndarray:
-    """Element-wise sum of per-chromosome matrices of identical shape."""
+def sum_matrices(matrices: Sequence[np.ndarray], weights: Sequence[float] = ()) -> np.ndarray:
+    """Element-wise sum of per-chromosome matrices of identical shape.
+
+    ``weights``, when given, scales each matrix first (one weight per matrix).
+    """
     if not matrices:
         raise ValueError("No painting matrices to sum")
+    if weights and len(weights) != len(matrices):
+        raise ValueError(f"{len(weights)} weights for {len(matrices)} painting matrices")
     shape = matrices[0].shape
+    total = np.zeros(shape, dtype=np.float64)
     for i, m in enumerate(matrices):
         if m.shape != shape:
             raise ValueError(
                 f"Painting matrix {i} has shape {m.shape}, the first has {shape}. Every "
                 "chromosome must be painted on the same samples in the same order."
             )
-    return np.sum(np.stack(matrices), axis=0)
+        total += m * (weights[i] if weights else 1.0)
+    return total
 
 
-def fill_self_copying(matrix: np.ndarray) -> np.ndarray:
-    """Replace the structurally zero diagonal with each row's off-diagonal mean.
+def centimorgan_weight(chunklengths: np.ndarray, chromosome: str, ploidy: int = 2) -> float:
+    """Weight that converts one chromosome's chunk lengths from sites to centimorgans.
 
-    pbwt never lets an individual copy from itself, so the diagonal is zero for
-    a reason that has nothing to do with ancestry. Left in place, that zero is a
-    feature only one sample has, which PCA would spend variance on. The row's
-    own mean is the most neutral stand-in: it adds nothing to the row's profile.
-    """
-    m = np.array(matrix, dtype=np.float64, copy=True)
-    n = m.shape[0]
-    if n < 2:
-        raise ValueError("Painting needs at least two samples")
-    np.fill_diagonal(m, 0.0)
-    np.fill_diagonal(m, m.sum(axis=1) / (n - 1))
-    return m
-
-
-def row_normalise(matrix: np.ndarray, labels: Sequence[str] = ()) -> np.ndarray:
-    """Scale each row to sum to one.
-
-    Rows then describe *how* a sample's genome is copied rather than how much of
-    it was painted, so a sample with more matched sites does not sit farther out.
+    This is ``g_c / K_c`` of Yang et al. (2025): the chromosome's genetic
+    length over its number of sites. pbwt scales every ``chunklengths`` row to
+    sum to ``K_c * ploidy``, so ``K_c`` is read off the matrix itself.
 
     Raises:
-        ValueError: a row sums to zero (the sample copied from nobody, which
-            usually means its genotypes were all missing). Named, because a
-            silent row of NaNs would surface much later as a PCA failure.
+        ValueError: the chromosome has no genetic length in ``CHROMOSOME_CM``
+            (only autosomes 1 to 22 do), or the matrix has no copying at all.
     """
-    totals = matrix.sum(axis=1)
-    empty = np.flatnonzero(totals <= 0)
+    name = str(chromosome)
+    for prefix in ("chr", "CHR", "Chr"):
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+    if name not in CHROMOSOME_CM:
+        raise ValueError(
+            f"No genetic length is known for chromosome {chromosome!r}, so its chunk "
+            "lengths cannot be put in centimorgans. The hc method covers autosomes 1-22, so "
+            "use method: finestructure for any other chromosome."
+        )
+    n_sites = float(np.mean(chunklengths.sum(axis=1))) / ploidy
+    if n_sites <= 0:
+        raise ValueError(f"The chunk lengths of chromosome {chromosome!r} are all zero")
+    return CHROMOSOME_CM[name] / n_sites
+
+
+def finestructure_features(counts: np.ndarray) -> np.ndarray:
+    """fineSTRUCTURE's normalization of a chunk count matrix before PCA.
+
+    Follows ``mypcanorm`` in ``FinestructureLibrary.R``: "setting the diagonal
+    to be the average of the rows, then zero meaning by substracting the row
+    mean (so the diagonal ends up as zero)". The PCA is then taken on
+    ``X X^T`` without centering the columns.
+    """
+    x = np.array(counts, dtype=np.float64, copy=True)
+    n = x.shape[0]
+    if n < 2:
+        raise ValueError("Painting needs at least two samples")
+    np.fill_diagonal(x, x.sum(axis=1) / (n - 1))
+    return x - x.mean(axis=1, keepdims=True)
+
+
+def hc_features(lengths_cm: np.ndarray) -> np.ndarray:
+    """``log10(A + 1)`` of the summed chunk lengths in centimorgans (Yang et al. 2025).
+
+    The diagonal stays zero, as in the sparse matrix the paper decomposes.
+    """
+    a = np.asarray(lengths_cm, dtype=np.float64)
+    if (a < 0).any():
+        raise ValueError("Chunk lengths cannot be negative")
+    return np.log10(a + 1.0)
+
+
+def method_matrix(method: str) -> str:
+    """The pbwt matrix a method reads. Raises ``ValueError`` for an unknown method."""
+    try:
+        return MATRIX_FOR_METHOD[method]
+    except KeyError:
+        raise ValueError(
+            f"Unknown painting method: {method!r}. Choose from: {', '.join(METHODS)}"
+        ) from None
+
+
+def check_rows(matrix: np.ndarray, labels: Sequence[str] = ()) -> None:
+    """Raise if a sample copied from nobody, naming a few such samples.
+
+    An all-zero row usually means the sample's genotypes were all missing. It
+    is named here, because it would otherwise surface much later as an odd
+    point in the PCA.
+    """
+    empty = np.flatnonzero(np.asarray(matrix).sum(axis=1) <= 0)
     if empty.size:
         names = [labels[i] if i < len(labels) else f"row {i}" for i in empty[:5]]
         raise ValueError(
             f"{empty.size} sample(s) copied from no donor in the painting, for example "
             f"{', '.join(names)}. Check their genotypes in the phased VCF."
         )
-    return matrix / totals[:, None]
 
 
-def log_transform(proportions: np.ndarray) -> np.ndarray:
-    """``log(1 + n * p)`` for row-normalised proportions ``p`` over ``n`` donors.
+def build_features(
+    matrices: Mapping[str, np.ndarray], method: str, labels: Sequence[str] = ()
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Per-chromosome pbwt matrices to ``(summed, features)`` for ``method``.
 
-    Copying is heavy-tailed: a few close relatives can dominate a row and with
-    it the leading components. The log compresses that tail. Multiplying by
-    ``n`` first makes uniform copying equal to one, so the transform does not
-    change shape with cohort size, and the ``1 +`` keeps zeros finite.
+    ``matrices`` maps chromosome to the matrix ``method_matrix(method)`` names.
+    ``summed`` is the matrix written as the coancestry CSV: chunk counts for
+    ``finestructure`` and chunk lengths in centimorgans for ``hc``.
     """
-    n = proportions.shape[1]
-    return np.log1p(proportions * n)
-
-
-def coancestry_features(
-    matrix: np.ndarray, *, log: bool = True, labels: Sequence[str] = ()
-) -> np.ndarray:
-    """Summed painting matrix to the features the PCA is fitted on.
-
-    Fills the self-copying diagonal, row-normalises, then optionally logs.
-    """
-    features = row_normalise(fill_self_copying(matrix), labels)
-    return log_transform(features) if log else features
+    method_matrix(method)
+    chroms = list(matrices)
+    mats = [matrices[c] for c in chroms]
+    if method == "hc":
+        summed = sum_matrices(mats, [centimorgan_weight(m, c) for c, m in zip(chroms, mats)])
+        check_rows(summed, labels)
+        return summed, hc_features(summed)
+    summed = sum_matrices(mats)
+    check_rows(summed, labels)
+    return summed, finestructure_features(summed)

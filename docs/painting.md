@@ -56,8 +56,7 @@ data:
 
 painting:
   enabled: true
-  matrix: chunkcounts      # or chunklengths
-  log: true
+  method: finestructure    # or hc, see below
   chromosomes: 1-22        # substituted for {chr} (the default)
 ```
 
@@ -91,28 +90,72 @@ config is named in a warning and dropped.
 
 ## What it computes
 
-1. **Paint each chromosome**, every sample against every other:
-   `pbwt -readVcfGT chr<c>.vcf.gz -writeSamples chr<c>.samples -paint chr<c>`.
-   pbwt writes one row per recipient and one column per donor, and it has
-   already summed the two haplotypes of each sample, so the matrix is per
-   individual. It names samples `IND1 … INDn` in VCF order, which is why the
-   sample names are written alongside.
-2. **Sum the chosen matrix over chromosomes.** `chunkcounts` counts the copied
-   segments and `chunklengths` measures their length in sites. Counts are what
-   fineSTRUCTURE models, so they are the default here. Every chromosome must list the same samples in the
-   same order, or the sum would be meaningless, so a mismatch stops the run.
-3. **Fill the diagonal.** pbwt never lets a sample copy from itself, so the
-   diagonal is zero for a reason unrelated to ancestry. Left as zero it would be
-   a feature that only one sample has, and the PCA would spend variance on it.
-   Each diagonal entry becomes the mean of its row instead.
-4. **Normalize each row to sum to one.** A row then describes how a sample's
-   genome is copied rather than how much of it was painted.
-5. **Optionally take `log(1 + n p)`**, where `p` is the proportion and `n` the
-   number of donors. A few close relatives can dominate a row, and the log keeps
-   them from dominating the leading components. Multiplying by `n` makes uniform
-   copying equal to one, so the transform does not change with cohort size.
-6. **Reduce by PCA** to `n_pcs` components, capped at one fewer than the number
-   of fit samples.
+Each chromosome is painted every sample against every other:
+`pbwt -readVcfGT chr<c>.vcf.gz -writeSamples chr<c>.samples -paint chr<c>`.
+pbwt writes one row per recipient and one column per donor, and it has already
+summed the two haplotypes of each sample, so the matrix is per individual. It
+names samples `IND1 … INDn` in VCF order, which is why the sample names are
+written alongside. Every chromosome must list the same samples in the same
+order, or the matrices could not be summed, so a mismatch stops the run.
+
+The diagonal of every matrix is zero, because pbwt never lets a sample copy
+from itself. How the matrices become PCA features follows one of two published
+recipes, chosen by `method`. Neither row-normalizes the matrix, and neither
+centers its columns.
+
+### `finestructure` (the default)
+
+This is the PCA of the coancestry matrix from fineSTRUCTURE
+([Lawson et al. 2012](https://doi.org/10.1371/journal.pgen.1002453)), as the
+fineSTRUCTURE R library implements it in `mypca`
+([FinestructureLibrary.R](https://people.maths.bris.ac.uk/~madjl/finestructure/finestructureR.html)):
+
+> Normalise for PCA by setting the diagonal to be the average of the rows, then
+> zero meaning by substracting the row mean (so the diagonal ends up as zero)
+
+1. **Sum the chunk counts** (`chunkcounts`) over chromosomes. Counts are what
+   fineSTRUCTURE models.
+2. **Fill the diagonal** with the mean of the row's off-diagonal entries.
+3. **Center each row** on its mean.
+4. **Decompose** `X Xᵀ`, which `mypca` does with `eigen(xN %*% t(xN))`. The
+   pipeline takes the same components from an SVD `X = U D Vᵀ` and writes the
+   scores `U D`, which are on the scale of genotype PC scores. `mypca` reports
+   `U`, which differs only by one scale factor per component.
+
+Lawson et al. show that in the unlinked limit this matrix is approximately
+proportional to the one Eigenstrat decomposes, so the components match genotype
+PCA there and add haplotype information when markers are linked.
+
+### `hc`
+
+These are the haplotype components of
+[Yang, Durbin, Iversen and Lawson (2025)](https://doi.org/10.1038/s41467-025-57601-3),
+the paper that describes pbwt's `-paint` and `-paintSparse` and that pbwt's
+README points to for their use. They computed them for 406,733 UK Biobank
+samples:
+
+> we weighted the chunk length for chromosome i with weight gᵢ/Kᵢ. Then we
+> summed up the sparse chunk length matrix for all the chromosomes as matrix A
+> \[...\] We performed singular value decomposition (SVD) on the
+> log-transformed sparse chunk length matrix log10(A + 1) \[...\] Then we
+> extracted the first 150 columns of U√D as the top 150 haplotype principal
+> components.
+
+1. **Put chunk lengths in centimorgans.** pbwt measures `chunklengths` in sites,
+   so each chromosome's matrix is weighted by its genetic length over its number
+   of sites, `gᵢ/Kᵢ`. The genetic lengths are the ones the authors used
+   ([SparsePainter painting pipeline](https://github.com/YaolingYang/SparsePainter/tree/main/painting-pipeline)),
+   and `Kᵢ` is read from the matrix, whose rows pbwt scales to sum to twice the
+   number of sites. Only autosomes 1 to 22 have a genetic length here.
+2. **Sum** over chromosomes and take `log10(A + 1)`. The diagonal stays zero.
+3. **Decompose** by an SVD without centering and write `U √D`.
+
+The first `hc` component carries the overall level of copying, which is close
+to constant across samples, so population structure starts on the second.
+
+Either way, the number of components is `n_pcs`, capped at one fewer than the
+number of fit samples. Up to 5,000 fit samples the SVD is exact, and above that
+it is randomized with 20 power iterations.
 
 ## Fit and project cohorts
 
@@ -145,7 +188,7 @@ outputs/painting/
 │   ├── chr1.chunklengths.out
 │   ├── chr1.samples                  sample names, in VCF order
 │   └── chr1.log                      pbwt's log
-├── coancestry_chunkcounts.csv        summed matrix, recipients by donors
+├── coancestry_<method>.csv          summed matrix, recipients by donors
 ├── fit_painting_pca_<n>.csv          sample_id, dim_1 … dim_<n>
 └── project_painting_pca_<n>.csv
 ```

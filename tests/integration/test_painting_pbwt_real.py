@@ -57,7 +57,8 @@ def simulate_vcf(path, samples, n_sites, chrom, seed):
     path.write_text("\n".join(lines) + "\n")
 
 
-def test_real_pbwt_paints_and_separates_two_groups(tmp_path, pbwt):
+@pytest.mark.parametrize("method", ["finestructure", "hc"])
+def test_real_pbwt_paints_and_separates_two_groups(tmp_path, pbwt, method):
     samples = [f"A{i}" for i in range(6)] + [f"B{i}" for i in range(6)]
     for chrom, seed in (("1", 1), ("2", 2)):
         simulate_vcf(tmp_path / f"chr{chrom}.vcf", samples, 400, chrom, seed)
@@ -69,6 +70,7 @@ def test_real_pbwt_paints_and_separates_two_groups(tmp_path, pbwt):
         project_output=tmp_path / "coords.csv",
         coancestry_output=tmp_path / "coancestry.csv",
         n_pcs=3,
+        method=method,
         pbwt=pbwt,
     )
 
@@ -80,9 +82,11 @@ def test_real_pbwt_paints_and_separates_two_groups(tmp_path, pbwt):
     _, lengths = read_paint_matrix(tmp_path / "pbwt" / "chr1.chunklengths.out")
     np.testing.assert_allclose(lengths.sum(axis=1), 400 * 2, rtol=1e-3)  # n_sites * ploidy
 
-    # Within-group copying dominates, and the first component splits the groups.
+    # Within-group copying dominates, and one of the leading components splits
+    # the groups: the first for finestructure, whose rows are centered, and the
+    # second for hc, whose first component is the overall level of copying.
     coancestry = pd.read_csv(tmp_path / "coancestry.csv", index_col="sample_id")
     assert coancestry.loc["A0", ["A1", "A2"]].mean() > 3 * coancestry.loc["A0", ["B1", "B2"]].mean()
-    first = coords.set_index("sample_id")["dim_1"]
-    a, b = first[samples[:6]], first[samples[6:]]
+    split = coords.set_index("sample_id")["dim_1" if method == "finestructure" else "dim_2"]
+    a, b = split[samples[:6]], split[samples[6:]]
     assert (a.max() < b.min()) or (b.max() < a.min())

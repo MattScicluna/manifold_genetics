@@ -30,8 +30,7 @@ A config looks like::
 
     painting:                  # optional; replaces genotype PCA as the embedding input
       enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
-      matrix: chunkcounts      # or chunklengths
-      log: true
+      method: finestructure    # or hc
 
 Two decisions worth knowing:
 
@@ -143,8 +142,7 @@ _ADMIXTURE_KEYS = {
 }
 _PAINTING_KEYS = {
     "enabled": "painting",
-    "matrix": "painting_matrix",
-    "log": "painting_log",
+    "method": "painting_method",
     "chromosomes": "painting_chromosomes",
     "force": "force_painting",
 }

@@ -192,7 +192,7 @@ class TestSubsample:
 
         document = yaml.safe_load(cohort.read_text())
         document["data"]["phased_vcf"] = "phased/chr{chr}.vcf.gz"
-        document["painting"] = {"enabled": True, "log": False}
+        document["painting"] = {"enabled": True, "method": "hc"}
         cohort.write_text(yaml.safe_dump(document, sort_keys=False))
         with caplog.at_level("WARNING"):
             config = subsample(
@@ -204,7 +204,7 @@ class TestSubsample:
             )
         loaded = load_config(config)
         assert loaded["phased_vcf"] == (tmp_path / "in/phased/chr{chr}.vcf.gz").resolve()
-        assert loaded["painting"] is True and loaded["painting_log"] is False
+        assert loaded["painting"] is True and loaded["painting_method"] == "hc"
         assert "manifold-genetics subsample` does not filter the phased VCFs" in caplog.text
 
     def test_a_sample_list_is_honoured_verbatim(self, cohort, tmp_path):

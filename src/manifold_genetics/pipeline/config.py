@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
-_PAINTING_MATRICES = ("chunkcounts", "chunklengths")
+_PAINTING_METHODS = ("finestructure", "hc")
 
 
 @dataclass(frozen=True)
@@ -42,15 +42,15 @@ class IOConfig:
 class PaintingConfig:
     """Haplotype painting with pbwt, replacing genotype PCA as the embedding input.
 
-    ``matrix`` picks which pbwt output feeds the PCA. ``log`` applies
-    ``log(1 + n * p)`` to the row-normalised matrix. The number of components is
+    ``method`` picks the published recipe that turns pbwt's output into PCA
+    features: ``finestructure`` (Lawson et al. 2012, chunk counts) or ``hc``
+    (Yang et al. 2025, chunk lengths). The number of components is
     the PCA section's ``n_pcs``, so switching painting on changes nothing else
     about the run's shape.
     """
 
     enabled: bool = False
-    matrix: str = "chunkcounts"
-    log: bool = True
+    method: str = "finestructure"
     chromosomes: Tuple[str, ...] = tuple(str(c) for c in range(1, 23))
     force: bool = False
 
@@ -138,8 +138,7 @@ def build_configs(
     geographic_coords=None,
     phased_vcf=None,
     painting: bool = False,
-    painting_matrix: str = "chunkcounts",
-    painting_log: bool = True,
+    painting_method: str = "finestructure",
     painting_chromosomes=None,
     force_painting: bool = False,
     n_pcs: int = 50,
@@ -217,8 +216,7 @@ def build_configs(
     painting_cfg = build_painting_config(
         phased_vcf=phased_vcf,
         enabled=painting,
-        matrix=painting_matrix,
-        log=painting_log,
+        method=painting_method,
         chromosomes=painting_chromosomes,
         force=force_painting,
     )
@@ -272,26 +270,35 @@ def build_painting_config(
     *,
     phased_vcf=None,
     enabled: bool = False,
-    matrix: str = "chunkcounts",
-    log: bool = True,
+    method: str = "finestructure",
     chromosomes=None,
     force: bool = False,
 ) -> PaintingConfig:
     """Validate the painting settings into a ``PaintingConfig``. No filesystem access.
 
     Raises:
-        ValueError: an unknown matrix, an unparseable chromosome list, or painting
+        ValueError: an unknown method, an ``hc`` run on a chromosome with no known
+            genetic length, an unparseable chromosome list, or painting
             enabled without a ``phased_vcf`` containing ``{chr}``.
     """
     # Imported here: the painting package pulls in sklearn, which the rest of
     # this module has no need for.
+    from ..painting.matrix import CHROMOSOME_CM
     from ..painting.pbwt import expand_phased_vcf, parse_chromosomes
 
-    if matrix not in _PAINTING_MATRICES:
+    if method not in _PAINTING_METHODS:
         raise ValueError(
-            f"Unknown painting matrix: {matrix!r}. Choose from: {', '.join(_PAINTING_MATRICES)}"
+            f"Unknown painting method: {method!r}. Choose from: {', '.join(_PAINTING_METHODS)}"
         )
     names = tuple(parse_chromosomes(chromosomes))
+    if method == "hc":
+        unknown = [c for c in names if c.removeprefix("chr") not in CHROMOSOME_CM]
+        if unknown:
+            raise ValueError(
+                f"Painting method hc needs each chromosome's genetic length, which is known "
+                f"only for autosomes 1-22, not {', '.join(unknown)}. Use method: "
+                "finestructure for these."
+            )
     if enabled:
         if phased_vcf is None:
             raise ValueError(
@@ -300,5 +307,5 @@ def build_painting_config(
             )
         expand_phased_vcf(phased_vcf, names)  # raises when {chr} is missing
     return PaintingConfig(
-        enabled=bool(enabled), matrix=matrix, log=bool(log), chromosomes=names, force=bool(force)
+        enabled=bool(enabled), method=method, chromosomes=names, force=bool(force)
     )

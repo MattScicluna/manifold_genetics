@@ -11,8 +11,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - **Haplotype painting as an alternative to genotype PCA** (#191). A new
   `painting` config section and `data.phased_vcf` key paint one phased VCF per
-  chromosome with `pbwt -paint`, sum the coancestry matrix over chromosomes,
-  normalize it and reduce it by PCA. The coordinates replace the genotype PCA as
+  chromosome with `pbwt -paint`, sum the coancestry matrix over chromosomes and
+  reduce it by PCA, following either fineSTRUCTURE's `mypca` (Lawson et al.
+  2012, `method: finestructure`, the default) or the haplotype components of
+  Yang et al. 2025 (`method: hc`). The coordinates replace the genotype PCA as
   the embedding input, so the embedding, figures and metrics run unchanged. The
   fit cohort's rows fit the PCA and the project cohort's rows are projected
   through it, with the whole painted set as donors. Also available as

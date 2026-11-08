@@ -120,9 +120,8 @@ The example leaves out the other keys a config accepts:
 - `data`: `fit_labels`, `project_labels`, `fit_colormap` and `project_colormap`.
   Each overrides `labels` or `colormap` for one cohort. `phased_vcf` names the
   phased VCFs for haplotype painting, as a path containing `{chr}`.
-- `painting`: `enabled`, `matrix` (`chunkcounts`, the default, or
-  `chunklengths`), `log` (default `true`), `chromosomes` (default `1-22`) and
-  `force`. When `enabled` is true, the painting coordinates replace the genotype
+- `painting`: `enabled`, `method` (`finestructure`, the default, or `hc`),
+  `chromosomes` (default `1-22`) and `force`. When `enabled` is true, the painting coordinates replace the genotype
   PCA as the embedding input. See [Haplotype painting](painting.md).
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
 - `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
@@ -161,8 +160,9 @@ outputs/
 A run with painting enabled writes `painting/` in place of `pca/`. It holds
 `fit_painting_pca_<n>.csv` and `project_painting_pca_<n>.csv` in the usual
 coordinate format, the summed coancestry matrix as
-`coancestry_<matrix>.csv` (one row per recipient, one column per donor, both
-named by sample ID), and pbwt's own per-chromosome output under `pbwt/`. The
+`coancestry_<method>.csv` (one row per recipient, one column per donor, both
+named by sample ID: chunk counts for `finestructure`, chunk lengths in
+centimorgans for `hc`), and pbwt's own per-chromosome output under `pbwt/`. The
 [painting page](painting.md#outputs) lists them.
 
 The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,

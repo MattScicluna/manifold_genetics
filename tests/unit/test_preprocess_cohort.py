@@ -348,7 +348,7 @@ def test_an_unchanged_preset_carries_every_embedding_key(cohort, tmp_path, caplo
 def _with_painting(cohort, phased_vcf):
     raw = dict(cohort.raw)
     raw["data"] = {**raw["data"], "phased_vcf": phased_vcf}
-    raw["painting"] = {"enabled": True, "matrix": "chunklengths", "log": False}
+    raw["painting"] = {"enabled": True, "method": "hc"}
     return dataclasses.replace(cohort, raw=raw)
 
 
@@ -368,11 +368,11 @@ def test_a_relative_phased_vcf_and_painting_carry_forward_to_the_same_files(
         )
     document = yaml.safe_load(path.read_text())
     assert document["data"]["phased_vcf"] == "../phased/chr{chr}.vcf.gz"
-    assert document["painting"] == {"enabled": True, "matrix": "chunklengths", "log": False}
+    assert document["painting"] == {"enabled": True, "method": "hc"}
     loaded = load_config(path)
     assert loaded["phased_vcf"] == cohort.path.parent / "phased/chr{chr}.vcf.gz"
     assert loaded["painting"] is True
-    assert loaded["painting_matrix"] == "chunklengths"
+    assert loaded["painting_method"] == "hc"
     messages = " | ".join(r.getMessage() for r in caplog.records)
     assert "manifold-genetics subsample` does not filter the phased VCFs" in messages
     assert "painting uses them as given" in messages

@@ -219,8 +219,7 @@ def cmd_paint(args):
         coancestry_output=args.coancestry_output,
         fit_plink=args.fit_plink,
         project_plink=args.project_plink,
-        matrix=args.matrix,
-        log=not args.no_log,
+        method=args.method,
         n_pcs=args.n_pcs,
         force=args.force,
     )
@@ -1179,13 +1178,14 @@ def main(argv: Optional[List[str]] = None):
         help="Directory for pbwt's per-chromosome outputs, reused on a rerun (default: ./pbwt_outputs)",
     )
     paint_parser.add_argument(
-        "--matrix",
-        choices=["chunkcounts", "chunklengths"],
-        default="chunkcounts",
-        help="Which pbwt matrix to reduce (default: chunkcounts)",
-    )
-    paint_parser.add_argument(
-        "--no-log", action="store_true", help="Skip the log transform of the coancestry matrix"
+        "--method",
+        choices=["finestructure", "hc"],
+        default="finestructure",
+        help=(
+            "How the painting becomes PCA features: finestructure (chunk counts, "
+            "Lawson et al. 2012) or hc (chunk lengths, Yang et al. 2025) "
+            "(default: finestructure)"
+        ),
     )
     paint_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")
     paint_parser.add_argument(

@@ -48,6 +48,35 @@ def paint(tmp_path, pbwt, **kwargs):
     return run_painting(tmp_path / "data" / "chr{chr}.vcf", **defaults)
 
 
+@pytest.mark.parametrize("method", ["finestructure", "hc"])
+def test_both_methods_separate_the_groups(tmp_path, method):
+    # Twenty per group: hc keeps the zero self-copying diagonal, which in
+    # groups of three would outweigh the group signal.
+    pbwt = str(install_fake_pbwt(tmp_path / "bin"))
+    names = [f"{g}{i}" for g in "AB" for i in range(20)]
+    for chrom in ("1", "2"):
+        write_vcf(tmp_path / "data" / f"chr{chrom}.vcf", names, chrom)
+    coords = paint(tmp_path, pbwt, method=method, n_pcs=2).set_index("sample_id")
+
+    x = coords.to_numpy()
+    dist = np.linalg.norm(x[:, None] - x[None], axis=-1)
+    group = np.array([s[0] for s in coords.index])
+    same = group[:, None] == group[None]
+    off = ~np.eye(len(group), dtype=bool)
+    assert dist[same & off].max() < dist[~same].min()
+
+
+def test_hc_coancestry_is_in_centimorgans(painted):
+    tmp_path, pbwt = painted
+    paint(tmp_path, pbwt, method="hc", coancestry_output=tmp_path / "coancestry.csv")
+
+    # The fake writes chunk length rows of 2 * 100 + 3 * 10 = 230 per
+    # chromosome, i.e. 115 sites, so each is scaled by g_c / 115.
+    coancestry = pd.read_csv(tmp_path / "coancestry.csv", index_col="sample_id")
+    np.testing.assert_allclose(coancestry.loc["A1", "A2"], 100 * (286.28 + 268.83) / 115)
+    np.testing.assert_allclose(coancestry.sum(axis=1), 2 * (286.28 + 268.83))
+
+
 def test_paints_every_sample_and_writes_coordinates(painted):
     tmp_path, pbwt = painted
     coords = paint(tmp_path, pbwt, coancestry_output=tmp_path / "coancestry.csv")
@@ -137,14 +166,14 @@ def test_step_writes_where_painting_output_paths_says(painted):
         phased_vcf=tmp_path / "data" / "chr{chr}.vcf",
     )
     pca = PCAConfig(n_pcs=2)
-    painting = PaintingConfig(enabled=True, chromosomes=("1", "2"), matrix="chunklengths")
+    painting = PaintingConfig(enabled=True, chromosomes=("1", "2"), method="hc")
 
     result = run_painting_step(io, pca, painting, pbwt=pbwt)
     paths = painting_output_paths(io, pca, painting)
 
     assert result.fit_pca == paths["fit_pca"] == tmp_path / "out/painting/fit_painting_pca_2.csv"
     assert result.project_pca == paths["project_pca"]
-    assert result.coancestry == tmp_path / "out/painting/coancestry_chunklengths.csv"
+    assert result.coancestry == tmp_path / "out/painting/coancestry_hc.csv"
     assert all(p.exists() for p in (result.fit_pca, result.project_pca, result.coancestry))
     assert (paths["pbwt_roots"]["1"].parent / "chr1.chunkcounts.out").exists()
 
@@ -158,8 +187,11 @@ def test_painting_config_validation():
         build_painting_config(enabled=True)
     with pytest.raises(ValueError, match="must contain"):
         build_painting_config(enabled=True, phased_vcf="all.vcf.gz")
-    with pytest.raises(ValueError, match="Unknown painting matrix"):
-        build_painting_config(matrix="regionchunkcounts")
+    with pytest.raises(ValueError, match="Unknown painting method"):
+        build_painting_config(method="chunkcounts")
+    with pytest.raises(ValueError, match="autosomes 1-22, not X"):
+        build_painting_config(method="hc", chromosomes="21,22,X")
+    assert build_painting_config(chromosomes="X").chromosomes == ("X",)  # finestructure
 
     cfg = build_painting_config(enabled=True, phased_vcf="c{chr}.vcf", chromosomes="21-22")
     assert cfg.chromosomes == ("21", "22")
@@ -174,10 +206,10 @@ def test_build_configs_carries_painting():
         colormap="c.json",
         phased_vcf="data/chr{chr}.vcf.gz",
         painting=True,
-        painting_log=False,
+        painting_method="hc",
     )
     assert str(configs.io.phased_vcf) == "data/chr{chr}.vcf.gz"
-    assert configs.painting.enabled and not configs.painting.log
+    assert configs.painting.enabled and configs.painting.method == "hc"
 
 
 def test_config_file_painting_section(tmp_path):
@@ -190,7 +222,7 @@ def test_config_file_painting_section(tmp_path):
             "output_dir": "out",
             "phased_vcf": "data/chr{chr}.vcf.gz",
         },
-        "painting": {"enabled": True, "matrix": "chunklengths", "log": False, "chromosomes": "1-2"},
+        "painting": {"enabled": True, "method": "hc", "chromosomes": "1-2"},
     }
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(config))
@@ -199,8 +231,7 @@ def test_config_file_painting_section(tmp_path):
 
     assert kwargs["phased_vcf"] == (tmp_path / "data" / "chr{chr}.vcf.gz").resolve()
     assert kwargs["painting"] is True
-    assert kwargs["painting_matrix"] == "chunklengths"
-    assert kwargs["painting_log"] is False
+    assert kwargs["painting_method"] == "hc"
     assert kwargs["painting_chromosomes"] == "1-2"
 
 
@@ -330,9 +361,8 @@ def test_paint_subcommand(painted, monkeypatch, capsys):
                 str(out),
                 "--n-pcs",
                 "2",
-                "--matrix",
-                "chunklengths",
-                "--no-log",
+                "--method",
+                "hc",
             ]
         )
         == 0
