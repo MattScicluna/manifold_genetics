@@ -1028,7 +1028,8 @@ def main(argv: Optional[List[str]] = None):
         "pca",
         help="Run PCA",
         description=(
-            "Run FlashPCA on a PLINK dataset.\n\n"
+            "Run PCA on a PLINK dataset, in process by default or with FlashPCA\n"
+            "(--pca-backend flashpca).\n\n"
             "Fits a PCA model on the fit set and projects it onto the project set\n"
             "(or the same set when only --input is given). Outputs standardised CSV\n"
             "files with columns: sample_id, dim_1, dim_2, ..., dim_N."
@@ -1581,8 +1582,7 @@ def main(argv: Optional[List[str]] = None):
             "              the two things worth not doing by hand.\n\n"
             "  aou         Fetch All of Us arrays from the workspace's release (read\n"
             "              from $CDR_STORAGE_PATH) and label them\n"
-            "              from the CDR, as examples/aou/shared/download_aou_data.sh\n"
-            "              did. Only works inside a Researcher Workbench, and says\n"
+            "              from the CDR. Only works inside a Researcher Workbench, and says\n"
             "              what is missing if this is not one. Needs the `aou` extra.\n\n"
             "None of them overwrites an existing config.yaml unless you pass --force."
         ),
@@ -1719,7 +1719,7 @@ def main(argv: Optional[List[str]] = None):
 
     sub_parser = subparsers.add_parser(
         "subsample",
-        help="Choose a cohort's fit samples by label counts or a list",
+        help="Choose a cohort's fit samples by label counts, a list or geosketch",
         description=(
             "Optional. Reads a cohort directory and writes one whose fit set is a chosen\n"
             "subset of its project set; the project set is linked, not copied. The output\n"
@@ -1810,7 +1810,7 @@ def main(argv: Optional[List[str]] = None):
             "  flashpca (~2 MB, Linux x86-64 only)\n"
             "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
             "With --preprocessing, also fetches the GIAB, WRayner and TOPMed\n"
-            "references the harmonise preset needs (~2 GB, most of it the TOPMed\n"
+            "references the harmonise preset needs (~4 GB, most of it the TOPMed\n"
             "reference), so preprocess can run its harmonisation step on a\n"
             "compute node without internet.\n\n"
             "Requires internet access (run on a login node, not a compute node).\n"
@@ -1828,7 +1828,7 @@ def main(argv: Optional[List[str]] = None):
         action="store_true",
         help=(
             "Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs "
-            "(~2 GB, most of it the TOPMed reference)"
+            "(~4 GB, most of it the TOPMed reference)"
         ),
     )
     setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -1904,7 +1904,7 @@ def main(argv: Optional[List[str]] = None):
     # Pipeline command
     pipeline_parser = subparsers.add_parser(
         "pipeline",
-        help="Run full pipeline (recommended entry point)",
+        help="Run the full pipeline with every setting as a flag (see run for config files)",
         description=(
             "Run the full manifold-genetics pipeline end-to-end:\n"
             "  PCA → Neural Admixture → Embedding → Visualization → Metrics\n\n"
