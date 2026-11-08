@@ -23,8 +23,8 @@ of your own for results (Resources → New → Cloud Storage bucket).
 1. **Add the workflows.** Workflows → Add workflow → WDL →
    `https://github.com/MattScicluna/manifold_genetics`, then pick
    `wdl/aou_prepare.wdl`; add again for `wdl/analyse.wdl`, `wdl/analyse_3d.wdl`
-   and `wdl/admixture.wdl`. (Workflows added before they moved into `wdl/`
-   point at the old root path; add them again.)
+   and `wdl/admixture.wdl`.
+   The registered All of Us workflows run from another branch, as [the next section](#which-branch-workbench-runs) explains.
 2. **Run `aou_prepare` once per release.** It writes the prepared cohort to
    `<output_dir>/prepared/`.
 
@@ -42,7 +42,7 @@ of your own for results (Resources → New → Cloud Storage bucket).
 4. **Run `analyse_3d`** with the same `output_dir` for the 3-D figures. It
    reads each experiment's PCA, so `experiments` must name those folders.
 5. **Run `admixture`** (optional) with the same `cohort_dir` and `output_dir`.
-   It writes `outputs/admixture/` (Q matrices of the fit set for K = 2 to 10;
+   For each experiment it writes `<output_dir>/<name>/outputs/admixture/` (Q matrices of the fit set for K = 2 to 10;
    of the whole cohort too with `infer_project`, which needs about one byte per
    genotype of the cohort in memory) and colours
    every embedding already in `outputs/embeddings/` by admixture. It runs on a
@@ -69,6 +69,17 @@ Set `docker` to a `sha-<commit>` or version tag: the mirror can keep serving
 a stale image under a branch tag.
 
 Follow the All of Us dissemination rules before sharing figures or counts.
+
+### Which branch Workbench runs
+
+The All of Us workflows registered in Workbench run from the `verily-workflow` branch, not from `main`.
+That branch is `main` as it was before the workflows moved into `wdl/`: there, they sit at the repository root (`aou_prepare.wdl`, `analyse.wdl`, `analyse_3d.wdl`, `admixture.wdl`), and their `docker` defaults to the `verily-workflow` image tag.
+The workflows themselves are identical on both branches, so this page applies to either.
+Only the path differs: `wdl/<name>.wdl` on `main`, `<name>.wdl` on `verily-workflow`.
+A change on `main` therefore does not reach the registered workflows until it is on `verily-workflow`.
+
+From release 0.4.0, `verily-workflow` follows the latest release: it moves to each release tag, and the registered workflows use the `wdl/` paths.
+Workbench then runs exactly the released workflows, in the released image.
 
 !!! note "The reference panel"
     `aou_prepare` needs an HGDP+1KGP reference restricted to the array's
@@ -142,6 +153,18 @@ Apptainer on a cluster, 486,748 samples):
 Each experiment's folder has PCA, the 2-D PHATE and UMAP embeddings and their
 figures; `analyse_3d` with `wdl/analyse_3d.biobank.inputs.json` adds the 3-D
 ones and the rotating videos (`outputs/figures/embeddings_3d/*.mp4`).
+
+## A cohort you already have, in one task
+
+`wdl/manifold_genetics.wdl` runs `manifold-genetics pipeline` as a single task, like `nextflow/main.nf`.
+It takes the fit set as PLINK files (`fit_bed`, `fit_bim`, `fit_fam`), an optional projection set (`project_bed`, `project_bim`, `project_fam`, which default to the fit set), `labels`, a `colormap` and an optional `geographic` file.
+The defaults are the published biobank settings: 20 PCs, and a 2-D PHATE embedding fit on the fit set with `knn` 500, `t` 50 and 10,000 random landmarks.
+`run_admixture` adds admixture for K from `k_min` (2) to `k_max` (10), with its figures and metrics, on the CPU.
+`extra_args` is appended to the command last, so it can override any option, for example `--embedding umap`.
+
+Unlike the other workflows, `docker` has no default: set it to an image tag.
+The workflow returns `results`, the whole output directory as `results.tar.gz`, and `figures`, its PNG figures.
+`wdl/inputs.full.json` and `wdl/inputs.no_admixture.json` are example inputs, with and without admixture.
 
 ## Outside Verily
 
