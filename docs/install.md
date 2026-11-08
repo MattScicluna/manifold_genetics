@@ -43,7 +43,7 @@ it compiles; the rest run at GPU speed.
 ## External tools
 
 `plink2` and `plink` are needed to **prepare** data, not to run the pipeline:
-the example `prepare_data.sh` scripts use them to build fit and project subsets
+`acquire`, `preprocess` and `subsample` use them to build fit and project subsets
 from a full cohort, intersect variants across cohorts, and handle strand flips.
 
 You do not normally have to fetch them yourself. The first time something needs
