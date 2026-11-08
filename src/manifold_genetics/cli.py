@@ -28,7 +28,7 @@ from .pipeline.steps import (
     run_pca,
 )
 from .utils.io import read_colormap
-from .utils.tools import ToolResolver
+from .utils.tools import ToolNotFoundError, ToolResolver
 from .utils.validation import (
     validate_admixture_csv,
     validate_colormap_json,
@@ -662,9 +662,21 @@ def cmd_setup(args):
     setup_logging(args.verbose)
 
     resolver = ToolResolver()
-    tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+    status = 0
+    tools = {}
+    try:
+        tools.update(resolver.install_tools(include_plink1=not args.skip_plink1))
+    except ToolNotFoundError as exc:
+        # pbwt is built from source and does not need these, so a platform
+        # with no plink2 download (Linux aarch64) still gets pbwt.
+        print(f"Error: {exc}", file=sys.stderr)
+        status = 1
     if args.pbwt:
-        tools["pbwt"] = resolver.install_pbwt()
+        try:
+            tools["pbwt"] = resolver.install_pbwt()
+        except ToolNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            status = 1
     print("External tools installed:")
     for name, path in tools.items():
         print(f"  - {name}: {path}")
@@ -681,7 +693,7 @@ def cmd_setup(args):
         print("Harmonisation references installed:")
         for name, path in references.items():
             print(f"  - {name}: {path}")
-    return 0
+    return status
 
 
 def cmd_embed(args):

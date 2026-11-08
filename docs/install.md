@@ -79,7 +79,9 @@ running process's `PATH`. Alternatively, point `PLINK_PATH` (plink2), `PLINK1_PA
 
 [Haplotype painting](painting.md) also needs pbwt. It has no published
 binaries, so `manifold-genetics setup --pbwt` builds it from source into the
-same directory, or you can point `PBWT_PATH` at a copy you built yourself.
+same directory, or you can point `PBWT_PATH` at a copy you built yourself. The
+build needs a C compiler, `make` and the zlib headers: on Debian or Ubuntu,
+`apt-get install gcc make libc6-dev zlib1g-dev`.
 
 ## Developing on the repository
 
