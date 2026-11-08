@@ -125,9 +125,36 @@ class ToolNotFoundError(Exception):
     """Raised when a required tool cannot be found."""
 
 
+class ToolInstallError(ToolNotFoundError):
+    """Raised by ``install_tools`` when at least one tool failed to install.
+
+    Every tool is attempted before this is raised, so ``installed`` holds the
+    ones that did install (or were skipped, as ``None``) and ``failures`` maps
+    each failed tool to its error message.
+    """
+
+    def __init__(self, installed: dict, failures: dict):
+        self.installed = installed
+        self.failures = failures
+        super().__init__("\n".join(f"{name}: {message}" for name, message in failures.items()))
+
+
+#: Why ``setup`` skips flashpca where upstream publishes no build.
+FLASHPCA_SKIPPED = (
+    "skipped, because flashpca is published only for Linux x86-64. The default "
+    "python PCA backend needs no binary."
+)
+
+
 def download_url(tool: str, *, system: str, machine: str) -> str:
     """The preferred release asset for ``tool`` on the given platform."""
     return download_candidates(tool, system=system, machine=machine)[0]
+
+
+def has_build(tool: str, *, system: str, machine: str) -> bool:
+    """Whether upstream publishes a build of ``tool`` for the given platform."""
+    key = (system, _MACHINE_ALIASES.get(machine.lower(), machine))
+    return key in _URLS.get(tool, {})
 
 
 def download_candidates(tool: str, *, system: str, machine: str) -> Tuple[str, ...]:
@@ -584,19 +611,41 @@ class ToolResolver:
         """
         Install external tools to the package bin/ directory.
 
+        flashpca is optional (the default PCA backend needs no binary), so on a
+        platform it has no build for it is skipped and maps to ``None``. Every
+        other tool is attempted even when an earlier one fails.
+
         Args:
             include_plink1: If True, download PLINK v1.9 as well.
 
         Returns:
-            Dictionary with keys: plink2, flashpca, and optionally plink1
+            Dictionary with keys: plink2, flashpca, and optionally plink1. The
+            value is the installed path, or None for a skipped tool.
+
+        Raises:
+            ToolInstallError: at least one tool failed. It carries the tools
+                that did install and the error for each one that did not.
         """
-        tools = {
-            "plink2": self._download_plink2(),
-            "flashpca": self._download_flashpca(),
-        }
+        steps = [("plink2", self._download_plink2), ("flashpca", self._download_flashpca)]
         if include_plink1:
-            tools["plink1"] = self._download_plink1()
-        return tools
+            steps.append(("plink1", self._download_plink1))
+
+        installed: dict = {}
+        failures: dict = {}
+        for name, download in steps:
+            if name == "flashpca" and not has_build(
+                "flashpca", system=platform.system(), machine=platform.machine()
+            ):
+                logger.info("Skipping flashpca on %s/%s", platform.system(), platform.machine())
+                installed[name] = None
+                continue
+            try:
+                installed[name] = download()
+            except ToolNotFoundError as exc:
+                failures[name] = str(exc)
+        if failures:
+            raise ToolInstallError(installed, failures)
+        return installed
 
     def resolve_all(self) -> dict:
         """

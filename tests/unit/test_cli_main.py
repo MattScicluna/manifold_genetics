@@ -386,6 +386,39 @@ def test_cmd_setup_skip_plink1(monkeypatch):
     assert captured["include_plink1"] is False
 
 
+def test_cmd_setup_reports_skipped_flashpca_and_succeeds(monkeypatch, capsys):
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2", "flashpca": None, "plink1": "/bin/plink"}
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    assert mg_cli.main(["setup"]) == 0
+    out = capsys.readouterr().out
+    assert "flashpca: skipped" in out
+    assert "python PCA backend needs no binary" in out
+    assert "plink1: /bin/plink" in out
+
+
+def test_cmd_setup_failure_exits_nonzero_after_reporting_the_rest(monkeypatch, capsys):
+    from manifold_genetics.utils.tools import ToolInstallError
+
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            raise ToolInstallError({"flashpca": None, "plink1": "/bin/plink"}, {"plink2": "404"})
+
+    calls = []
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    monkeypatch.setattr(
+        "manifold_genetics.preprocessing.references.install_harmonisation_references",
+        lambda: calls.append(True) or {},
+    )
+    assert mg_cli.main(["setup", "--preprocessing"]) == 1
+    captured = capsys.readouterr()
+    assert "plink1: /bin/plink" in captured.out
+    assert "Error: plink2: 404" in captured.err
+    assert calls == [True]
+
+
 def test_setup_preprocessing_flag_is_parsed(monkeypatch):
     seen = {}
 

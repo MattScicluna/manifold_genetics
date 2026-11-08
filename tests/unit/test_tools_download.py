@@ -12,7 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from manifold_genetics.utils.tools import ToolNotFoundError, ToolResolver
+from manifold_genetics.utils.tools import (
+    ToolInstallError,
+    ToolNotFoundError,
+    ToolResolver,
+    has_build,
+)
 
 
 @pytest.fixture
@@ -247,7 +252,8 @@ def test_download_plink1_wraps_failure(resolver, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_install_tools_with_and_without_plink1(resolver, monkeypatch):
+def test_install_tools_with_and_without_plink1(resolver, monkeypatch, platform_is):
+    platform_is("Linux", "x86_64")
     monkeypatch.setattr(resolver, "_download_plink2", lambda: "p2")
     monkeypatch.setattr(resolver, "_download_flashpca", lambda: "fp")
     monkeypatch.setattr(resolver, "_download_plink1", lambda: "p1")
@@ -258,6 +264,68 @@ def test_install_tools_with_and_without_plink1(resolver, monkeypatch):
         "plink1": "p1",
     }
     assert set(resolver.install_tools(include_plink1=False)) == {"plink2", "flashpca"}
+
+
+@pytest.mark.parametrize(
+    "system, machine", [("Darwin", "arm64"), ("Darwin", "x86_64"), ("Linux", "aarch64")]
+)
+def test_install_tools_skips_flashpca_without_a_build(
+    resolver, monkeypatch, platform_is, system, machine
+):
+    """Off Linux x86-64 flashpca is skipped, not attempted, and the rest install."""
+    platform_is(system, machine)
+    monkeypatch.setattr(resolver, "_download_plink2", lambda: "p2")
+    monkeypatch.setattr(resolver, "_download_plink1", lambda: "p1")
+
+    def no_flashpca():
+        raise AssertionError("flashpca must not be downloaded here")
+
+    monkeypatch.setattr(resolver, "_download_flashpca", no_flashpca)
+    assert resolver.install_tools(include_plink1=True) == {
+        "plink2": "p2",
+        "flashpca": None,
+        "plink1": "p1",
+    }
+
+
+def test_install_tools_attempts_every_tool_before_raising(resolver, monkeypatch, platform_is):
+    platform_is("Linux", "x86_64")
+
+    def plink2_fails():
+        raise ToolNotFoundError("plink2 404")
+
+    monkeypatch.setattr(resolver, "_download_plink2", plink2_fails)
+    monkeypatch.setattr(resolver, "_download_flashpca", lambda: "fp")
+    monkeypatch.setattr(resolver, "_download_plink1", lambda: "p1")
+
+    with pytest.raises(ToolInstallError) as info:
+        resolver.install_tools(include_plink1=True)
+    assert info.value.installed == {"flashpca": "fp", "plink1": "p1"}
+    assert info.value.failures == {"plink2": "plink2 404"}
+
+
+def test_install_tools_reports_a_real_flashpca_failure(resolver, monkeypatch, platform_is):
+    """Where a build exists, a failed flashpca download is still a failure."""
+    platform_is("Linux", "x86_64")
+
+    def flashpca_fails():
+        raise ToolNotFoundError("Failed to download FlashPCA")
+
+    monkeypatch.setattr(resolver, "_download_plink2", lambda: "p2")
+    monkeypatch.setattr(resolver, "_download_flashpca", flashpca_fails)
+
+    with pytest.raises(ToolInstallError) as info:
+        resolver.install_tools(include_plink1=False)
+    assert info.value.installed == {"plink2": "p2"}
+    assert set(info.value.failures) == {"flashpca"}
+
+
+def test_has_build():
+    assert has_build("flashpca", system="Linux", machine="x86_64")
+    assert has_build("flashpca", system="Linux", machine="AMD64")
+    assert not has_build("flashpca", system="Darwin", machine="arm64")
+    assert has_build("plink2", system="Darwin", machine="arm64")
+    assert not has_build("nope", system="Linux", machine="x86_64")
 
 
 def test_resolve_all_aggregates(resolver, monkeypatch):

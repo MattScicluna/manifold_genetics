@@ -305,6 +305,12 @@ for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
 
+flashpca is published only for Linux x86-64. On any other platform, macOS
+included, `setup` skips it with a message and fetches the rest: the default
+`python` PCA backend needs no binary. Every tool is attempted even when one
+fails, and `setup` exits non-zero only when a tool it should have fetched could
+not be.
+
 `--preprocessing` also places the GIAB, WRayner and TOPMed references that
 `preprocess --preset harmonise` needs (about 4 GB, almost all of it TOPMed) in
 the cache's `preprocessing/` subdirectory. The WRayner checker ships with the
