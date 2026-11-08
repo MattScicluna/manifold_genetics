@@ -80,14 +80,14 @@ BSD 3-Clause License (see [LICENSE](LICENSE)).
 
 If you use this package in your research, please cite the preprint:
 
-Scicluna M, Ni S, Córdova CMV, Grenier J-C, Poujol R, Kanoun ME, Rocha JF, Moon KR, Lemieux S, Wolf G, Krishnaswamy S, Hussin JG.
+Scicluna M, Ni S, Valdez Córdova CM, Grenier J-C, Poujol R, Kanoun ME, Rocha JF, Moon KR, Lemieux S, Wolf G, Krishnaswamy S, Hussin JG.
 PHATE-Derived Ancestry Coordinates Capture Continuous Population Structure in Human Genomic Data.
 *bioRxiv* (2026). [doi:10.64898/2026.10.29.762525](https://doi.org/10.64898/2026.10.29.762525)
 
 ```bibtex
 @article{scicluna2026phate,
   title   = {{PHATE}-Derived Ancestry Coordinates Capture Continuous Population Structure in Human Genomic Data},
-  author  = {Scicluna, Matthew and Ni, Shuang and C{\'o}rdova, C{\'e}sar Miguel Valdez and Grenier, Jean-Christophe and Poujol, Rapha{\"e}l and Kanoun, Mohamed Elyes and Rocha, Jo{\~a}o Felipe and Moon, Kevin R. and Lemieux, S{\'e}bastien and Wolf, Guy and Krishnaswamy, Smita and Hussin, Julie G.},
+  author  = {Scicluna, Matthew and Ni, Shuang and {Valdez C{\'o}rdova}, C{\'e}sar Miguel and Grenier, Jean-Christophe and Poujol, Rapha{\"e}l and Kanoun, Mohamed Elyes and Rocha, Jo{\~a}o Felipe and Moon, Kevin R. and Lemieux, S{\'e}bastien and Wolf, Guy and Krishnaswamy, Smita and Hussin, Julie G.},
   journal = {bioRxiv},
   year    = {2026},
   doi     = {10.64898/2026.10.29.762525}
