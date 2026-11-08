@@ -8,5 +8,5 @@
   "prepare.reference_bim": "<HGDP+1KGP at the cohort's positions>.bim",
   "prepare.reference_fam": "<HGDP+1KGP at the cohort's positions>.fam",
   "prepare.reference_labels": "<labels.csv: sample_id, Population, ...>",
-  "prepare.docker": "mattscicluna/manifold-genetics:sha-97ca2ba"
+  "prepare.docker": "mattscicluna/manifold-genetics:main"
 }

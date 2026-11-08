@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 class PCA:
     """
-    FlashPCA wrapper for principal component analysis.
+    Principal component analysis on a PLINK dataset.
+
+    The default backend runs in process and needs no external binary. The
+    flashpca binary is used only with ``backend="flashpca"`` or a
+    ``flashpca_path``.
 
     Examples:
         >>> # Fit PCA on reference data

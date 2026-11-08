@@ -46,7 +46,7 @@ These sets may be identical, one may be a subset of the other, or they may come 
 | preset | fit | project | for |
 |---|---|---|---|
 | **`projection`** | a reference panel | your cohort | Visualizing your cohort along axes of genetic variation defined by a reference cohort |
-| **`subsample`** | a subset of your cohort | that same subset | Cohorts that are too large—or too strongly dominated by one group—to embed in full, such as UK Biobank or All of Us |
+| **`subsample`** | a subset of your cohort | the whole cohort, which is placed in PCA space but not embedded | Cohorts that are too large—or too strongly dominated by one group—to embed in full, such as UK Biobank or All of Us |
 | **`whole_cohort`** | a subset of your cohort | the whole cohort | Cohorts small enough to embed in full, such as the HGDP+1KGP example |
 
 ## Where to start

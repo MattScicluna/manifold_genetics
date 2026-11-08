@@ -66,13 +66,14 @@ manifold-genetics run config.yaml --memory-gb 4
 ```bash
 manifold-genetics acquire custom \
     --fit-plink data/fit_subset \
-    --project-plink data/project_subset \
+    --project-plink data/full_cohort \
     --labels data/labels.csv \
     --preset subsample
 ```
 
 Both sets come from the same cohort: `fit_subset` is the subset the model is
-estimated on, `project_subset` the full cohort the components are computed for.
+estimated on, `full_cohort` the full cohort the components are computed for.
+Only the fit subset is embedded.
 
 **Two cohorts**, projecting yours onto a reference panel — separate label files,
 because the cohorts need not have the same labels:

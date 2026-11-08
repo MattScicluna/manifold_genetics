@@ -1,4 +1,4 @@
-# Container for the workflows (main.nf, the WDL workflows): the package with its
+# Container for the workflows (nextflow/main.nf, the WDL workflows): the package with its
 # aou, admixture and interactive extras, plink2 / flashpca / plink 1.9 and the GIAB
 # difficult-regions bed fetched at build time, and the Google Cloud CLI. A run
 # downloads nothing, so it works on networks that reach only Google services.

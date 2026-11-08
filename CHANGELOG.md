@@ -125,6 +125,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The workflows on `main` default to the `main` image.** `aou_prepare`,
+  `analyse`, `analyse_3d` and `admixture` defaulted to the `verily-workflow`
+  image, which is built from another branch. They now default to `main`
+  (`main-gpu` for admixture), and `prepare.inputs.json`, `inputs.full.json`
+  and `inputs.no_admixture.json` pin `main` instead of tags that do not
+  exist or predate `--colormap`.
+
+- **The Nextflow workflow moved into `nextflow/`**: `main.nf`,
+  `nextflow.config` and the optional-input placeholders (from
+  `assets/nextflow/`). Run it as `nextflow run nextflow/main.nf ...`; the
+  config beside it is still picked up.
+
+- **The WDL example inputs moved into `wdl/`**, with the miniwdl config for
+  Apptainer. The workflows themselves stay at the repository root, where the
+  workflows registered in Verily Workbench expect them. Run them as
+  `miniwdl run analyse.wdl -i wdl/analyse.inputs.json`.
+
 - **PCA reads genotypes 4-6x faster, with identical results.** The python
   backend's streaming fit re-reads the cohort about 40 times, and nearly all
   its time went to decoding and standardising each chunk on one core. Each
@@ -137,6 +154,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   here or tiny (`fbpca`), so making it optional saved nothing and left
   `--geosketch` failing with an `ImportError` on a default install.
 
+- **CI runs a WDL workflow, not only validates it.** The `container` job runs
+  `manifold_genetics.wdl` with miniwdl on the synthetic cohort, in the
+  image it just built, and checks the PCA, embedding and figures come back.
+
 ### Fixed
 
 - **PCA pair grids fill the figure.** `plot-pca` drew every figure on a
@@ -144,6 +165,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and left three blank, with the legend centred on the empty space. The grid
   now takes as many rows as the pairs need (at most 5 columns, spread evenly):
   20 PCs give 2 x 5, 14 give 2 x 4.
+
+- **`manifold_genetics.wdl` runs under miniwdl with Docker.** Its command
+  measured `TMPDIR` under `set -u`; miniwdl leaves it unset, so the task
+  stopped at once with "unbound variable". The new CI run found it.
 
 - **WRayner's harmonisation fits on disk at biobank scale.** Its generated
   `Run-plink.sh` writes a full copy of the genotypes at each of five steps,
@@ -452,8 +477,7 @@ not yet been verified end to end -- so expect further breaking changes before
 
 ### Added
 
-- **Guardrails against committing controlled-access data**
-  ([archive/working-with-agents.md](archive/working-with-agents.md)). A pre-commit hook and
+- **Guardrails against committing controlled-access data.** A pre-commit hook and
   a CI job run `scripts/check_sensitive_files.py`, written against this
   repository's own two incidents rather than as a generic secret scanner: it
   flags files whose header declares them private, genotype containers, long

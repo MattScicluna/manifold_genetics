@@ -36,7 +36,7 @@ workflow aou_prepare {
         File reference_fam
         File? topmed_reference
 
-        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
+        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:main"
         Int cpu = 32
         Int memory_gb = 128
         # WRayner holds about four ~230 GB copies of the v9 genotypes at once.

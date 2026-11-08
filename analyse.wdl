@@ -39,7 +39,7 @@ workflow analyse {
         Int umap_n_neighbors = 15
         Float umap_min_dist = 0.5
 
-        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:verily-workflow"
+        String docker = "us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:main"
         Int pca_cpu = 16
         Int pca_memory_gb = 128
         Int pca_disk_gb = 200
