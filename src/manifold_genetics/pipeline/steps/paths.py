@@ -8,7 +8,7 @@ checkpoint logic depend on them (spec constraint B).
 from pathlib import Path
 from typing import Dict
 
-from ..config import AdmixtureConfig, EmbeddingConfig, IOConfig, PCAConfig
+from ..config import AdmixtureConfig, EmbeddingConfig, IOConfig, PaintingConfig, PCAConfig
 
 
 def pca_output_paths(io: IOConfig, pca: PCAConfig) -> Dict[str, Path]:
@@ -17,6 +17,31 @@ def pca_output_paths(io: IOConfig, pca: PCAConfig) -> Dict[str, Path]:
         "fit_pca": d / f"fit_pca_{pca.n_pcs}.csv",
         "project_pca": d / f"project_pca_{pca.n_pcs}.csv",
         "flashpca_dir": d / "flashpca_outputs",
+    }
+
+
+def painting_output_paths(io: IOConfig, pca: PCAConfig, painting: PaintingConfig) -> Dict:
+    """Where the painting step writes. The coordinate CSVs mirror the PCA step's.
+
+    The method is in every name that depends on it, so a run with ``hc`` and
+    one with ``finestructure`` in the same output directory do not overwrite
+    each other, and ``skip: pca`` finds only the method it was asked for.
+    pbwt's own output does not depend on the method, so it is shared, and
+    ``painting.pbwt_dir`` can move it outside the output directory.
+
+    ``pbwt_roots`` maps each chromosome to the root pbwt writes under, so its
+    files are ``<root>.chunkcounts.out`` and so on.
+    """
+    d = io.output_dir / "painting"
+    pbwt_dir = painting.pbwt_dir if painting.pbwt_dir is not None else d / "pbwt"
+    method, n = painting.method, pca.n_pcs
+    return {
+        "dir": d,
+        "pbwt_dir": pbwt_dir,
+        "pbwt_roots": {c: pbwt_dir / f"chr{c}" for c in painting.chromosomes},
+        "coancestry": d / f"coancestry_{method}.csv",
+        "fit_pca": d / f"fit_painting_{method}_pca_{n}.csv",
+        "project_pca": d / f"project_painting_{method}_pca_{n}.csv",
     }
 
 

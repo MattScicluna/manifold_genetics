@@ -386,6 +386,54 @@ def test_cmd_setup_skip_plink1(monkeypatch):
     assert captured["include_plink1"] is False
 
 
+def test_cmd_setup_pbwt_builds_pbwt(monkeypatch, capsys):
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2"}
+
+        def install_pbwt(self):
+            return "/bin/pbwt"
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    assert mg_cli.main(["setup", "--pbwt"]) == 0
+    assert "pbwt: /bin/pbwt" in capsys.readouterr().out
+
+
+def test_cmd_setup_pbwt_still_builds_when_a_download_fails(monkeypatch, capsys):
+    """Linux aarch64 has no plink2 download, which must not stop the pbwt build."""
+    from manifold_genetics.utils.tools import ToolNotFoundError
+
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            raise ToolNotFoundError("No plink2 build is known for Linux/aarch64.")
+
+        def install_pbwt(self):
+            return "/bin/pbwt"
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    assert mg_cli.main(["setup", "--pbwt"]) == 1
+    captured = capsys.readouterr()
+    assert "pbwt: /bin/pbwt" in captured.out
+    assert "No plink2 build" in captured.err
+
+
+def test_cmd_setup_pbwt_build_failure_exits_nonzero(monkeypatch, capsys):
+    from manifold_genetics.utils.tools import ToolNotFoundError
+
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2"}
+
+        def install_pbwt(self):
+            raise ToolNotFoundError("Building pbwt needs a C compiler and make")
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    assert mg_cli.main(["setup", "--pbwt"]) == 1
+    captured = capsys.readouterr()
+    assert "plink2: /bin/plink2" in captured.out
+    assert "Building pbwt needs" in captured.err
+
+
 def test_setup_preprocessing_flag_is_parsed(monkeypatch):
     seen = {}
 

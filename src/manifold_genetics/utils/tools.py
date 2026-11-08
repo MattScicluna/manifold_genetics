@@ -66,7 +66,27 @@ _HOMEPAGES = {
     "plink2": "https://www.cog-genomics.org/plink/2.0/",
     "plink1": "https://www.cog-genomics.org/plink/1.9/",
     "flashpca": "https://github.com/gabraham/flashpca/releases",
+    "pbwt": "https://github.com/richarddurbin/pbwt",
 }
+
+# pbwt publishes no binaries and has no release tags, so `setup --pbwt` builds a
+# pinned commit from source against a pinned htslib release. htslib's release
+# tarball ships its configure script, which a git checkout does not. Configured
+# without bzip2, lzma and libcurl, it needs only zlib, which every system with a
+# C compiler has. pbwt reads local VCF and BCF files, so it needs none of the rest.
+PBWT_COMMIT = "50fd6be991a74b76b6868f4ed577cd14f657031c"
+PBWT_SOURCE_URL = f"https://github.com/richarddurbin/pbwt/archive/{PBWT_COMMIT}.tar.gz"
+HTSLIB_VERSION = "1.21"
+HTSLIB_SOURCE_URL = (
+    f"https://github.com/samtools/htslib/releases/download/{HTSLIB_VERSION}/"
+    f"htslib-{HTSLIB_VERSION}.tar.bz2"
+)
+
+_PBWT_MANUAL_BUILD = (
+    "To build it by hand (needs a C compiler, make and zlib headers), follow\n"
+    "https://github.com/richarddurbin/pbwt#installation-instructions, then put pbwt\n"
+    "on PATH or set PBWT_PATH to it."
+)
 
 # platform.machine() is not consistent across operating systems.
 _MACHINE_ALIASES = {
@@ -354,6 +374,117 @@ class ToolResolver:
             download=self._download_flashpca,
             label="FlashPCA",
         )
+
+    def resolve_pbwt(self) -> str:
+        """
+        Resolve pbwt, which haplotype painting runs.
+
+        Priority:
+        1. The download directory (built there by ``manifold-genetics setup --pbwt``)
+        2. PBWT_PATH environment variable
+        3. PATH lookup
+        4. Error. pbwt is built from source rather than downloaded, and a build
+           needs a compiler that a compute node may not have, so it is never
+           attempted implicitly.
+
+        Raises:
+            ToolNotFoundError: pbwt is not installed. The message says how to install it.
+        """
+
+        local = self.download_dir / "pbwt"
+        if self._validate_executable(str(local)):
+            return str(local)
+        if env_path := os.getenv("PBWT_PATH"):
+            if self._validate_executable(env_path):
+                return env_path
+            raise ToolNotFoundError(f"PBWT_PATH points to invalid executable: {env_path}")
+        if path := shutil.which("pbwt"):
+            return path
+        raise ToolNotFoundError(
+            f"pbwt not found in {self.download_dir}, PBWT_PATH, or PATH. Haplotype painting "
+            "needs it.\n\nBuild it with:\n  manifold-genetics setup --pbwt\n\n" + _PBWT_MANUAL_BUILD
+        )
+
+    def install_pbwt(self, *, force: bool = False) -> str:
+        """
+        Build pbwt from source into the download directory.
+
+        Downloads the pinned htslib release and pbwt commit, builds htslib as a
+        static library with zlib as its only dependency, then builds pbwt
+        against it. It takes well under a minute.
+
+        Returns:
+            Path to the built pbwt executable.
+
+        Raises:
+            ToolNotFoundError: no C compiler or make, or the build failed.
+        """
+        import tarfile
+        import tempfile
+
+        output_bin = self.download_dir / "pbwt"
+        if not force and self._validate_executable(str(output_bin)):
+            logger.info(f"pbwt already built: {output_bin}")
+            return str(output_bin)
+
+        cc = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc")
+        make = shutil.which("make")
+        if not cc or not make:
+            missing = "a C compiler" if not cc else "make"
+            raise ToolNotFoundError(
+                f"Building pbwt needs a C compiler and make, and {missing} was not found.\n"
+                + _PBWT_MANUAL_BUILD
+            )
+
+        def run(cmd, cwd):
+            logger.info("%s (in %s)", " ".join(cmd), cwd)
+            done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+            if done.returncode != 0:
+                tail = "\n".join((done.stdout + done.stderr).splitlines()[-20:])
+                raise ToolNotFoundError(
+                    f"Building pbwt failed at: {' '.join(cmd)}\n{tail}\n\n" + _PBWT_MANUAL_BUILD
+                )
+
+        self._ensure_download_dir()
+        with tempfile.TemporaryDirectory(prefix="pbwt-build-") as tmp:
+            tmp = Path(tmp)
+            sources = ((HTSLIB_SOURCE_URL, "htslib.tar.bz2"), (PBWT_SOURCE_URL, "pbwt.tar.gz"))
+            for url, name in sources:
+                logger.info(f"Downloading {url}...")
+                fetch_url(url, tmp / name)
+                with tarfile.open(tmp / name) as archive:
+                    # The "data" filter refuses absolute paths and links out
+                    # of the directory. Python releases before it existed get
+                    # the same check by hand.
+                    if hasattr(tarfile, "data_filter"):
+                        archive.extractall(tmp, filter="data")
+                    else:  # pragma: no cover - Python < 3.10.12
+                        root = tmp.resolve()
+                        for member in archive.getmembers():
+                            if root not in (tmp / member.name).resolve().parents:
+                                raise ToolNotFoundError(f"Unsafe path in {url}: {member.name}")
+                        archive.extractall(tmp)
+            htslib = tmp / f"htslib-{HTSLIB_VERSION}"
+            pbwt_src = tmp / f"pbwt-{PBWT_COMMIT}"
+
+            configure = [
+                "./configure",
+                f"CC={cc}",
+                "--disable-bz2",
+                "--disable-lzma",
+                "--disable-libcurl",
+                "--disable-gcs",
+                "--disable-s3",
+                "--without-libdeflate",
+            ]
+            run(configure, htslib)
+            run([make, "-j4", "lib-static"], htslib)
+            libs = f"-lpthread {htslib / 'libhts.a'} -lz -lm"
+            run([make, f"CC={cc}", f"HTSDIR={htslib}", f"LDLIBS={libs}", "pbwt"], pbwt_src)
+            shutil.copy2(pbwt_src / "pbwt", output_bin)
+        output_bin.chmod(0o755)
+        logger.info(f"pbwt built: {output_bin}")
+        return str(output_bin)
 
     def resolve_neural_admixture(self) -> str:
         """

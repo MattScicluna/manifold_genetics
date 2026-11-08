@@ -117,6 +117,7 @@ components.
 | command | in | out |
 |---|---|---|
 | `pca` | PLINK prefixes | PCA CSVs and a projectable model |
+| `paint` | phased VCFs, one per chromosome | coancestry PCA CSVs, in place of `pca` |
 | `admixture` | PLINK prefixes | Q matrices per K |
 | `embed` | PCA CSV | embedding CSV (2-D by default, `--n-components 3` for 3-D) |
 | `plot` | embedding CSV + labels + colormap | scatter per label column |
@@ -147,6 +148,23 @@ manifold-genetics plot-3d --input out/phate_3d.csv \
     --labels data/labels.csv --colormap data/colormap.json \
     --output out/figures/
 ```
+
+`paint` is the standalone form of [haplotype painting](painting.md). It paints
+every sample of the VCFs against every other with pbwt, then reduces the summed
+coancestry matrix by PCA. With `--fit-plink` and `--project-plink`, the `.fam`
+files choose which painted samples fit the PCA and which are projected:
+
+```bash
+manifold-genetics paint --phased-vcf 'data/chr{chr}.vcf.gz' --chromosomes 1-22 \
+    --fit-plink data/fit --project-plink data/project \
+    --fit-output out/fit_painting.csv --output out/project_painting.csv --n-pcs 20
+```
+
+Quote the path so the shell leaves `{chr}` alone. pbwt's per-chromosome output
+goes to `--pbwt-dir` and is reused by a rerun, so changing `--n-pcs` or
+`--method` does not repaint. Before painting, `paint` checks that every sample
+of the `.fam` files is in the VCFs and stops if one is not. `--missing drop`
+leaves such samples out instead, with a warning.
 
 `--n-components` works on `embed` and `pipeline`, for every method. It defaults
 to 2, so existing commands are unchanged.
@@ -295,7 +313,7 @@ Choose the fit samples by exactly one of:
 ## Setup
 
 ```bash
-manifold-genetics setup [--skip-plink1] [--preprocessing]
+manifold-genetics setup [--skip-plink1] [--preprocessing] [--pbwt]
 ```
 
 Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
@@ -310,6 +328,12 @@ see [Install](install.md#external-tools).
 the cache's `preprocessing/` subdirectory. The WRayner checker ships with the
 package; the other two are downloaded. Every reference is attempted even when
 one fails, and re-running fetches only what is still missing.
+
+`--pbwt` also builds pbwt, which [haplotype painting](painting.md) runs. pbwt
+publishes no binaries, so this downloads a pinned htslib release and pbwt
+commit and compiles them, which needs a C compiler, `make` and zlib. It is
+never built implicitly, because a compute node may have no compiler. A pbwt on
+`PATH` or named by `PBWT_PATH` is used instead when one exists.
 
 ## Exit codes and logging
 

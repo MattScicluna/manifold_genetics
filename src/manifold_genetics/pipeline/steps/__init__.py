@@ -23,7 +23,13 @@ from .metrics import (
     run_admixture_metrics_step,
     run_geographic_metrics_step,
 )
-from .paths import admixture_output_paths, embedding_output_paths, figure_output_paths
+from .painting import PaintingStepResult, run_painting, run_painting_step
+from .paths import (
+    admixture_output_paths,
+    embedding_output_paths,
+    figure_output_paths,
+    painting_output_paths,
+)
 from .pca import PCAStepResult, pca_output_paths, run_pca, run_pca_step
 from .viz import (
     EmbeddingVizResult,
@@ -43,12 +49,14 @@ __all__ = [
     "EmbeddingVizResult",
     "MetricsStepResult",
     "PCAStepResult",
+    "PaintingStepResult",
     "VizStepResult",
     "admixture_output_paths",
     "build_embedding_model",
     "embedding_output_paths",
     "figure_output_paths",
     "metrics_output_paths",
+    "painting_output_paths",
     "pca_output_paths",
     "plot_pca_pair_grids",
     "run_admixture",
@@ -60,6 +68,8 @@ __all__ = [
     "run_embedding_step",
     "run_embedding_viz_step",
     "run_geographic_metrics_step",
+    "run_painting",
+    "run_painting_step",
     "run_pca",
     "run_pca_step",
     "run_pca_viz_step",

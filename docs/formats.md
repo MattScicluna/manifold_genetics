@@ -14,6 +14,7 @@ Four kinds of file, named in the config:
 | **labels** | CSV with a `sample_id` column and one column per grouping |
 | **colormap** | JSON mapping a label column to `{value: colour}` |
 | **coordinates** *(optional)* | CSV with `sample_id`, `latitude`, `longitude` |
+| **phased VCFs** *(optional)* | one phased VCF or BCF per chromosome, for [haplotype painting](painting.md) |
 
 Which of the two genotype sets the model is **fitted** on is the choice the
 preset names. Labels look like this:
@@ -117,7 +118,13 @@ the config.
 The example leaves out the other keys a config accepts:
 
 - `data`: `fit_labels`, `project_labels`, `fit_colormap` and `project_colormap`.
-  Each overrides `labels` or `colormap` for one cohort.
+  Each overrides `labels` or `colormap` for one cohort. `phased_vcf` names the
+  phased VCFs for haplotype painting, as a path containing `{chr}`.
+- `painting`: `enabled`, `method` (`hc`, the default, or `finestructure`),
+  `chromosomes` (default `1-22`), `force`, `missing` (`error`, the default, or
+  `drop`, for cohort samples the phased VCFs lack) and `pbwt_dir` (where pbwt's
+  output goes, to share it between runs). When `enabled` is true, the painting coordinates replace the genotype
+  PCA as the embedding input. See [Haplotype painting](painting.md).
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
 - `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
 - `visualization`: `admix_group_column`, `admix_within_group_order`,
@@ -151,6 +158,14 @@ outputs/
     ├── geographic.json
     └── admixture.json
 ```
+
+A run with painting enabled writes `painting/` in place of `pca/`. It holds
+`fit_painting_<method>_pca_<n>.csv` and `project_painting_<method>_pca_<n>.csv` in the usual
+coordinate format, the summed coancestry matrix as
+`coancestry_<method>.csv` (one row per recipient, one column per donor, both
+named by sample ID: chunk counts for `finestructure`, chunk lengths in
+centimorgans for `hc`), and pbwt's own per-chromosome output under `pbwt/`. The
+[painting page](painting.md#outputs) lists them.
 
 The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,
 `phate_2d.csv` because `method: phate` with the default `n_components: 2`

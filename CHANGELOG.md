@@ -9,6 +9,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Haplotype painting as an alternative to genotype PCA** (#191). A new
+  `painting` config section and `data.phased_vcf` key paint one phased VCF per
+  chromosome with `pbwt -paint`, sum the coancestry matrix over chromosomes and
+  reduce it by PCA, following either the haplotype components of Yang et al.
+  2025 (`method: hc`, the default) or fineSTRUCTURE's `mypca` (Lawson et al.
+  2012, `method: finestructure`). The coordinates replace the genotype PCA as
+  the embedding input, so the embedding, figures and metrics run unchanged. The
+  fit cohort's rows fit the PCA and the project cohort's rows are projected
+  through it, with the whole painted set as donors. Also available as
+  `manifold-genetics paint`. pbwt publishes no binaries, so
+  `manifold-genetics setup --pbwt` builds it from a pinned commit, tested on
+  Linux x86-64, Linux aarch64 and macOS arm64. `setup --pbwt` still builds pbwt
+  when a binary download fails, as plink2's does on Linux aarch64.
+  `preprocess` and `subsample` carry `data.phased_vcf` and the `painting`
+  section into the config they write, with a warning that they do not filter
+  the VCFs. Every chromosome's VCF or BCF header is checked against the fit
+  and project `.fam` files before painting, so a missing sample fails in
+  seconds, and the error separates ID format mismatches from absent samples.
+  `painting: missing: drop` (`paint --missing drop`) leaves absent samples out
+  instead. Output names carry the method
+  (`project_painting_<method>_pca_<n>.csv`), and `painting: pbwt_dir` lets
+  runs share pbwt's output. See `docs/painting.md`.
+
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published
   `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)

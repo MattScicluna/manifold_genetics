@@ -8,7 +8,7 @@ the CLI and example scripts use this function to ensure consistency.
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from .orchestrator import Pipeline
 from .result import PipelineResult
@@ -29,6 +29,14 @@ def run_pipeline(
     project_colormap: Optional[Union[str, Path]] = None,
     # Geographic coordinates for metrics
     geographic_coords: Optional[Union[str, Path]] = None,
+    # Haplotype painting, in place of genotype PCA
+    phased_vcf: Optional[Union[str, Path]] = None,
+    painting: bool = False,
+    painting_method: str = "hc",
+    painting_chromosomes: Optional[Union[str, int, List]] = None,
+    force_painting: bool = False,
+    painting_missing: str = "error",
+    painting_pbwt_dir: Optional[Union[str, Path]] = None,
     # PCA parameters
     n_pcs: int = 50,
     pca_backend: str = "python",
@@ -86,6 +94,18 @@ def run_pipeline(
         fit_colormap: Optional override colormap JSON for fit dataset
         project_colormap: Optional override colormap JSON for project dataset
         geographic_coords: Optional path to geographic coordinates CSV for metrics
+        phased_vcf: Phased VCF per chromosome, a path containing ``{chr}``
+        painting: Paint ``phased_vcf`` with pbwt and embed the coancestry PCA
+            instead of the genotype PCA. ``skip_pca`` then skips the painting.
+        painting_method: 'hc' (default) or 'finestructure', the published recipe
+            that turns the painting into PCA features (see docs/painting.md)
+        painting_chromosomes: Chromosomes substituted for ``{chr}`` (default 1-22)
+        force_painting: Repaint chromosomes whose pbwt output is cached
+        painting_missing: 'error' (default) stops before painting when a fit or
+            project sample is not in the phased VCFs. 'drop' leaves it out of
+            its cohort with a warning.
+        painting_pbwt_dir: Where pbwt's per-chromosome output goes (default
+            ``<output_dir>/painting/pbwt``). Share it between runs to paint once.
         n_pcs: Number of principal components (default: 50)
         pca_backend: 'flashpca' (external binary) or 'python' (in process)
         max_fit_memory_gb: GB budget for the dense standardised matrix when
@@ -187,6 +207,7 @@ def run_pipeline(
         admixture_backend=admixture_backend,
         projection_plot_fit_column=projection_plot_fit_column,
         projection_plot_project_column=projection_plot_project_column,
+        phased_vcf=phased_vcf,
     )
 
     # Run pipeline with all parameters
@@ -212,6 +233,12 @@ def run_pipeline(
         admix_threads=admix_threads,
         admix_gpus=admix_gpus,
         admix_batch_size=admix_batch_size,
+        painting=painting,
+        painting_method=painting_method,
+        painting_chromosomes=painting_chromosomes,
+        force_painting=force_painting,
+        painting_missing=painting_missing,
+        painting_pbwt_dir=painting_pbwt_dir,
     )
 
     logger.info("Pipeline execution complete")

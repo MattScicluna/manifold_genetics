@@ -14,6 +14,7 @@ from typing import Mapping, Optional, Tuple
 from .steps.admixture import AdmixtureStepResult
 from .steps.embedding import EmbeddingStepResult
 from .steps.metrics import MetricsStepResult
+from .steps.painting import PaintingStepResult
 from .steps.pca import PCAStepResult
 
 __all__ = ["PipelineResult"]
@@ -33,6 +34,9 @@ class PipelineResult:
     embedding: Optional[EmbeddingStepResult] = None
     geographic_metrics: Optional[MetricsStepResult] = None
     admixture_metrics: Optional[MetricsStepResult] = None
+    # Set only when painting is enabled. ``pca`` then points at the painting
+    # coordinates, because those are what the embedding read.
+    painting: Optional[PaintingStepResult] = None
 
     # Figures, by family
     pca_figures: Tuple[Path, ...] = ()

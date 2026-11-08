@@ -1,7 +1,7 @@
 """
 Resolved, validated configuration for the manifold-genetics pipeline.
 
-Six frozen sub-config dataclasses plus ``build_configs()``, which turns the
+Seven frozen sub-config dataclasses plus ``build_configs()``, which turns the
 loose keyword arguments of ``run_pipeline`` / the ``pipeline`` CLI subcommand
 into these typed objects and performs argument-shape validation (no filesystem
 access).
@@ -9,11 +9,13 @@ access).
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
+_PAINTING_METHODS = ("finestructure", "hc")
+_PAINTING_MISSING = ("error", "drop")
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,35 @@ class IOConfig:
     fit_colormap: Path
     project_colormap: Path
     geographic_coords: Optional[Path] = None
+    # Phased VCFs for haplotype painting, one per chromosome: a path containing
+    # "{chr}". Only read when painting is enabled.
+    phased_vcf: Optional[Path] = None
+
+
+@dataclass(frozen=True)
+class PaintingConfig:
+    """Haplotype painting with pbwt, replacing genotype PCA as the embedding input.
+
+    ``method`` picks the published recipe that turns pbwt's output into PCA
+    features: ``finestructure`` (Lawson et al. 2012, chunk counts) or ``hc``
+    (Yang et al. 2025, chunk lengths). The number of components is
+    the PCA section's ``n_pcs``, so switching painting on changes nothing else
+    about the run's shape.
+
+    ``missing`` says what happens to a fit or project sample that the phased
+    VCFs lack: ``error`` stops before painting, ``drop`` leaves it out of its
+    cohort with a warning. ``pbwt_dir`` is where pbwt's per-chromosome output
+    goes, ``<output_dir>/painting/pbwt`` when ``None``. pbwt's output does not
+    depend on the method, so runs with different methods or output
+    directories can share one.
+    """
+
+    enabled: bool = False
+    method: str = "hc"
+    chromosomes: Tuple[str, ...] = tuple(str(c) for c in range(1, 23))
+    force: bool = False
+    missing: str = "error"
+    pbwt_dir: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -96,6 +127,7 @@ class PipelineConfigs:
     embedding: EmbeddingConfig
     viz: VizConfig
     skips: SkipConfig
+    painting: PaintingConfig = field(default_factory=PaintingConfig)
 
 
 def _as_path(value) -> Optional[Path]:
@@ -114,6 +146,13 @@ def build_configs(
     fit_colormap=None,
     project_colormap=None,
     geographic_coords=None,
+    phased_vcf=None,
+    painting: bool = False,
+    painting_method: str = "hc",
+    painting_chromosomes=None,
+    force_painting: bool = False,
+    painting_missing: str = "error",
+    painting_pbwt_dir=None,
     n_pcs: int = 50,
     force_pca: bool = False,
     k_min: int = 2,
@@ -186,6 +225,15 @@ def build_configs(
         raise ValueError(f"k_min ({k_min}) must be <= k_max ({k_max})")
     if n_pcs <= 0:
         raise ValueError(f"n_pcs must be a positive integer, got {n_pcs}")
+    painting_cfg = build_painting_config(
+        phased_vcf=phased_vcf,
+        enabled=painting,
+        method=painting_method,
+        chromosomes=painting_chromosomes,
+        force=force_painting,
+        missing=painting_missing,
+        pbwt_dir=painting_pbwt_dir,
+    )
 
     io = IOConfig(
         fit_plink=Path(fit_plink),
@@ -196,6 +244,7 @@ def build_configs(
         fit_colormap=Path(eff_fit_colormap),
         project_colormap=Path(eff_project_colormap),
         geographic_coords=_as_path(geographic_coords),
+        phased_vcf=_as_path(phased_vcf),
     )
     return PipelineConfigs(
         io=io,
@@ -227,4 +276,62 @@ def build_configs(
             skip_admixture_visualization=skip_admixture_visualization,
             skip_metrics=skip_metrics,
         ),
+        painting=painting_cfg,
+    )
+
+
+def build_painting_config(
+    *,
+    phased_vcf=None,
+    enabled: bool = False,
+    method: str = "hc",
+    chromosomes=None,
+    force: bool = False,
+    missing: str = "error",
+    pbwt_dir=None,
+) -> PaintingConfig:
+    """Validate the painting settings into a ``PaintingConfig``. No filesystem access.
+
+    Raises:
+        ValueError: an unknown method or ``missing`` policy, an ``hc`` run on a
+            chromosome with no known genetic length, an unparseable chromosome list, or painting
+            enabled without a ``phased_vcf`` containing ``{chr}``.
+    """
+    # Imported here: the painting package pulls in sklearn, which the rest of
+    # this module has no need for.
+    from ..painting.matrix import CHROMOSOME_CM
+    from ..painting.pbwt import expand_phased_vcf, parse_chromosomes
+
+    if method not in _PAINTING_METHODS:
+        raise ValueError(
+            f"Unknown painting method: {method!r}. Choose from: {', '.join(_PAINTING_METHODS)}"
+        )
+    if missing not in _PAINTING_MISSING:
+        raise ValueError(
+            f"Unknown painting missing policy: {missing!r}. Choose from: "
+            f"{', '.join(_PAINTING_MISSING)}"
+        )
+    names = tuple(parse_chromosomes(chromosomes))
+    if method == "hc":
+        unknown = [c for c in names if c.removeprefix("chr") not in CHROMOSOME_CM]
+        if unknown:
+            raise ValueError(
+                f"Painting method hc needs each chromosome's genetic length, which is known "
+                f"only for autosomes 1-22, not {', '.join(unknown)}. Use method: "
+                "finestructure for these."
+            )
+    if enabled:
+        if phased_vcf is None:
+            raise ValueError(
+                "Painting is enabled but no phased_vcf is set. Name one per chromosome in "
+                "the data section, for example phased_vcf: data/chr{chr}.vcf.gz"
+            )
+        expand_phased_vcf(phased_vcf, names)  # raises when {chr} is missing
+    return PaintingConfig(
+        enabled=bool(enabled),
+        method=method,
+        chromosomes=names,
+        force=bool(force),
+        missing=missing,
+        pbwt_dir=_as_path(pbwt_dir),
     )

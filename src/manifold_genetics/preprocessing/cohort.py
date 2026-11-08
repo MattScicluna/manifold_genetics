@@ -5,6 +5,7 @@
 config and writing it back with the paths moved."""
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -214,7 +215,53 @@ def filter_geographic_to_fam(geographic: PathLike, prefix: PathLike, out: PathLi
     return len(kept)
 
 
-_CARRIED_SECTIONS = ("pca", "admixture", "embedding", "visualization", "skip")
+_CARRIED_SECTIONS = ("pca", "painting", "admixture", "embedding", "visualization", "skip")
+
+
+def phased_vcf_of(cohort: CohortConfig) -> Optional[str]:
+    """The cohort's ``data.phased_vcf`` as an absolute path, ``{chr}`` kept, or None."""
+    value = (cohort.raw.get("data") or {}).get("phased_vcf")
+    if value is None:
+        return None
+    path = Path(str(value)).expanduser()
+    if not path.is_absolute():
+        path = cohort.path.parent / path
+    return os.path.normpath(path)
+
+
+def _carried_phased_vcf(based_on: CohortConfig, out_dir: Path) -> Optional[str]:
+    """``data.phased_vcf`` for the output config, naming the same files.
+
+    An absolute path is copied as written. A relative one is resolved against the
+    input config's directory, so it is rewritten relative to ``out_dir``. The
+    ``{chr}`` placeholder passes through both untouched.
+    """
+    value = (based_on.raw.get("data") or {}).get("phased_vcf")
+    if value is None:
+        return None
+    if Path(str(value)).expanduser().is_absolute():
+        return str(value)
+    target = phased_vcf_of(based_on)
+    try:
+        return os.path.relpath(target, out_dir)
+    except ValueError:  # pragma: no cover - different drives on Windows
+        return target
+
+
+def _rebased(value, based_on: CohortConfig, out_dir: Path) -> str:
+    """A path from the input config, rewritten to name the same place from ``out_dir``.
+
+    Absolute paths are copied as written. ``painting.pbwt_dir`` goes through
+    this, so a rerun from the new config reuses the same pbwt output.
+    """
+    if Path(str(value)).expanduser().is_absolute():
+        return str(value)
+    target = os.path.normpath(based_on.path.parent / Path(str(value)).expanduser())
+    try:
+        return os.path.relpath(target, out_dir)
+    except ValueError:  # pragma: no cover - different drives on Windows
+        return target
+
 
 # Dropped from a carried `embedding` section when the output's preset differs
 # from the input's: each is either the preset's own dataset-role choice
@@ -237,6 +284,10 @@ def write_cohort_config(
 
     The data section is replaced wholesale so that no stale key survives -- a
     ``labels`` left beside ``fit_labels`` is exactly the shape ``run`` rejects.
+    The one input key kept is ``phased_vcf``, which names files this command
+    does not rewrite: it is carried (rebased onto ``out_dir`` when relative)
+    with a warning that the VCFs were not filtered. The ``painting`` section is
+    carried like ``pca``.
 
     When ``preset`` differs from ``based_on.preset``, a carried ``embedding``
     section has its dataset-role and landmarking keys dropped (see
@@ -245,9 +296,21 @@ def write_cohort_config(
     ``input_mode`` or ``n_landmark`` would silently override the new preset.
     """
     document: Dict[str, object] = {"preset": preset, "data": dict(data)}
+    phased_vcf = _carried_phased_vcf(based_on, Path(out_dir))
+    if phased_vcf is not None:
+        document["data"]["phased_vcf"] = phased_vcf  # type: ignore[index]
+        logger.warning(
+            "data.phased_vcf carried to the new config as %s. `%s` does not filter "
+            "the phased VCFs: their variants and samples are not intersected or "
+            "QC'd, so painting uses them as given.",
+            phased_vcf,
+            written_by,
+        )
     for section in _CARRIED_SECTIONS:
         if section in based_on.raw and based_on.raw[section]:
             carried = dict(based_on.raw[section])
+            if section == "painting" and carried.get("pbwt_dir") is not None:
+                carried["pbwt_dir"] = _rebased(carried["pbwt_dir"], based_on, Path(out_dir))
             if section == "embedding" and preset != based_on.preset:
                 for key in _DROPPED_ON_PRESET_CHANGE:
                     if key in carried:
@@ -288,6 +351,7 @@ __all__ = [
     "filter_geographic_to_fam",
     "filter_labels_to_fam",
     "filter_labels_to_ids",
+    "phased_vcf_of",
     "read_cohort",
     "read_fam_ids",
     "write_cohort_config",
