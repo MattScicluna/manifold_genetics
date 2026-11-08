@@ -17,8 +17,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   fit cohort's rows fit the PCA and the project cohort's rows are projected
   through it, with the whole painted set as donors. Also available as
   `manifold-genetics paint`. pbwt publishes no binaries, so
-  `manifold-genetics setup --pbwt` builds it from a pinned commit. See
-  `docs/painting.md`.
+  `manifold-genetics setup --pbwt` builds it from a pinned commit, tested on
+  Linux x86-64, Linux aarch64 and macOS arm64. `setup --pbwt` still builds pbwt
+  when a binary download fails, as plink2's does on Linux aarch64.
+  `preprocess` and `subsample` carry `data.phased_vcf` and the `painting`
+  section into the config they write, with a warning that they do not filter
+  the VCFs. See `docs/painting.md`.
 
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published

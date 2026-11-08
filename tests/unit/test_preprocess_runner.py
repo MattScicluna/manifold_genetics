@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
 from manifold_genetics.pipeline.configfile import load_config
 from manifold_genetics.preprocessing import PreprocessOptions, preprocess  # noqa: F401
@@ -421,3 +422,37 @@ def test_the_checker_is_not_installed_when_wrayner_is_skipped(tmp_path, tools):
     )
 
     assert tools == []
+
+
+def _add_painting(config_path, phased_vcf):
+    document = yaml.safe_load(Path(config_path).read_text())
+    document["data"]["phased_vcf"] = phased_vcf
+    document["painting"] = {"enabled": True}
+    Path(config_path).write_text(yaml.safe_dump(document, sort_keys=False))
+
+
+def test_preprocess_carries_phased_vcf_and_painting_with_a_warning(tmp_path, tools, caplog):
+    acquire_synthetic(tmp_path / "in")
+    _add_painting(tmp_path / "in/config.yaml", "phased/chr{chr}.vcf.gz")
+    with caplog.at_level("WARNING"):
+        config = preprocess(tmp_path / "in/config.yaml", tmp_path / "out", runner=_fake_shell)
+    loaded = load_config(config)
+    assert loaded["phased_vcf"] == (tmp_path / "in/phased/chr{chr}.vcf.gz").resolve()
+    assert loaded["painting"] is True
+    assert "manifold-genetics preprocess` does not filter the phased VCFs" in caplog.text
+
+
+def test_a_second_configs_different_phased_vcf_is_named_and_not_carried(tmp_path, tools, caplog):
+    acquire_synthetic(tmp_path / "a", seed=1)
+    acquire_synthetic(tmp_path / "b", seed=2)
+    _add_painting(tmp_path / "a/config.yaml", "/vcfs/a/chr{chr}.vcf.gz")
+    _add_painting(tmp_path / "b/config.yaml", "/vcfs/b/chr{chr}.vcf.gz")
+    with caplog.at_level("WARNING"):
+        config = preprocess(
+            tmp_path / "a/config.yaml",
+            tmp_path / "out",
+            project_config=tmp_path / "b/config.yaml",
+            runner=_fake_shell,
+        )
+    assert load_config(config)["phased_vcf"] == Path("/vcfs/a/chr{chr}.vcf.gz")
+    assert "/vcfs/b/chr{chr}.vcf.gz) is not carried" in caplog.text

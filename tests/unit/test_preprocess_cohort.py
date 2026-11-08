@@ -343,3 +343,67 @@ def test_an_unchanged_preset_carries_every_embedding_key(cohort, tmp_path, caplo
         "random_landmarking": True,
     }
     assert not [r for r in caplog.records if "dropped" in r.getMessage()]
+
+
+def _with_painting(cohort, phased_vcf):
+    raw = dict(cohort.raw)
+    raw["data"] = {**raw["data"], "phased_vcf": phased_vcf}
+    raw["painting"] = {"enabled": True, "matrix": "chunklengths", "log": False}
+    return dataclasses.replace(cohort, raw=raw)
+
+
+def test_a_relative_phased_vcf_and_painting_carry_forward_to_the_same_files(
+    cohort, tmp_path, caplog
+):
+    based_on = _with_painting(cohort, "phased/chr{chr}.vcf.gz")
+    out = tmp_path / "next"
+    out.mkdir()
+    with caplog.at_level("WARNING"):
+        path = write_cohort_config(
+            out,
+            based_on=based_on,
+            preset="subsample",
+            data=_SUBSAMPLE_OUTPUT_DATA,
+            written_by="manifold-genetics subsample",
+        )
+    document = yaml.safe_load(path.read_text())
+    assert document["data"]["phased_vcf"] == "../phased/chr{chr}.vcf.gz"
+    assert document["painting"] == {"enabled": True, "matrix": "chunklengths", "log": False}
+    loaded = load_config(path)
+    assert loaded["phased_vcf"] == cohort.path.parent / "phased/chr{chr}.vcf.gz"
+    assert loaded["painting"] is True
+    assert loaded["painting_matrix"] == "chunklengths"
+    messages = " | ".join(r.getMessage() for r in caplog.records)
+    assert "manifold-genetics subsample` does not filter the phased VCFs" in messages
+    assert "painting uses them as given" in messages
+
+
+def test_an_absolute_phased_vcf_is_carried_verbatim(cohort, tmp_path):
+    vcf = str(tmp_path / "elsewhere/chr{chr}.vcf.gz")
+    out = tmp_path / "next"
+    out.mkdir()
+    path = write_cohort_config(
+        out,
+        based_on=_with_painting(cohort, vcf),
+        preset="subsample",
+        data=_SUBSAMPLE_OUTPUT_DATA,
+        written_by="manifold-genetics subsample",
+    )
+    assert yaml.safe_load(path.read_text())["data"]["phased_vcf"] == vcf
+
+
+def test_no_phased_vcf_means_none_in_the_output_and_no_warning(cohort, tmp_path, caplog):
+    out = tmp_path / "next"
+    out.mkdir()
+    with caplog.at_level("WARNING"):
+        path = write_cohort_config(
+            out,
+            based_on=cohort,
+            preset="subsample",
+            data=_SUBSAMPLE_OUTPUT_DATA,
+            written_by="manifold-genetics subsample",
+        )
+    document = yaml.safe_load(path.read_text())
+    assert "phased_vcf" not in document["data"]
+    assert "painting" not in document
+    assert not [r for r in caplog.records if "phased" in r.getMessage()]

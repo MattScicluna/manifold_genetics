@@ -18,6 +18,7 @@ from .cohort import (
     filter_geographic_to_fam,
     filter_labels_to_fam,
     filter_labels_to_ids,
+    phased_vcf_of,
     read_cohort,
     read_fam_ids,
     write_cohort_config,
@@ -121,6 +122,16 @@ def preprocess(
 
     fit_cohort = read_cohort(fit_config)
     project_cohort = read_cohort(project_config) if project_config else fit_cohort
+    project_vcf = phased_vcf_of(project_cohort)
+    if project_vcf is not None and project_vcf != phased_vcf_of(fit_cohort):
+        # The output's settings come from the first config. Painting needs one
+        # set of VCFs holding both cohorts, so the second's is not merged in.
+        logger.warning(
+            "data.phased_vcf of %s (%s) is not carried: the output takes the first "
+            "config's. Painting needs one set of VCFs holding both cohorts.",
+            project_cohort.path,
+            project_vcf,
+        )
     fit, project = fit_cohort.fit, project_cohort.project
     two_sided = project_config is not None or not fit_cohort.shared_labels
 

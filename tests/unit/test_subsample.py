@@ -187,6 +187,26 @@ class TestSubsample:
         fit_labels = pd.read_csv(loaded["fit_labels"], dtype=str)
         assert list(fit_labels["sample_id"]) == fit
 
+    def test_phased_vcf_and_painting_carry_forward(self, cohort, tmp_path, caplog):
+        import yaml
+
+        document = yaml.safe_load(cohort.read_text())
+        document["data"]["phased_vcf"] = "phased/chr{chr}.vcf.gz"
+        document["painting"] = {"enabled": True, "log": False}
+        cohort.write_text(yaml.safe_dump(document, sort_keys=False))
+        with caplog.at_level("WARNING"):
+            config = subsample(
+                cohort,
+                tmp_path / "out",
+                groups=[Group("branch", "^Branch 1$", 3)],
+                include_rest=False,
+                keep_runner=_fake_keep,
+            )
+        loaded = load_config(config)
+        assert loaded["phased_vcf"] == (tmp_path / "in/phased/chr{chr}.vcf.gz").resolve()
+        assert loaded["painting"] is True and loaded["painting_log"] is False
+        assert "manifold-genetics subsample` does not filter the phased VCFs" in caplog.text
+
     def test_a_sample_list_is_honoured_verbatim(self, cohort, tmp_path):
         fam = [line.split() for line in open(tmp_path / "in/data/project_subset.fam")]
         keep = tmp_path / "keep.txt"

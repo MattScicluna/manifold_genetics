@@ -26,11 +26,20 @@ wrong. Missing genotypes are read as the reference allele, so impute or filter
 them first.
 
 **pbwt itself.** pbwt publishes no binaries, so `setup` builds a pinned version
-from source, which takes under a minute and needs a C compiler, `make` and zlib:
+from source, which takes under a minute and needs a C compiler, `make` and the
+zlib headers. On Debian or Ubuntu, including the `python:*-slim` images, install
+them first:
 
 ```bash
+apt-get install gcc make libc6-dev zlib1g-dev
 manifold-genetics setup --pbwt
 ```
+
+On Fedora or RHEL the packages are `gcc make zlib-devel`, and on macOS the
+Xcode command line tools provide all three. The build was tested on Linux
+x86-64 and aarch64 (Debian 13, `python:3.12-slim`) and on macOS arm64. On Linux
+aarch64 there is no plink2 download, so `setup` reports that as an error and
+exits non-zero, but it still builds pbwt.
 
 It goes into the same tool directory as the other binaries. A pbwt already on
 `PATH`, or named by `PBWT_PATH`, is used as well. pbwt is licensed under
@@ -65,6 +74,20 @@ manifold-genetics paint --phased-vcf 'data/chr{chr}.vcf.gz' \
     --fit-plink data/fit --project-plink data/project \
     --fit-output out/fit_painting.csv --output out/project_painting.csv --n-pcs 20
 ```
+
+## After preprocess or subsample
+
+`preprocess` and `subsample` write a new config, and both carry `data.phased_vcf`
+and the `painting` section into it. An absolute `phased_vcf` is copied as
+written. A relative one is rewritten relative to the new config, so it still
+names the same files. Neither command filters the phased VCFs: their variants
+are not intersected with the other cohort's and get none of the QC, and their
+samples are not subset. Painting therefore uses the VCFs as given, and each
+command logs a warning saying so. The samples still line up, because painting
+takes the fit and project samples from the new `.fam` files, and a VCF sample in
+neither acts only as a donor. When `preprocess` is given two configs, the
+output takes the first one's `phased_vcf`, and a different one in the second
+config is named in a warning and dropped.
 
 ## What it computes
 
