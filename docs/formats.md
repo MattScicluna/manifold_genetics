@@ -121,7 +121,9 @@ The example leaves out the other keys a config accepts:
   Each overrides `labels` or `colormap` for one cohort. `phased_vcf` names the
   phased VCFs for haplotype painting, as a path containing `{chr}`.
 - `painting`: `enabled`, `method` (`hc`, the default, or `finestructure`),
-  `chromosomes` (default `1-22`) and `force`. When `enabled` is true, the painting coordinates replace the genotype
+  `chromosomes` (default `1-22`), `force`, `missing` (`error`, the default, or
+  `drop`, for cohort samples the phased VCFs lack) and `pbwt_dir` (where pbwt's
+  output goes, to share it between runs). When `enabled` is true, the painting coordinates replace the genotype
   PCA as the embedding input. See [Haplotype painting](painting.md).
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
 - `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
@@ -158,7 +160,7 @@ outputs/
 ```
 
 A run with painting enabled writes `painting/` in place of `pca/`. It holds
-`fit_painting_pca_<n>.csv` and `project_painting_pca_<n>.csv` in the usual
+`fit_painting_<method>_pca_<n>.csv` and `project_painting_<method>_pca_<n>.csv` in the usual
 coordinate format, the summed coancestry matrix as
 `coancestry_<method>.csv` (one row per recipient, one column per donor, both
 named by sample ID: chunk counts for `finestructure`, chunk lengths in

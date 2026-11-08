@@ -24,7 +24,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   when a binary download fails, as plink2's does on Linux aarch64.
   `preprocess` and `subsample` carry `data.phased_vcf` and the `painting`
   section into the config they write, with a warning that they do not filter
-  the VCFs. See `docs/painting.md`.
+  the VCFs. Every chromosome's VCF or BCF header is checked against the fit
+  and project `.fam` files before painting, so a missing sample fails in
+  seconds, and the error separates ID format mismatches from absent samples.
+  `painting: missing: drop` (`paint --missing drop`) leaves absent samples out
+  instead. Output names carry the method
+  (`project_painting_<method>_pca_<n>.csv`), and `painting: pbwt_dir` lets
+  runs share pbwt's output. See `docs/painting.md`.
 
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published

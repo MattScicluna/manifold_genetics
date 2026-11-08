@@ -162,7 +162,9 @@ manifold-genetics paint --phased-vcf 'data/chr{chr}.vcf.gz' --chromosomes 1-22 \
 
 Quote the path so the shell leaves `{chr}` alone. pbwt's per-chromosome output
 goes to `--pbwt-dir` and is reused by a rerun, so changing `--n-pcs` or
-`--method` does not repaint.
+`--method` does not repaint. Before painting, `paint` checks that every sample
+of the `.fam` files is in the VCFs and stops if one is not. `--missing drop`
+leaves such samples out instead, with a warning.
 
 `--n-components` works on `embed` and `pipeline`, for every method. It defaults
 to 2, so existing commands are unchanged.

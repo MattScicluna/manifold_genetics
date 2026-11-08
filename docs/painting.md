@@ -39,7 +39,10 @@ On Fedora or RHEL the packages are `gcc make zlib-devel`, and on macOS the
 Xcode command line tools provide all three. The build was tested on Linux
 x86-64 and aarch64 (Debian 13, `python:3.12-slim`) and on macOS arm64. On Linux
 aarch64 there is no plink2 download, so `setup` reports that as an error and
-exits non-zero, but it still builds pbwt.
+exits non-zero, but it still builds pbwt. On macOS arm64, `setup --pbwt`
+currently exits non-zero too, because of flashpca, although pbwt builds. The
+default PCA backend does not use flashpca, so the error can be ignored until
+the fix in pull request #213 is released.
 
 It goes into the same tool directory as the other binaries. A pbwt already on
 `PATH`, or named by `PBWT_PATH`, is used as well. pbwt is licensed under
@@ -58,6 +61,8 @@ painting:
   enabled: true
   method: hc               # or finestructure, see below
   chromosomes: 1-22        # substituted for {chr} (the default)
+  missing: error           # or drop, see "Fit and project cohorts"
+  pbwt_dir: shared/pbwt    # optional, see "Outputs"
 ```
 
 `fit_plink` and `project_plink` are still required. Their `.fam` files say which
@@ -156,20 +161,35 @@ PCA there and add haplotype information when markers are linked.
 ### Which to use
 
 `hc` is the default. It is the recipe pbwt's own authors give for its output,
-it is the one shown to work at biobank scale, and on the 1000 Genomes high
-coverage panel (chromosome 22 only, 3,202 samples) it separated populations
-within each continent better than `finestructure` did. Five-nearest-neighbor
-accuracy for population labels on the first five components, with the PCA fit
-on one continent at a time:
+and it is the one shown to work at biobank scale. Both recipes were compared
+with genotype PCA on the HGDP and 1000 Genomes panel from gnomAD
+(`phased_haplotypes_v2`), painted genome-wide: 4,089 samples on the 22
+autosomes, kept to biallelic SNPs with a minor allele frequency of at least 1%,
+which leaves 11.0 million SNPs. Genotype PCA used the same SNPs after LD
+pruning. Every PCA was fit on the 3,398 unrelated samples, which are also the
+ones scored. The table gives five-nearest-neighbor accuracy for population
+labels, over all regions at 5 and 10 components, and with the PCA fit on one
+region at a time at 5 components:
 
-| | AFR | AMR | EAS | EUR | SAS |
-|---|---|---|---|---|---|
-| genotype PCA | 0.57 | 0.56 | 0.48 | 0.45 | 0.27 |
-| `finestructure` | 0.74 | 0.69 | 0.84 | 0.81 | 0.44 |
-| `hc` | 0.83 | 0.95 | 0.89 | 0.89 | 0.70 |
+| | all, 5 PCs | all, 10 PCs | AFR | AMR | CSA | EAS | EUR | MID | OCE |
+|---|---|---|---|---|---|---|---|---|---|
+| genotype PCA | 0.76 | 0.82 | 0.91 | 0.95 | 0.82 | 0.78 | 0.87 | 0.95 | 1.00 |
+| `finestructure` | 0.81 | 0.86 | 0.87 | 0.93 | 0.80 | 0.83 | 0.92 | 0.95 | 1.00 |
+| `hc` | 0.85 | 0.89 | 0.95 | 0.89 | 0.86 | 0.83 | 0.94 | 0.95 | 0.97 |
 
-`hc` was also the more stable of the two when the painted set changed. Use
-`finestructure` to match a fineSTRUCTURE analysis, or for chromosomes other
+`hc` separates populations best, but it is not better on every measure. It
+separates the continents less cleanly than genotype PCA does: the silhouette of
+the seven regions on five components is 0.57 for `hc` and 0.64 for genotype
+PCA. The pipeline's geographic preservation metric is also lower for `hc`, at
+0.39, than for `finestructure` (0.54) and genotype PCA (0.53 to 0.57). Paint the
+whole genome: on chromosome 22 alone, `hc` reaches only 0.62 over all regions.
+
+Because painting is all against all, a sample's components depend on which
+other samples were painted. When 1,000 of these samples were painted on their
+own, their components still matched those from the full painting with a mean
+canonical correlation of 0.88 for `hc`, against 0.70 for `finestructure`.
+
+Use `finestructure` to match a fineSTRUCTURE analysis, or for chromosomes other
 than the autosomes, which `hc` cannot weight.
 
 Either way, the number of components is `n_pcs`, capped at one fewer than the
@@ -185,11 +205,23 @@ over the same donors, the whole painted set. So the fit cohort's rows fit the
 PCA, and the project cohort's rows are projected through it, as a project
 cohort's genotypes are projected through loadings fitted elsewhere.
 
-This means every sample of both cohorts must be in the phased VCFs, and the run
-stops if one is not, rather than quietly shrink a cohort. Sample names in the
-VCF may be either the `.fam` IID or `FID_IID`, which covers the usual ways a
-PLINK export names samples. Coordinates are written under the IID, which is what the labels
-file uses. A sample in the VCF that is in neither cohort is still painted and
+This means every sample of both cohorts must be in the phased VCFs, and by
+default the run stops if one is not, rather than quietly shrink a cohort. The
+check reads only the VCF headers and the `.fam` files, so it runs before any
+painting and fails in seconds. Sample names in the VCF may be either the `.fam`
+IID or `FID_IID`, which covers the usual ways a PLINK export names samples.
+Coordinates are written under the IID, which is what the labels file uses.
+
+The error tells two cases apart. When the names differ only in format, for
+example a `.fam` IID of `FAM1_HG00096` against a VCF sample `HG00096`, it shows
+a few pairs, and one side has to be renamed (for example with
+`bcftools reheader --samples`). When samples are absent from the VCF, it names a
+few. A public phased panel often lacks a handful of a cohort's samples: the
+gnomAD HGDP and 1000 Genomes haplotypes hold 4,089 of the 4,094 samples that
+`acquire hgdp` writes. To paint without them, set `painting: missing: drop`
+(`--missing drop` for `paint`). The missing samples are then left out of their
+cohort, with a warning that counts them, and the coordinates have no row for
+them. A sample in the VCF that is in neither cohort is still painted and
 still serves as a donor, which is how a reference panel added to the VCF
 sharpens the painting without appearing in the figures.
 
@@ -207,14 +239,23 @@ outputs/painting/
 │   ├── chr1.chunklengths.out
 │   ├── chr1.samples                  sample names, in VCF order
 │   └── chr1.log                      pbwt's log
-├── coancestry_<method>.csv          summed matrix, recipients by donors
-├── fit_painting_pca_<n>.csv          sample_id, dim_1 … dim_<n>
-└── project_painting_pca_<n>.csv
+├── coancestry_<method>.csv                 summed matrix, recipients by donors
+├── fit_painting_<method>_pca_<n>.csv        sample_id, dim_1 … dim_<n>
+└── project_painting_<method>_pca_<n>.csv
 ```
 
 A chromosome is repainted only when its outputs are missing, older than its VCF,
 or `painting: force: true` is set. With `skip: pca: true` the painting is
-skipped too, and the cached coordinates are embedded. The PC-pair grids in
+skipped too, and the cached coordinates of the configured method are embedded.
+The method is in each file name, so switching between `hc` and `finestructure`
+in one output directory keeps both sets, and `skip: pca` never picks up the
+other method's coordinates.
+
+pbwt's output is the same for both methods, and it is by far the slow part.
+`painting: pbwt_dir` (`--pbwt-dir` for `paint`) puts it somewhere other than
+`painting/pbwt/` in the output directory, so that runs with different methods
+or settings in separate output directories paint only once. A relative
+`pbwt_dir` is resolved against the config file's directory. The PC-pair grids in
 `figures/pca/` show the painting components, since those are what the embedding
 read.
 
@@ -233,8 +274,11 @@ M2 Max for chromosome 22 of the 1000 Genomes high coverage panel
 | 3,202 | 41 s | 1.37 GB |
 
 Time grows close to linearly over this range, and in proportion to the number
-of sites. Chromosome 22 is about 1.5% of the autosomal sequence, so the 22
-autosomes take roughly 60 to 70 times as long at this density. Memory has two
+of sites. Genome-wide, on the gnomAD HGDP and 1000 Genomes panel described
+above (4,089 samples, 11.0 million SNPs) and on the same machine, the whole
+`hc` run took 44 minutes, nearly all of it in pbwt. Peak memory was 4.4 GB, for
+chromosome 2. A `finestructure` run that reused that pbwt output took 51
+seconds. Memory has two
 parts: the matches pbwt stores, about 0.34 MB per sample here (linear in the
 samples and in the chromosome's sites), and the four
 dense n × n matrices of doubles `-paint` writes (32 n² bytes). The second
