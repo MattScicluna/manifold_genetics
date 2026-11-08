@@ -8,11 +8,13 @@ branches with no observable output.
 """
 
 import matplotlib.axes
+import matplotlib.pyplot
 import numpy as np
 import pandas as pd
 import pytest
 
 from manifold_genetics.visualization.plotting import (
+    _pair_grid_shape,
     plot_admixture_bar_grid,
     plot_embedding,
     plot_knn_composition,
@@ -145,6 +147,35 @@ def test_plot_pca_pairs_missing_data_layer(pca_inputs, scatter_calls, tmp_path):
     plot_pca_pairs(pca, labels, CMAP, tmp_path / "p.png", label_column="Region", n_pcs=6)
     gray = [c for c in scatter_calls if c.get("color") == "lightgray" and c.get("zorder") == 1]
     assert gray
+
+
+@pytest.mark.parametrize(
+    "n_panels, shape",
+    [(1, (1, 1)), (3, (1, 3)), (5, (1, 5)), (6, (2, 3)), (7, (2, 4)), (10, (2, 5)), (25, (5, 5))],
+)
+def test_pair_grid_shape_leaves_fewest_empty_cells(n_panels, shape):
+    n_rows, n_cols = _pair_grid_shape(n_panels)
+    assert (n_rows, n_cols) == shape
+    # Empty cells never fill a whole row
+    assert n_rows * n_cols - n_panels < n_rows
+
+
+def test_plot_pca_pairs_grid_has_no_empty_rows(monkeypatch, tmp_path):
+    # 20 PCs make 10 pairs: a 2 x 5 grid, not 5 x 5 with three blank rows
+    ids = list(range(12))
+    pca = _emb(ids, dims=20, seed=3)
+    labels = pd.DataFrame({"sample_id": [str(i) for i in ids], "Region": list("AAAABBBBCCCC")})
+    shapes = []
+    real = matplotlib.pyplot.subplots
+
+    def rec(*args, **kwargs):
+        fig, axes = real(*args, **kwargs)
+        shapes.append(axes.shape)
+        return fig, axes
+
+    monkeypatch.setattr(matplotlib.pyplot, "subplots", rec)
+    plot_pca_pairs(pca, labels, CMAP, tmp_path / "p.png", label_column="Region", n_pcs=20)
+    assert shapes == [(2, 5)]
 
 
 # ---------------------------------------------------------------------------

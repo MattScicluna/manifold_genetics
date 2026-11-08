@@ -159,6 +159,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **PCA pair grids fill the figure.** `plot-pca` drew every figure on a
+  5 x 5 grid and hid the unused panels, so 20 PCs (10 pairs) filled two rows
+  and left three blank, with the legend centred on the empty space. The grid
+  now takes as many rows as the pairs need (at most 5 columns, spread evenly):
+  20 PCs give 2 x 5, 14 give 2 x 4.
+
 - **`manifold_genetics.wdl` runs under miniwdl with Docker.** Its command
   measured `TMPDIR` under `set -u`; miniwdl leaves it unset, so the task
   stopped at once with "unbound variable". The new CI run found it.

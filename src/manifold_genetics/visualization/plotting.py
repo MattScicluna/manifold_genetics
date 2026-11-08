@@ -237,6 +237,17 @@ def plot_embedding(
     return output_path
 
 
+def _pair_grid_shape(n_panels: int, max_cols: int = 5) -> tuple:
+    """Rows and columns for n_panels, at most max_cols wide, with the fewest empty cells.
+
+    Takes the fewest rows that fit, then spreads the panels evenly across
+    them: 10 panels give 2 x 5, 7 give 2 x 4, 3 give 1 x 3.
+    """
+    n_rows = -(-n_panels // max_cols)
+    n_cols = -(-n_panels // n_rows)
+    return n_rows, n_cols
+
+
 def plot_pca_pairs(
     pca_coords: Union[pd.DataFrame, str, Path],
     labels: Union[pd.DataFrame, str, Path],
@@ -322,13 +333,10 @@ def plot_pca_pairs(
     if n_pairs == 0:
         raise ValueError(f"Need at least 2 PCs, found {len(available_pcs)}")
 
-    # Create grid - use 5x5 to accommodate up to 25 pairs (50 PCs)
-    n_cols = 5
-    n_rows = 5
+    # Size the grid to the pairs, so the panels fill the figure
+    n_rows, n_cols = _pair_grid_shape(n_pairs)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 2.5 * n_rows))
-    if n_pairs == 1:
-        axes = np.array([axes])
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 2.5 * n_rows), squeeze=False)
     axes = axes.flatten()
 
     # Get color mapping for the label column
