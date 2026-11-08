@@ -23,8 +23,10 @@ anything else goes through `--extra_args`. At biobank scale set
 
 Runs use a container with the external tools built in, so nothing is downloaded
 during a run. It is published on Docker Hub for `linux/amd64` as
-`mattscicluna/manifold-genetics`, tagged by branch (`main`), by commit
-(`sha-<commit>`), and by version (`0.3.0`, `latest`) once a release is tagged:
+`mattscicluna/manifold-genetics`, tagged by branch (`main`) and by commit
+(`sha-<commit>`).
+Version tags start with 0.4.0: each release tag publishes `X.Y.Z` and moves `latest`.
+No image exists for 0.3.0 or earlier, because the container was first published after that release.
 
 ```bash
 nextflow run nextflow/main.nf -profile no_admixture,docker \
@@ -38,6 +40,7 @@ serving an old image under a branch name after it has moved. To build your own,
 Add an execution profile to the workflow profile:
 
 - `docker` runs in the container locally (`-profile no_admixture,docker`).
+  Without `--container` it uses `mattscicluna/manifold-genetics:main`.
 - `google-batch` runs on Google Batch, as on Verily Workbench
   (`-profile no_admixture,google-batch`), with `--container` set to an image
   the workspace can pull.
