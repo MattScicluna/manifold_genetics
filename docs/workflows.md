@@ -4,16 +4,16 @@ The same pipeline as WDL workflows, for Cromwell (as on Verily Workbench) or
 miniwdl. Each runs `manifold-genetics` in the [published
 container](nextflow.md#container).
 
-All of them, and their example inputs, are in `wdl/`.
+The workflows are at the repository root, and their example inputs are in `wdl/`.
 
 | file | what it does |
 |---|---|
-| `wdl/manifold_genetics.wdl` | `manifold-genetics pipeline` as one task, for a cohort you already have |
-| `wdl/aou_prepare.wdl` | All of Us, step 1: fetch a release and intersect it with HGDP+1KGP |
-| `wdl/prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
-| `wdl/analyse.wdl` | step 2, any prepared cohort: subsample, PCA, then 2-D PHATE, UMAP and PCA figures |
-| `wdl/analyse_3d.wdl` | after `analyse`: 3-D PHATE, UMAP and PCA (HTML and MP4) from its PCA |
-| `wdl/admixture.wdl` | after `analyse`, optional: Neural Admixture per experiment, and its figures on the published embeddings |
+| `manifold_genetics.wdl` | `manifold-genetics pipeline` as one task, for a cohort you already have |
+| `aou_prepare.wdl` | All of Us, step 1: fetch a release and intersect it with HGDP+1KGP |
+| `prepare.wdl` | any other biobank, step 1: the same, from PLINK files you already have |
+| `analyse.wdl` | step 2, any prepared cohort: subsample, PCA, then 2-D PHATE, UMAP and PCA figures |
+| `analyse_3d.wdl` | after `analyse`: 3-D PHATE, UMAP and PCA (HTML and MP4) from its PCA |
+| `admixture.wdl` | after `analyse`, optional: Neural Admixture per experiment, and its figures on the published embeddings |
 
 ## All of Us (Verily Workbench)
 
@@ -22,9 +22,9 @@ of your own for results (Resources → New → Cloud Storage bucket).
 
 1. **Add the workflows.** Workflows → Add workflow → WDL →
    `https://github.com/MattScicluna/manifold_genetics`, then pick
-   `wdl/aou_prepare.wdl`; add again for `wdl/analyse.wdl`, `wdl/analyse_3d.wdl`
-   and `wdl/admixture.wdl`.
-   The registered All of Us workflows run from another branch, as [the next section](#which-branch-workbench-runs) explains.
+   `aou_prepare.wdl`; add again for `analyse.wdl`, `analyse_3d.wdl`
+   and `admixture.wdl`.
+   Choose the `verily-workflow` branch, as [the next section](#which-branch-workbench-runs) explains.
 2. **Run `aou_prepare` once per release.** It writes the prepared cohort to
    `<output_dir>/prepared/`.
 
@@ -73,12 +73,11 @@ Follow the All of Us dissemination rules before sharing figures or counts.
 ### Which branch Workbench runs
 
 The All of Us workflows registered in Workbench run from the `verily-workflow` branch, not from `main`.
-That branch is `main` as it was before the workflows moved into `wdl/`: there, they sit at the repository root (`aou_prepare.wdl`, `analyse.wdl`, `analyse_3d.wdl`, `admixture.wdl`), and their `docker` defaults to the `verily-workflow` image tag.
-The workflows themselves are identical on both branches, so this page applies to either.
-Only the path differs: `wdl/<name>.wdl` on `main`, `<name>.wdl` on `verily-workflow`.
-A change on `main` therefore does not reach the registered workflows until it is on `verily-workflow`.
+The workflows sit at the repository root on both branches, so the registered paths (`aou_prepare.wdl`, `analyse.wdl`, `analyse_3d.wdl`, `admixture.wdl`) are the same, and this page applies to either.
+A change on `main` does not reach the registered workflows until it is on `verily-workflow`.
 
-From release 0.4.0, `verily-workflow` follows the latest release: it moves to each release tag, and the registered workflows use the `wdl/` paths.
+Until release 0.4.0, `verily-workflow` stays at an earlier commit of `main`, and its `docker` defaults to the `verily-workflow` image tag.
+From 0.4.0, `verily-workflow` follows the latest release: it is fast-forwarded to each release tag.
 Workbench then runs exactly the released workflows, in the released image.
 
 !!! note "The reference panel"
@@ -156,7 +155,7 @@ ones and the rotating videos (`outputs/figures/embeddings_3d/*.mp4`).
 
 ## A cohort you already have, in one task
 
-`wdl/manifold_genetics.wdl` runs `manifold-genetics pipeline` as a single task, like `nextflow/main.nf`.
+`manifold_genetics.wdl` runs `manifold-genetics pipeline` as a single task, like `nextflow/main.nf`.
 It takes the fit set as PLINK files (`fit_bed`, `fit_bim`, `fit_fam`), an optional projection set (`project_bed`, `project_bim`, `project_fam`, which default to the fit set), `labels`, a `colormap` and an optional `geographic` file.
 The defaults are the published biobank settings: 20 PCs, and a 2-D PHATE embedding fit on the fit set with `knn` 500, `t` 50 and 10,000 random landmarks.
 `run_admixture` adds admixture for K from `k_min` (2) to `k_max` (10), with its figures and metrics, on the CPU.
@@ -172,9 +171,9 @@ Any WDL runner works. `output_dir` may be a local path, and the tasks then copy
 results there instead of to a bucket:
 
 ```bash
-miniwdl run wdl/prepare.wdl -i prepare.json
-miniwdl run wdl/analyse.wdl -i analyse.json
-miniwdl run wdl/analyse_3d.wdl -i analyse_3d.json
+miniwdl run prepare.wdl -i prepare.json
+miniwdl run analyse.wdl -i analyse.json
+miniwdl run analyse_3d.wdl -i analyse_3d.json
 ```
 
 On a cluster without Docker, `wdl/miniwdl.apptainer.cfg` runs the same image
@@ -195,7 +194,7 @@ Then run both steps in one batch job, for example with SLURM:
 #SBATCH --mem=128G
 #SBATCH --time=12:00:00
 export MINIWDL_CFG=wdl/miniwdl.apptainer.cfg
-miniwdl run wdl/prepare.wdl -i prepare.json
-miniwdl run wdl/analyse.wdl -i analyse.json
-miniwdl run wdl/analyse_3d.wdl -i analyse_3d.json
+miniwdl run prepare.wdl -i prepare.json
+miniwdl run analyse.wdl -i analyse.json
+miniwdl run analyse_3d.wdl -i analyse_3d.json
 ```
