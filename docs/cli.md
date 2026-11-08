@@ -182,7 +182,7 @@ usually the shortest, and stretching it to fill a cube exaggerates the curvature
 two- to three-fold.
 
 When a pipeline run uses `n_components: 3`, the embedding-visualisation step
-writes these HTML figures alongside the PNGs automatically (`<method>_3d_by_<column>.html`),
+writes these HTML figures alongside the PNGs automatically (`project_<method>_3d_by_<column>.html`, and `fit_` for the fit set),
 provided plotly is installed; otherwise it logs a warning naming the extra.
 
 Beside each HTML, `plot-3d` writes a video of the embedding making one full
@@ -253,8 +253,7 @@ produced the published figures, shipped inside the package, and needs `bash`,
   `--min-common-snps` (50,000) is the floor below which the run aborts.
 
 `harmonise` downloads its references at run time unless
-`manifold-genetics setup --preprocessing` has fetched them — and one of those
-downloads is currently broken upstream. See
+`manifold-genetics setup --preprocessing` has fetched them. See
 [Preprocessing](preprocessing.md), which also has the worked UK Biobank and
 All of Us examples.
 
@@ -300,8 +299,8 @@ manifold-genetics setup [--skip-plink1] [--preprocessing]
 ```
 
 Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
-(`~/.cache/manifold-genetics/bin`, or the checkout's `bin/` when you are running
-from one). They are also fetched on first use, so this is optional — what it is
+(`~/.cache/manifold-genetics/bin` on Linux, `~/Library/Caches/manifold-genetics/bin`
+on macOS, or the checkout's `bin/` when you are running from one). They are also fetched on first use, so this is optional — what it is
 for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).

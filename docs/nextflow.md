@@ -23,8 +23,8 @@ anything else goes through `--extra_args`. At biobank scale set
 
 Runs use a container with the external tools built in, so nothing is downloaded
 during a run. It is published on Docker Hub for `linux/amd64` as
-`mattscicluna/manifold-genetics`, tagged by branch (`main`) and by commit
-(`sha-<commit>`).
+`mattscicluna/manifold-genetics`, tagged by branch (`main`, `verily-workflow`) and by commit
+(`sha-<commit>`). Each tag also has a `-gpu` variant built on CUDA, for admixture.
 Version tags start with 0.4.0: each release tag publishes `X.Y.Z` and moves `latest`.
 No image exists for 0.3.0 or earlier, because the container was first published after that release.
 
@@ -33,7 +33,7 @@ nextflow run nextflow/main.nf -profile no_admixture,docker \
     --container mattscicluna/manifold-genetics:sha-97ca2ba ...
 ```
 
-Prefer a commit or release tag to a branch tag: a registry mirror can keep
+The default container is the `main` tag. For a run you need to reproduce, prefer a commit or release tag: a registry mirror can keep
 serving an old image under a branch name after it has moved. To build your own,
 `docker build --platform linux/amd64 -t <registry>/manifold-genetics .`
 

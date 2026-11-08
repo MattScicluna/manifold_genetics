@@ -1569,7 +1569,7 @@ def main(argv: Optional[List[str]] = None):
         description=(
             "Get a cohort into a cohort directory: genotypes, labels, colormap, config.\n\n"
             "  synthetic   Simulate a small cohort and write everything beside it.\n"
-            "              No network, a few seconds, and it runs end to end -- the\n"
+            "              No network, under a minute, and it runs end to end -- the\n"
             "              quickest way to confirm an installation works.\n\n"
             "  hgdp        Fetch the real HGDP+1KGP cohort (about 183 MB) and prepare\n"
             "              it: 4,094 QC-passing samples across seven genetic regions,\n"
@@ -1664,7 +1664,7 @@ def main(argv: Optional[List[str]] = None):
             "  preprocess ref/config.yaml biobank/config.yaml --out proj/\n"
             "      two cohorts: intersect them; the output is a projection\n\n"
             "Presets bundle the skip flags:\n"
-            "  intersect-only   no external tools: indels, missingness, intersection\n"
+            "  intersect-only   plink2 and plink only: indels, missingness, intersection\n"
             "  harmonise        everything on, including WRayner/TOPMed checks\n"
             "                   (downloads references: run `setup --preprocessing` first)\n"
             "  (none)           defaults; add --skip-* flags as needed\n\n"
@@ -1803,8 +1803,9 @@ def main(argv: Optional[List[str]] = None):
         "setup",
         help="Download external tools (plink2, flashpca, optional plink v1.9)",
         description=(
-            "Download the external command-line tools required by the pipeline.\n\n"
-            "Tools are cached per user (~/.cache/manifold-genetics/bin), or in the\n"
+            "Download the external command-line tools used to prepare data.\n\n"
+            "Tools are cached per user (~/.cache/manifold-genetics/bin on Linux,\n"
+            "~/Library/Caches/manifold-genetics/bin on macOS), or in the\n"
             "checkout's bin/ when you are running from one:\n"
             "  plink2   (~20 MB)\n"
             "  flashpca (~2 MB, Linux x86-64 only)\n"

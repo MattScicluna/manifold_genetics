@@ -46,7 +46,7 @@ they cannot silently override what the new preset sets.
 take configs rather than PLINK prefixes: the config says where the labels and
 colormaps are. A label file must cover at least half of the `.fam` it is
 paired with — the rule `acquire` applies — and samples without a row are
-warned about and drawn grey; extra rows are fine. Both commands check this
+left out of the figures; extra rows are fine. Both commands check this
 before doing any work, so a label file that describes the wrong cohort fails
 in seconds, not after the shell has run. Each command rewrites the labels in
 its output directory from its input, so they always describe the genotypes
@@ -104,7 +104,7 @@ and a reproduction has to start from the same one.
 
 ### What needs internet
 
-`intersect-only` needs nothing beyond `plink2`. `harmonise` needs three
+`intersect-only` needs only `plink2` and `plink` v1.9, which are fetched on first use. `harmonise` needs three
 references — the GIAB difficult-regions bed, the WRayner
 `HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 4 GB,
 almost all of it TOPMed). The checker ships with the package; the shell

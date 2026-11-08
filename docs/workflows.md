@@ -65,8 +65,8 @@ three (`analyse_3d`).
 
 Workflow machines pull the image through the All of Us Docker Hub mirror
 (`us-central1-docker.pkg.dev/all-of-us-rw-prod/aou-rw-gar-remote-repo-docker-prod/mattscicluna/manifold-genetics:<tag>`).
-Set `docker` to a `sha-<commit>` or version tag: the mirror can keep serving
-a stale image under a branch tag.
+The workflows default to the `main` tag, which follows the `main` branch.
+For a run you need to reproduce, set `docker` to a `sha-<commit>` tag, or from 0.4.0 a version tag: the mirror can keep serving a stale image under a branch tag.
 
 Follow the All of Us dissemination rules before sharing figures or counts.
 
