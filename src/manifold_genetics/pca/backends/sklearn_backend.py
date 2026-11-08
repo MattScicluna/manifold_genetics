@@ -17,14 +17,15 @@ reference space.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
 from sklearn.utils.extmath import randomized_svd
 
-from ..plink import count_lines, read_bed_dosages, read_bim_variants, read_fam
-from ..standardize import binom2_stats, standardize_dosages
+from ..plink import count_lines, read_bed_bytes, read_bed_dosages, read_bim_variants, read_fam
+from ..standardize import binom2_stats, standardize_bed_bytes, standardize_dosages
 from .base import PCABackend, PCAModel
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,19 @@ FIXED_OVERHEAD_BYTES = 512 * 1024**2
 # the process needs before it reads anything, which is said out loud rather than
 # silently honoured.
 MIN_CHUNK_VARIANTS = 256
+
+# Threads standardising each chunk. The work is memory-bound, so past this more
+# cores add little.
+MAX_THREADS = 8
+
+
+def _threads() -> int:
+    """Cores this process may use (its SLURM or container allocation), capped."""
+    try:
+        n = len(os.sched_getaffinity(0))
+    except AttributeError:  # macOS
+        n = os.cpu_count() or 1
+    return max(1, min(MAX_THREADS, n))
 
 
 class SklearnPCABackend(PCABackend):
@@ -256,19 +270,34 @@ class SklearnPCABackend(PCABackend):
                 variants=slice(start, stop),
             )
             mean[start:stop], sd[start:stop] = binom2_stats(dosages)
+            del dosages  # before the next read, or two chunks are live at once
         return mean, sd
 
     def _standardised_chunks(self, prefix, n_samples, n_variants, mean, sd, chunk=None):
+        """Yield each standardised chunk once.
+
+        The memory budget sizes one chunk, so only one may be live. The
+        generator drops its reference before reading the next, and every
+        consumer must ``del`` its own at the end of the loop body: a loop
+        variable stays bound while the next chunk is read, which is how a
+        projection at ``--memory-gb 80`` held two 80 GB chunks and was killed.
+        """
+        threads = _threads()
         for start, stop in self._chunks(n_variants, chunk):
-            dosages = read_bed_dosages(
-                prefix,
-                n_samples=n_samples,
-                n_variants=n_variants,
-                variants=slice(start, stop),
+            Xc = standardize_bed_bytes(
+                read_bed_bytes(
+                    prefix,
+                    n_samples=n_samples,
+                    n_variants=n_variants,
+                    variants=slice(start, stop),
+                ),
+                n_samples,
+                mean[start:stop],
+                sd[start:stop],
+                threads=threads,
             )
-            yield start, stop, standardize_dosages(
-                dosages, mean[start:stop], sd[start:stop], copy=False
-            )
+            yield start, stop, Xc
+            del Xc
 
     def _streaming_svd(self, prefix, n_samples, n_variants, mean, sd, chunk=None):
         """Randomized SVD that never materialises the standardised matrix.
@@ -288,23 +317,29 @@ class SklearnPCABackend(PCABackend):
         sum_sq = 0.0
         for start, stop, Xc in stream():
             Y += Xc @ Z[start:stop]
-            sum_sq += float(np.sum(Xc**2))  # free on a pass we already make
+            # Free on a pass we already make. einsum, not np.sum(Xc**2): squaring
+            # allocates a second chunk-sized array just to add it up.
+            sum_sq += float(np.einsum("ij,ij->", Xc, Xc))
+            del Xc
 
         for _ in range(self.n_iter):
             Y, _ = np.linalg.qr(Y)
             Z = np.empty((n_variants, width))
             for start, stop, Xc in stream():
                 Z[start:stop] = Xc.T @ Y
+                del Xc
             Z, _ = np.linalg.qr(Z)
             Y = np.zeros((n_samples, width))
             for start, stop, Xc in stream():
                 Y += Xc @ Z[start:stop]
+                del Xc
 
         Q, _ = np.linalg.qr(Y)
 
         B = np.empty((width, n_variants))
         for start, stop, Xc in stream():
             B[:, start:stop] = Q.T @ Xc
+            del Xc
 
         Ub, S, Vt = np.linalg.svd(B, full_matrices=False)
         k = self.n_components
@@ -322,19 +357,25 @@ class SklearnPCABackend(PCABackend):
         scale = np.sqrt(model.n_variants)
         chunk = self._resolve_project_chunk_size(n_samples, n_variants)
         coords = np.zeros((n_samples, model.n_components), dtype=np.float64)
+        threads = _threads()
 
         # Projection is a sum over variants, so chunking over them is exact.
         for start in range(0, n_variants, chunk):
             stop = min(start + chunk, n_variants)
-            dosages = read_bed_dosages(
-                plink_prefix,
-                n_samples=n_samples,
-                n_variants=n_variants,
-                variants=slice(start, stop),
-            )
-            Xc = standardize_dosages(
-                dosages, model.mean[start:stop], model.sd[start:stop], copy=False
+            Xc = standardize_bed_bytes(
+                read_bed_bytes(
+                    plink_prefix,
+                    n_samples=n_samples,
+                    n_variants=n_variants,
+                    variants=slice(start, stop),
+                ),
+                n_samples,
+                model.mean[start:stop],
+                model.sd[start:stop],
+                threads=threads,
             )
             coords += Xc @ model.loadings[start:stop]
+            # Unbound before the next read, so one chunk is live, not two.
+            del Xc
 
         return coords / scale

@@ -1,7 +1,10 @@
 # Python API
 
 ```python
-from manifold_genetics import run_pipeline, load_config, PCA, PHATE, UMAP, TSNE, DiffusionMap
+from manifold_genetics import (
+    run_pipeline, load_config, Pipeline, PCA, NeuralAdmixture,
+    PHATE, UMAP, TSNE, DiffusionMap, visualize, plot_embedding,
+)
 ```
 
 ## Pipeline
@@ -33,6 +36,14 @@ from manifold_genetics import run_pipeline, load_config, PCA, PHATE, UMAP, TSNE,
 ## Admixture
 
 ::: manifold_genetics.admixture.neural.NeuralAdmixture
+
+## Metrics
+
+Both metrics compare distances between sampled pairs of samples in the embedding with distances in another space, using a Spearman correlation.
+
+::: manifold_genetics.metrics.geographic.compute_geographic_preservation
+
+::: manifold_genetics.metrics.admixture.compute_admixture_preservation
 
 ## Visualisation
 

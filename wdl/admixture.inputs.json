@@ -1,0 +1,4 @@
+{
+  "admixture.cohort_dir": "gs://<bucket>/aou_v9/prepared",
+  "admixture.output_dir": "gs://<bucket>/aou_v9"
+}

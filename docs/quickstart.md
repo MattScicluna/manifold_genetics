@@ -66,13 +66,14 @@ manifold-genetics run config.yaml --memory-gb 4
 ```bash
 manifold-genetics acquire custom \
     --fit-plink data/fit_subset \
-    --project-plink data/project_subset \
+    --project-plink data/full_cohort \
     --labels data/labels.csv \
     --preset subsample
 ```
 
 Both sets come from the same cohort: `fit_subset` is the subset the model is
-estimated on, `project_subset` the full cohort the components are computed for.
+estimated on, `full_cohort` the full cohort the components are computed for.
+Only the fit subset is embedded.
 
 **Two cohorts**, projecting yours onto a reference panel — separate label files,
 because the cohorts need not have the same labels:
@@ -110,6 +111,14 @@ manifold-genetics run proj/config.yaml
 ```
 
 This is the All of Us experiment from the manuscript: the workbench's
-HGDP+1KGP panel, the All of Us V8 arrays, harmonised and intersected, then
-projected. `acquire aou` has not yet been run inside the workbench (issue
-#124); the details are in [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench).
+HGDP+1KGP panel, the All of Us arrays (V8 in the manuscript), harmonised and intersected, then
+projected. In the workbench the [`aou_prepare` workflow](workflows.md#all-of-us-verily-workbench)
+runs these steps for you; the details are in [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench).
+
+To embed All of Us on its own instead, fit on a geometric sketch of it, chosen
+without labels:
+
+```bash
+manifold-genetics subsample proj/config.yaml --geosketch 60000 --out sketch_60k/
+manifold-genetics run sketch_60k/config.yaml
+```

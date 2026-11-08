@@ -16,6 +16,7 @@ Two targets, because they answer different questions:
   figures were made from.
 """
 
+import json
 import logging
 import shutil
 import subprocess
@@ -62,6 +63,16 @@ from .preprocessing.cohort import MIN_LABEL_COVERAGE
 logger = logging.getLogger(__name__)
 
 PathLike = Union[str, Path]
+
+# Colormap generation lives in colormaps.py; these names stay importable from
+# here because hgdp.py, aou.py and tests reach them through scaffold.
+from .colormaps import (  # noqa: E402,F401
+    _PALETTE,
+    _PALETTE_EXTENDED,
+    _distinct_colours,
+    _write_generated_colormap,
+    published_colours,
+)
 
 # PLINK 1 .bed codes, by A1 dosage. 01 is missing and is never written here.
 _DOSAGE_TO_CODE = {2: 0b00, 1: 0b10, 0: 0b11}
@@ -508,22 +519,6 @@ def clean(out_dir: PathLike) -> None:
     shutil.rmtree(Path(out_dir), ignore_errors=True)
 
 
-# Distinguishable at a glance and colourblind-safe enough to start from: Okabe-Ito,
-# extended by cycling with varied lightness. A generated colormap is a starting
-# point, not a publication choice.
-_PALETTE = (
-    "#0072B2",
-    "#D55E00",
-    "#009E73",
-    "#CC79A7",
-    "#E69F00",
-    "#56B4E9",
-    "#F0E442",
-    "#000000",
-    "#8C564B",
-    "#7F7F7F",
-)
-
 _CUSTOM_CONFIG = """\
 # Written by `manifold-genetics acquire custom`.
 #
@@ -606,6 +601,7 @@ def acquire_custom(
     n_pcs: int = 20,
     force: bool = False,
     min_overlap: float = MIN_LABEL_COVERAGE,
+    colormap: Optional[PathLike] = None,
 ) -> Path:
     """Write a config and colormap for genotypes you already have.
 
@@ -632,6 +628,10 @@ def acquire_custom(
         min_overlap: Refuse if fewer than this fraction of genotyped samples
             appear in the label file. The default is the rule every command
             applies (``preprocessing.cohort.MIN_LABEL_COVERAGE``).
+        colormap: A colormap JSON (column -> value -> colour) whose colours take
+            precedence. Without one, values with a published colour (HGDP+1KGP,
+            UK Biobank, All of Us; ``colormaps.published_colours``) get it.
+            Either way every other value gets a generated colour.
 
     Returns:
         The path of the config file written.
@@ -644,8 +644,14 @@ def acquire_custom(
     config_path = out_dir / "config.yaml"
     _refuse_to_clobber(config_path, force)
 
-    fit_plink = Path(fit_plink)
-    project_plink = Path(project_plink) if project_plink else fit_plink
+    # Resolved against the working directory now, because config.yaml reads
+    # relative paths against its own directory: `--labels raw/labels.csv` given
+    # from the parent of `--out ref/` would otherwise be looked for in ref/raw/.
+    fit_plink = _absolute(fit_plink)
+    project_plink = _absolute(project_plink) if project_plink else fit_plink
+    labels = _absolute(labels) if labels else labels
+    fit_labels = _absolute(fit_labels) if fit_labels else fit_labels
+    project_labels = _absolute(project_labels) if project_labels else project_labels
 
     if fit_labels or project_labels:
         if not (fit_labels and project_labels):
@@ -669,8 +675,13 @@ def acquire_custom(
         frames.append(_checked_labels(label_path, plink, min_overlap))
     label_frame = pd.concat(frames, ignore_index=True)
 
+    known = published_colours()
+    if colormap:
+        for column, mapping in json.loads(Path(colormap).read_text()).items():
+            known[column] = mapping
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    _write_generated_colormap(label_frame, out_dir / "colormap.json")
+    _write_generated_colormap(label_frame, out_dir / "colormap.json", known=known)
 
     if fit_labels and project_labels:
         label_lines = f"  fit_labels: {fit_labels}\n  project_labels: {project_labels}"
@@ -690,23 +701,6 @@ def acquire_custom(
     return config_path
 
 
-def _write_generated_colormap(labels: pd.DataFrame, path: Path) -> None:
-    """A colour for every value of every label column, so no point goes grey.
-
-    Generated, therefore provisional: it is the file you recolour for a figure,
-    and it exists so that nobody hand-writes 22 hex codes to find out whether
-    their pipeline runs.
-    """
-    colormap = {}
-    for column in labels.columns:
-        if column == "sample_id":
-            continue
-        values = sorted(labels[column].dropna().astype(str).unique())
-        colormap[column] = {value: _PALETTE[i % len(_PALETTE)] for i, value in enumerate(values)}
-
-    if not colormap:
-        raise ValueError("the label file has no columns besides sample_id to colour by")
-
-    import json as _json
-
-    path.write_text(_json.dumps(colormap, indent=2) + "\n")
+def _absolute(path: PathLike) -> Path:
+    """``path`` resolved against the working directory, ``~`` expanded."""
+    return Path(path).expanduser().resolve()

@@ -66,3 +66,74 @@ def test_the_column_is_always_named(caplog, column):
         warn_about_unmatched_labels(pd.Series(["x"]), {}, column)
 
     assert column in caplog.text
+
+
+class TestUnlistedValuesAreDrawn:
+    """A value the colormap does not list is drawn grey, as Unknown.
+
+    Only empty labels used to reach the grey layer, so an unlisted value was
+    drawn by no layer at all: its points vanished while the warning said they
+    were grey. On All of Us v9 that was every "American Indian or Alaska
+    Native" participant.
+    """
+
+    @pytest.fixture
+    def drawn(self, monkeypatch):
+        import matplotlib.axes
+
+        calls = {"scatter": [], "legend": []}
+        real_scatter, real_legend = matplotlib.axes.Axes.scatter, matplotlib.axes.Axes.legend
+
+        def scatter(self, x, y, *a, **kw):
+            calls["scatter"].append((kw.get("color"), len(x)))
+            return real_scatter(self, x, y, *a, **kw)
+
+        def legend(self, *a, **kw):
+            handles = kw.get("handles") or (a[0] if a else [])
+            calls["legend"].append([h.get_label() for h in handles])
+            return real_legend(self, *a, **kw)
+
+        monkeypatch.setattr(matplotlib.axes.Axes, "scatter", scatter)
+        monkeypatch.setattr(matplotlib.axes.Axes, "legend", legend)
+        return calls
+
+    @staticmethod
+    def _frames(values):
+        ids = [f"s{i}" for i in range(len(values))]
+        embedding = pd.DataFrame(
+            {"sample_id": ids, "dim_1": range(len(ids)), "dim_2": range(len(ids))}
+        )
+        return embedding, pd.DataFrame({"sample_id": ids, "group": values})
+
+    def test_every_point_is_drawn(self, tmp_path, drawn):
+        from manifold_genetics.visualization.plotting import plot_embedding
+
+        embedding, labels = self._frames(["White", "Asian", "New", "New", None])
+        colormap = {"group": {"White": "#9B59B6", "Asian": "#4C6FFF"}}
+
+        plot_embedding(embedding, labels, colormap, tmp_path / "e.png")
+
+        assert sum(n for _, n in drawn["scatter"]) == 5
+        assert ("lightgray", 3) in drawn["scatter"], "two unlisted + one empty, in grey"
+        assert drawn["legend"][0] == ["White", "Asian", "Unknown"]
+
+    def test_an_unlisted_value_alone_still_gets_the_unknown_entry(self, tmp_path, drawn):
+        from manifold_genetics.visualization.plotting import plot_embedding
+
+        embedding, labels = self._frames(["White", "New"])
+
+        plot_embedding(embedding, labels, {"group": {"White": "#9B59B6"}}, tmp_path / "e.png")
+
+        assert ("lightgray", 1) in drawn["scatter"]
+        assert "Unknown" in drawn["legend"][0]
+
+    def test_listed_values_with_no_samples_are_harmless(self, tmp_path, drawn):
+        from manifold_genetics.visualization.plotting import plot_embedding
+
+        embedding, labels = self._frames(["White", "Asian"])
+        colormap = {"group": {"White": "#9B59B6", "Asian": "#4C6FFF", "Gone": "#000000"}}
+
+        plot_embedding(embedding, labels, colormap, tmp_path / "e.png")
+
+        assert drawn["legend"][0] == ["White", "Asian"]
+        assert sum(n for _, n in drawn["scatter"]) == 2

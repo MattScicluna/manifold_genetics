@@ -30,6 +30,20 @@ matplotlib.use("Agg")  # Non-interactive backend
 logger = logging.getLogger(__name__)
 
 
+def uncoloured(values, color_dict):
+    """Which samples have no colour: an empty label, or a value the colormap
+    does not list. Both are drawn as the grey "Unknown" background layer.
+
+    Testing ``isna()`` alone left unlisted values out of every layer, so their
+    points vanished from the figure while the warning said they were grey.
+    """
+    import pandas as pd
+
+    values = pd.Series(values)
+    coloured = {str(k) for k in color_dict}
+    return values.isna() | ~values.astype(str).isin(coloured)
+
+
 def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
     """Warn, loudly, about label values the colormap has no colour for.
 
@@ -63,7 +77,7 @@ def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
     if share == 1.0:
         logger.warning(
             "COLORMAP MISMATCH: none of the %d values in %r have a colour (%s). "
-            "Every point will be drawn grey and the legend will be empty. This "
+            "Every point will be drawn grey, as Unknown. This "
             "usually means the colormap and the label file describe different "
             "cohorts, or the column was renamed.",
             len(counts),
@@ -73,7 +87,7 @@ def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
     else:
         logger.warning(
             "COLORMAP MISMATCH: %d of %d samples (%.1f%%) have a value in %r with "
-            "no colour: %s. Those points are drawn grey and left out of the legend.",
+            "no colour: %s. Those points are drawn grey, as Unknown.",
             affected,
             len(values),
             100 * share,
@@ -150,7 +164,7 @@ def plot_embedding(
             continue
 
         # FIRST: Plot samples with missing data in gray (background layer)
-        missing_mask = merged_df[label_col].isna()
+        missing_mask = uncoloured(merged_df[label_col], color_dict)
         if missing_mask.sum() > 0:
             ax.scatter(
                 merged_df.loc[missing_mask, "dim_1"],
@@ -193,7 +207,7 @@ def plot_embedding(
             for g in color_dict.keys()
             if g in merged_df[label_col].values
         ]
-        if merged_df[label_col].isna().any():
+        if missing_mask.any():
             legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
         # Remove ticks, tick labels, axis labels, and titles
@@ -221,6 +235,17 @@ def plot_embedding(
 
     logger.info(f"Saved embedding plot: {output_path}")
     return output_path
+
+
+def _pair_grid_shape(n_panels: int, max_cols: int = 5) -> tuple:
+    """Rows and columns for n_panels, at most max_cols wide, with the fewest empty cells.
+
+    Takes the fewest rows that fit, then spreads the panels evenly across
+    them: 10 panels give 2 x 5, 7 give 2 x 4, 3 give 1 x 3.
+    """
+    n_rows = -(-n_panels // max_cols)
+    n_cols = -(-n_panels // n_rows)
+    return n_rows, n_cols
 
 
 def plot_pca_pairs(
@@ -308,13 +333,10 @@ def plot_pca_pairs(
     if n_pairs == 0:
         raise ValueError(f"Need at least 2 PCs, found {len(available_pcs)}")
 
-    # Create grid - use 5x5 to accommodate up to 25 pairs (50 PCs)
-    n_cols = 5
-    n_rows = 5
+    # Size the grid to the pairs, so the panels fill the figure
+    n_rows, n_cols = _pair_grid_shape(n_pairs)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 2.5 * n_rows))
-    if n_pairs == 1:
-        axes = np.array([axes])
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3 * n_cols, 2.5 * n_rows), squeeze=False)
     axes = axes.flatten()
 
     # Get color mapping for the label column
@@ -339,7 +361,7 @@ def plot_pca_pairs(
         pc_y_col = available_pcs[pc_y_idx]
 
         # FIRST: Plot samples with missing data in gray (background layer)
-        missing_mask = merged_df[label_column].isna()
+        missing_mask = uncoloured(merged_df[label_column], color_dict)
         if missing_mask.sum() > 0:
             ax.scatter(
                 merged_df.loc[missing_mask, pc_x_col],
@@ -391,7 +413,7 @@ def plot_pca_pairs(
         for g in color_dict.keys()
         if g in merged_df[label_column].values
     ]
-    if merged_df[label_column].isna().any():
+    if uncoloured(merged_df[label_column], color_dict).any():
         legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
     # Add legend with patches
@@ -853,7 +875,7 @@ def plot_embedding_3d(
 
     # Unlabelled samples first, so they sit behind the coloured groups in the
     # legend the same way they sit behind them in the 2-D figures.
-    missing_mask = merged_df[label_column].isna()
+    missing_mask = uncoloured(merged_df[label_column], color_dict)
     if missing_mask.sum() > 0:
         unknown = merged_df[missing_mask]
         traces.append(
@@ -873,7 +895,11 @@ def plot_embedding_3d(
             )
         )
 
-    for label in [k for k in color_dict if k in merged_df[label_column].values]:
+    # Same stacking rule as the 2-D figures: the colormap's first entries are
+    # drawn on top. plotly draws later traces over earlier ones, so the groups
+    # are added in reverse; legendrank keeps the legend in colormap order.
+    groups = [k for k in color_dict if k in merged_df[label_column].values]
+    for rank, label in reversed(list(enumerate(groups, start=1))):
         group = merged_df[merged_df[label_column] == label]
         traces.append(
             go.Scatter3d(
@@ -882,6 +908,7 @@ def plot_embedding_3d(
                 z=group["dim_3"],
                 mode="markers",
                 name=str(label),
+                legendrank=rank,
                 marker=dict(size=point_size, color=color_dict[label], opacity=alpha),
                 text=(group["sample_id"].astype(str) if hover_sample_id else None),
                 hovertemplate=(
@@ -908,9 +935,13 @@ def visualize_3d(
     output_dir: Optional[Union[str, Path]] = None,
     output_prefix: str = "embedding_3d",
     dataset_prefix: str = "",
+    video_format: Optional[str] = "mp4",
+    video_kwargs: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> List[Path]:
-    """Write one interactive 3-D plot per label column, mirroring ``visualize``.
+    """Write one interactive 3-D plot per label column, mirroring ``visualize``,
+    and beside each a video of the embedding rotating (``video_format`` mp4 or
+    gif; None for the HTML alone).
 
     Args:
         embedding: DataFrame or path to embedding CSV
@@ -919,10 +950,14 @@ def visualize_3d(
         output_dir: Directory to save plots (default: current directory)
         output_prefix: Prefix for output filenames
         dataset_prefix: Prefix for dataset type (e.g. "fit_" or "project_")
-        **kwargs: Forwarded to ``plot_embedding_3d``
+        video_format: "mp4", "gif", or None for no video
+        video_kwargs: Forwarded to ``video.plot_embedding_rotation`` (fps,
+            seconds, elev, dpi)
+        **kwargs: Forwarded to ``plot_embedding_3d``; ``point_size``, ``alpha``,
+            ``max_points`` and ``random_state`` also shape the video
 
     Returns:
-        List of paths to saved HTML files
+        List of paths to the saved HTML files and videos
     """
     output_dir = Path.cwd() if output_dir is None else Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -946,7 +981,34 @@ def visualize_3d(
         )
         output_paths.append(output_path)
 
-    logger.info(f"Generated {len(output_paths)} interactive 3-D plots")
+        if video_format:
+            from .video import plot_embedding_rotation
+
+            shared = {
+                k: kwargs[k]
+                for k in ("point_size", "alpha", "max_points", "random_state")
+                if k in kwargs
+            }
+            try:
+                output_paths.append(
+                    plot_embedding_rotation(
+                        embedding=embedding,
+                        labels=labels,
+                        colormap=colormap_dict,
+                        output_path=output_path.with_suffix(f".{video_format}"),
+                        label_column=label_col,
+                        title=f"3-D embedding coloured by {label_col}",
+                        **shared,
+                        **(video_kwargs or {}),
+                    )
+                )
+            except ImportError as exc:
+                # The HTML is written; an environment from before the video
+                # existed lacks only the encoder. Say so, and keep going.
+                logger.warning(f"Wrote the HTML but not the video: {exc}")
+                video_format = None
+
+    logger.info(f"Generated {len(output_paths)} 3-D figures (HTML and video)")
     return output_paths
 
 
@@ -1947,7 +2009,7 @@ def plot_projection(
     # LAYER 1: Plot missing data in lightgray for both datasets
     # Fit missing data
     if fit_label_column in fit_merged.columns:
-        fit_missing_mask = fit_merged[fit_label_column].isna()
+        fit_missing_mask = uncoloured(fit_merged[fit_label_column], fit_color_dict)
         if fit_missing_mask.sum() > 0:
             ax.scatter(
                 fit_merged.loc[fit_missing_mask, "dim_1"],
@@ -1964,7 +2026,7 @@ def plot_projection(
 
     # Project missing data
     if project_label_column in project_merged.columns:
-        project_missing_mask = project_merged[project_label_column].isna()
+        project_missing_mask = uncoloured(project_merged[project_label_column], project_color_dict)
         if project_missing_mask.sum() > 0:
             ax.scatter(
                 project_merged.loc[project_missing_mask, "dim_1"],

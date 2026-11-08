@@ -64,8 +64,13 @@ than projected.
 !!! warning "The labels must actually match the genotypes"
 
     A stale label file does not crash — it produces figures that are simply
-    wrong. The pipeline refuses below 50% overlap and reports the fraction it
-    found. Check that number.
+    wrong. `acquire`, `preprocess` and `subsample` refuse labels that cover less
+    than 50% of the `.fam`, and report the fraction they found. Check that
+    number.
+
+    `run` does not repeat that check. A sample with no row in the labels is left
+    out of the figures, and a label value with no color in the colormap is drawn
+    gray with a warning.
 
 ## The config file
 
@@ -79,6 +84,7 @@ data:
   project_plink: data/project_subset
   labels: data/labels.csv
   colormap: colormap.json
+  geographic_coords: data/geographic.csv   # optional: for the geographic metric
   output_dir: outputs
 
 pca:
@@ -89,7 +95,7 @@ pca:
 embedding:
   method: phate               # phate | umap | tsne | diffusion_map
   n_components: 2             # embedding dimensions; 3 for a rotatable plot-3d figure
-  knn: 100                    # method-specific parameters pass straight through
+  knn: 100                    # method-specific: see the accepted keys below
   t: 3
 
 visualization:
@@ -119,6 +125,24 @@ ignored, and `--dry-run` prints every setting the run will use — including the
 ones the package supplied — which is the reliable way to see what a config
 resolves to.
 
+The `embedding` section accepts `method`, `input_mode` and a fixed set of
+parameters: `n_components`, `knn`, `t`, `n_landmark`, `random_landmarking`,
+`embed_batch_size`, `gamma`, `n_neighbors`, `min_dist` and `perplexity`. Any
+other key is rejected, so a parameter such as PHATE's `decay` cannot be set from
+the config.
+
+The example leaves out the other keys a config accepts:
+
+- `data`: `fit_labels`, `project_labels`, `fit_colormap` and `project_colormap`.
+  Each overrides `labels` or `colormap` for one cohort.
+- `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
+- `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
+- `visualization`: `admix_group_column`, `admix_within_group_order`,
+  `projection_plot_fit_column`, `projection_plot_project_column`, `method_grid`
+  and `phate_grid`.
+- `skip`: `pca`, `admixture`, `embedding`, `pca_visualization`, `visualization`,
+  `admixture_visualization` and `metrics`.
+
 ## Outputs
 
 One tree, the same shape every run, under `output_dir`. `<n>` is your `n_pcs`:
@@ -130,16 +154,19 @@ outputs/
 │   ├── project_pca_<n>.csv
 │   └── flashpca_outputs/        the projectable model: loadings, means, SDs
 ├── embeddings/
-│   └── phate_2d.csv             sample_id, dim_1, dim_2
-│                                (phate_3d.csv when n_components: 3)
+│   ├── phate_2d.csv             sample_id, dim_1, dim_2
+│   │                            (phate_3d.csv when n_components: 3)
 │   └── grids/                   one CSV per grid panel, when a grid is configured
 ├── figures/
 │   ├── pca/                     PC-pair grids
-│   └── embeddings/              one scatter per colormap column
-│       └── grids/               method_grid_by_<col>.png, phate_grid_by_<col>.png
+│   ├── embeddings/              one scatter per colormap column
+│   │   │                        (plus rotatable HTML and MP4 for a 3-D embedding)
+│   │   └── grids/               method_grid_by_<col>.png, phate_grid_by_<col>.png
+│   └── admixture/               bar plots and admixture-colored embeddings
 ├── admixture/                   only when the admixture stage runs
 │   ├── fit.2.csv … fit.10.csv   ancestry proportions, one file per K
-│   └── project.2.csv … project.10.csv
+│   ├── project.2.csv … project.10.csv
+│   └── checkpoints/             the trained models, reused by a rerun
 └── metrics/                     only when the metrics stage runs
     ├── geographic.json
     └── admixture.json
@@ -149,9 +176,11 @@ The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,
 `phate_2d.csv` because `method: phate` with the default `n_components: 2`
 (`phate_3d.csv` when it is 3), one `fit.<K>.csv` per K in range.
 
-Both `acquire` configs skip admixture, because it needs the `admixture` extra
-(torch), so a first run produces the first three directories only. Geographic
-metrics need a coordinates file, which neither supplies.
+Every `acquire` source (`synthetic`, `hgdp`, `custom` and `aou`) writes a config
+that skips admixture, because it needs the `admixture` extra (torch), so a first
+run produces the first three directories only. Geographic metrics need a
+coordinates file. Of the four, only `acquire hgdp` supplies one: it writes
+`data/geographic.csv` and names it in the config.
 
 The three CSV families look like this:
 
@@ -173,18 +202,19 @@ sample_id,component_1,component_2
 HG00096,0.9996,0.0004
 ```
 
-Two details worth knowing:
+Three details worth knowing:
 
 - **`flashpca_outputs/` is written whichever PCA backend you used.** The name is
   historical; the in-process backend writes the same artefacts, so a model
   fitted by either is readable by the other.
-- **In `projection` mode there is also `phate_fit_2d.csv`**, the reference panel's
-  own embedding, because that mode embeds both cohorts.
+- **When both cohorts are embedded there is also `phate_fit_2d.csv`**, the fit
+  cohort's own embedding. This happens in `projection` mode, and in a run with
+  no preset, whose default is to embed both.
 - **Three-dimensional embeddings carry the dimensionality in the name**, so a
   3-D run never overwrites or is mistaken for a 2-D one. `plot-3d` turns one
   into a rotatable HTML figure; see [the CLI page](cli.md).
 
-Every CSV has the same shape — a `sample_id` column then `dim_1 … dim_n` — which
-is what lets the stages compose, and lets you start from the middle if you
-already have principal components.
-
+Every coordinate CSV has the same shape — a `sample_id` column then
+`dim_1 … dim_n` — which is what lets the stages compose, and lets you start from
+the middle if you already have principal components. Admixture CSVs are the
+exception: their columns are `component_1 … component_K`.

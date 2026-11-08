@@ -13,8 +13,8 @@ For more details see our upcoming publication.
 Below are PHATE embeddings for UK Biobank and All of Us cohorts.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/ukbb_phate.png" width="45%" alt="UK Biobank PHATE embedding coloured by self-described ancestry"/>
-  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/aou_phate.png" width="45%" alt="All of Us PHATE embedding coloured by ancestry"/>
+  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/ukbb_phate_3d.gif" width="45%" alt="Rotating 3D UK Biobank PHATE embedding coloured by self-described ancestry"/>
+  <img src="https://raw.githubusercontent.com/MattScicluna/manifold_genetics/main/assets/aou_phate_3d.gif" width="45%" alt="Rotating 3D All of Us PHATE embedding coloured by race/ethnicity"/>
 </p>
 
 ## This Package Returns the Following Things
@@ -23,7 +23,7 @@ Below are PHATE embeddings for UK Biobank and All of Us cohorts.
 |---|---|
 | **PCA** | components, which are passed to the embedding method |
 | **Admixture** | ancestry proportions per K, via neural-admixture |
-| **Embedding** | 2-D coordinates from PHATE, UMAP, t-SNE or diffusion maps |
+| **Embedding** | 2-D or 3-D coordinates from PHATE, UMAP, t-SNE or diffusion maps |
 | **Visualisation** | scatter plots by any label column, admixture bar plots |
 | **Metrics** | geographic and admixture preservation |
 
@@ -46,7 +46,7 @@ These sets may be identical, one may be a subset of the other, or they may come 
 | preset | fit | project | for |
 |---|---|---|---|
 | **`projection`** | a reference panel | your cohort | Visualizing your cohort along axes of genetic variation defined by a reference cohort |
-| **`subsample`** | a subset of your cohort | that same subset | Cohorts that are too large—or too strongly dominated by one group—to embed in full, such as UK Biobank or All of Us |
+| **`subsample`** | a subset of your cohort | the whole cohort, which is placed in PCA space but not embedded | Cohorts that are too large—or too strongly dominated by one group—to embed in full, such as UK Biobank or All of Us |
 | **`whole_cohort`** | a subset of your cohort | the whole cohort | Cohorts small enough to embed in full, such as the HGDP+1KGP example |
 
 ## Where to start

@@ -472,7 +472,7 @@ def cmd_acquire(args):
         if args.target == "synthetic":
             config = acquire_synthetic(out, force=args.force)
         elif args.target == "aou":
-            config = acquire_aou(out, force=args.force)
+            config = acquire_aou(out, force=args.force, bucket_root=args.bucket_root)
         elif args.target == "custom":
             if not args.fit_plink:
                 print("Error: acquire custom needs --fit-plink.", file=sys.stderr)
@@ -487,6 +487,7 @@ def cmd_acquire(args):
                 preset=args.preset,
                 n_pcs=args.n_pcs,
                 force=args.force,
+                colormap=args.colormap,
             )
         else:
             config = acquire_hgdp(
@@ -605,6 +606,8 @@ def cmd_subsample(args):
             geosketch=args.geosketch,
             pca=args.pca,
             n_pcs=args.n_pcs,
+            sketch_pool=args.sketch_pool,
+            max_memory_gb=args.memory_gb,
             force=args.force,
         )
     except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -783,6 +786,8 @@ def cmd_plot_3d(args):
         max_points=max_points,
         hover_sample_id=not args.no_hover_ids,
         aspect=args.aspect,
+        video_format=None if args.no_video else args.video_format,
+        video_kwargs={"fps": args.fps, "seconds": args.seconds, "elev": args.elev},
     )
 
     print("Interactive 3-D visualization complete:")
@@ -1023,7 +1028,8 @@ def main(argv: Optional[List[str]] = None):
         "pca",
         help="Run PCA",
         description=(
-            "Run FlashPCA on a PLINK dataset.\n\n"
+            "Run PCA on a PLINK dataset, in process by default or with FlashPCA\n"
+            "(--pca-backend flashpca).\n\n"
             "Fits a PCA model on the fit set and projects it onto the project set\n"
             "(or the same set when only --input is given). Outputs standardised CSV\n"
             "files with columns: sample_id, dim_1, dim_2, ..., dim_N."
@@ -1474,6 +1480,29 @@ def main(argv: Optional[List[str]] = None):
             "its true length (default); true: every axis at true scale"
         ),
     )
+    plot_3d_parser.add_argument(
+        "--no-video",
+        action="store_true",
+        help="Write the HTML only, without the rotating video beside it",
+    )
+    plot_3d_parser.add_argument(
+        "--video-format",
+        choices=["mp4", "gif"],
+        default="mp4",
+        help="Format of the rotating video (default: mp4)",
+    )
+    plot_3d_parser.add_argument(
+        "--fps", type=int, default=24, help="Video frames per second (default: 24)"
+    )
+    plot_3d_parser.add_argument(
+        "--seconds", type=float, default=12.0, help="Video length, one full turn (default: 12)"
+    )
+    plot_3d_parser.add_argument(
+        "--elev",
+        type=float,
+        default=20.0,
+        help="Camera elevation in degrees for the video (default: 20)",
+    )
     plot_3d_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     plot_3d_parser.set_defaults(func=cmd_plot_3d)
 
@@ -1540,7 +1569,7 @@ def main(argv: Optional[List[str]] = None):
         description=(
             "Get a cohort into a cohort directory: genotypes, labels, colormap, config.\n\n"
             "  synthetic   Simulate a small cohort and write everything beside it.\n"
-            "              No network, a few seconds, and it runs end to end -- the\n"
+            "              No network, under a minute, and it runs end to end -- the\n"
             "              quickest way to confirm an installation works.\n\n"
             "  hgdp        Fetch the real HGDP+1KGP cohort (about 183 MB) and prepare\n"
             "              it: 4,094 QC-passing samples across seven genetic regions,\n"
@@ -1551,9 +1580,9 @@ def main(argv: Optional[List[str]] = None):
             "              have. Generates a colour for every label value, and\n"
             "              refuses if the labels do not describe the cohort --\n"
             "              the two things worth not doing by hand.\n\n"
-            "  aou         Fetch All of Us (V8 arrays) from its bucket and label it\n"
-            "              from the CDR, as examples/aou/shared/download_aou_data.sh\n"
-            "              did. Only works inside a Researcher Workbench, and says\n"
+            "  aou         Fetch All of Us arrays from the workspace's release (read\n"
+            "              from $CDR_STORAGE_PATH) and label them\n"
+            "              from the CDR. Only works inside a Researcher Workbench, and says\n"
             "              what is missing if this is not one. Needs the `aou` extra.\n\n"
             "None of them overwrites an existing config.yaml unless you pass --force."
         ),
@@ -1579,6 +1608,11 @@ def main(argv: Optional[List[str]] = None):
     )
     acquire_parser.add_argument(
         "--project-labels", help="custom only: labels for the project set, if they differ"
+    )
+    acquire_parser.add_argument(
+        "--colormap",
+        help="custom only: colormap JSON whose colours take precedence "
+        "(default: the published colours for labels that have them)",
     )
     acquire_parser.add_argument(
         "--preset",
@@ -1607,6 +1641,13 @@ def main(argv: Optional[List[str]] = None):
             "(the workbench's 1KGPHGDP.tar.gz, fetched with gsutil)"
         ),
     )
+    acquire_parser.add_argument(
+        "--bucket-root",
+        help=(
+            "aou only: the gs:// directory holding arrays.{bed,bim,fam} "
+            "(default: $CDR_STORAGE_PATH/microarray/plink, the attached release)"
+        ),
+    )
     acquire_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     acquire_parser.set_defaults(func=cmd_acquire)
 
@@ -1623,7 +1664,7 @@ def main(argv: Optional[List[str]] = None):
             "  preprocess ref/config.yaml biobank/config.yaml --out proj/\n"
             "      two cohorts: intersect them; the output is a projection\n\n"
             "Presets bundle the skip flags:\n"
-            "  intersect-only   no external tools: indels, missingness, intersection\n"
+            "  intersect-only   plink2 and plink only: indels, missingness, intersection\n"
             "  harmonise        everything on, including WRayner/TOPMed checks\n"
             "                   (downloads references: run `setup --preprocessing` first)\n"
             "  (none)           defaults; add --skip-* flags as needed\n\n"
@@ -1678,7 +1719,7 @@ def main(argv: Optional[List[str]] = None):
 
     sub_parser = subparsers.add_parser(
         "subsample",
-        help="Choose a cohort's fit samples by label counts or a list",
+        help="Choose a cohort's fit samples by label counts, a list or geosketch",
         description=(
             "Optional. Reads a cohort directory and writes one whose fit set is a chosen\n"
             "subset of its project set; the project set is linked, not copied. The output\n"
@@ -1687,12 +1728,19 @@ def main(argv: Optional[List[str]] = None):
             "                                 (case-insensitive regex); repeatable; a sample is\n"
             "                                 taken once. --include-rest adds every unmatched sample.\n"
             "  --fit-samples FILE             a FID IID list chosen elsewhere.\n"
-            "  --geosketch N --pca CSV        take N samples via geometric sketching (Hie et al.\n"
-            "                                 2019) on the PCA coordinates in CSV; --n-pcs limits\n"
-            "                                 how many of its columns are used (default: all).\n\n"
+            "  --geosketch N                  take N samples via geometric sketching (Hie et al.\n"
+            "                                 2019), with no labels involved. Sketching needs PCs,\n"
+            "                                 not genotypes: PCA is fitted on --sketch-pool random\n"
+            "                                 samples (default 100000), every sample is projected,\n"
+            "                                 and the sketch is taken in those --n-pcs PCs (default\n"
+            "                                 20), saved as OUT/sketch_pca.csv. `run` then refits\n"
+            "                                 PCA on the N chosen samples, as for any subsample.\n"
+            "  --geosketch N --pca CSV        sketch in PCs computed elsewhere instead; --n-pcs\n"
+            "                                 limits how many of its columns are used (default: all).\n\n"
             "  subsample proj/config.yaml --out 10k/ \\\n"
             '      --group "race_ethnicity=White|European:10000" \\\n'
-            '      --group "race_ethnicity=Black or African American:10000" --include-rest'
+            '      --group "race_ethnicity=Black or African American:10000" --include-rest\n'
+            "  subsample proj/config.yaml --out sketch_60k/ --geosketch 60000"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1717,16 +1765,33 @@ def main(argv: Optional[List[str]] = None):
         "--geosketch",
         type=int,
         metavar="N",
-        help="Take N samples via geometric sketching on --pca coordinates",
+        help="Take N samples via geometric sketching in label-free PCs (or --pca's)",
     )
     sub_parser.add_argument(
-        "--pca", metavar="CSV", help="PCA CSV (sample_id, dim_1, dim_2, ...) for --geosketch"
+        "--pca",
+        metavar="CSV",
+        help="PCA CSV (sample_id, dim_1, dim_2, ...) to sketch in, instead of computing PCs",
     )
     sub_parser.add_argument(
         "--n-pcs",
         type=int,
         metavar="N",
-        help="Use only the first N columns of --pca for --geosketch (default: all)",
+        help=(
+            "PCs to sketch in: how many to compute (default: 20), or with --pca how many "
+            "of its columns to use (default: all)"
+        ),
+    )
+    sub_parser.add_argument(
+        "--sketch-pool",
+        type=int,
+        metavar="N",
+        help="Random samples to fit the sketch PCs on, without --pca (default: 100000)",
+    )
+    sub_parser.add_argument(
+        "--memory-gb",
+        type=float,
+        metavar="GB",
+        help="Memory budget for fitting and projecting the sketch PCs (default: 8)",
     )
     sub_parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing config.yaml"
@@ -1738,14 +1803,15 @@ def main(argv: Optional[List[str]] = None):
         "setup",
         help="Download external tools (plink2, flashpca, optional plink v1.9)",
         description=(
-            "Download the external command-line tools required by the pipeline.\n\n"
-            "Tools are cached per user (~/.cache/manifold-genetics/bin), or in the\n"
+            "Download the external command-line tools used to prepare data.\n\n"
+            "Tools are cached per user (~/.cache/manifold-genetics/bin on Linux,\n"
+            "~/Library/Caches/manifold-genetics/bin on macOS), or in the\n"
             "checkout's bin/ when you are running from one:\n"
             "  plink2   (~20 MB)\n"
             "  flashpca (~2 MB, Linux x86-64 only)\n"
             "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
             "With --preprocessing, also fetches the GIAB, WRayner and TOPMed\n"
-            "references the harmonise preset needs (~2 GB, most of it the TOPMed\n"
+            "references the harmonise preset needs (~4 GB, most of it the TOPMed\n"
             "reference), so preprocess can run its harmonisation step on a\n"
             "compute node without internet.\n\n"
             "Requires internet access (run on a login node, not a compute node).\n"
@@ -1763,7 +1829,7 @@ def main(argv: Optional[List[str]] = None):
         action="store_true",
         help=(
             "Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs "
-            "(~2 GB, most of it the TOPMed reference)"
+            "(~4 GB, most of it the TOPMed reference)"
         ),
     )
     setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -1839,7 +1905,7 @@ def main(argv: Optional[List[str]] = None):
     # Pipeline command
     pipeline_parser = subparsers.add_parser(
         "pipeline",
-        help="Run full pipeline (recommended entry point)",
+        help="Run the full pipeline with every setting as a flag (see run for config files)",
         description=(
             "Run the full manifold-genetics pipeline end-to-end:\n"
             "  PCA → Neural Admixture → Embedding → Visualization → Metrics\n\n"

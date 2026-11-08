@@ -1,0 +1,13 @@
+# What `gcloud builds submit` uploads (it reads this file, not .dockerignore):
+# the package source only, as for the image itself. A checkout can hold
+# controlled-access data in its working tree; none of it may leave it.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src/
+!Dockerfile
+!.dockerignore
+**/__pycache__
+**/*.pyc

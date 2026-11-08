@@ -864,6 +864,21 @@ class TestInitCustom:
         kwargs = load_config(config)
         assert kwargs["fit_plink"] == cohort / "cohort"
 
+    def test_relative_paths_are_read_from_where_the_command_ran(self, cohort, monkeypatch):
+        """config.yaml reads relative paths against its own directory, so a
+        relative --labels written into it verbatim pointed inside --out:
+        `--labels raw/labels.csv --out ref/` was looked for at ref/raw/."""
+        from manifold_genetics.pipeline.configfile import load_config
+        from manifold_genetics.scaffold import acquire_custom
+
+        monkeypatch.chdir(cohort)
+        config = acquire_custom("out", fit_plink="cohort", labels="labels.csv")
+
+        kwargs = load_config(config)
+        assert Path(kwargs["fit_plink"]).resolve() == (cohort / "cohort").resolve()
+        text = config.read_text()
+        assert str((cohort / "labels.csv").resolve()) in text
+
     def test_generates_a_colour_for_every_label_value(self, cohort):
         """The 22-colours-by-hand problem is the reason this command exists."""
         from manifold_genetics.scaffold import acquire_custom
@@ -873,6 +888,63 @@ class TestInitCustom:
         colours = json.loads((cohort / "out" / "colormap.json").read_text())
         assert set(colours["population"]) == {"A", "B", "C", "D"}
         assert all(c.startswith("#") for c in colours["population"].values())
+
+    def test_published_labels_get_the_published_colours(self, cohort):
+        """A UK Biobank labels file drawn in invented colours (African blue,
+        British brown) is a figure nobody can compare with the paper's."""
+        from manifold_genetics.scaffold import acquire_custom
+
+        ids = [f"S{i:03d}" for i in range(40)]
+        pd.DataFrame(
+            {
+                "sample_id": ids,
+                "self_described_ancestry": ["British", "African", "Irish", "Unlisted"] * 10,
+                "Population": ["EUR", "AFR", "EUR", "EAS"] * 10,
+            }
+        ).to_csv(cohort / "ukbb.csv", index=False)
+
+        acquire_custom(cohort / "out", fit_plink=cohort / "cohort", labels=cohort / "ukbb.csv")
+
+        colours = json.loads((cohort / "out" / "colormap.json").read_text())
+        ancestry = colours["self_described_ancestry"]
+        assert ancestry["British"] == "#9370DB"
+        assert ancestry["African"] == "#228B22"
+        assert ancestry["Irish"] == "#8A2BE2"
+        assert ancestry["Unlisted"] not in {"#9370DB", "#228B22", "#8A2BE2"}
+        assert colours["Population"] == {"EUR": "#9370DB", "AFR": "#228B22", "EAS": "#1E90FF"}
+        # Published order first: it is the legend order and the drawing order.
+        assert list(ancestry)[:3] == ["African", "Irish", "British"]
+
+    def test_the_ukbb_colours_are_the_published_file(self):
+        example = Path(__file__).resolve().parents[2] / "examples" / "colormaps" / "ukbb.json"
+        if not example.exists():
+            pytest.skip("examples/ is not tracked; this runs where the published files are")
+        from manifold_genetics.colormaps import (
+            _UKBB_ANCESTRY_COLOURS,
+            _UKBB_SUPERPOPULATION_COLOURS,
+        )
+
+        published = json.loads(example.read_text())
+        assert list(published["self_described_ancestry"].items()) == list(
+            _UKBB_ANCESTRY_COLOURS.items()
+        )
+        assert list(published["Population"].items()) == list(_UKBB_SUPERPOPULATION_COLOURS.items())
+
+    def test_a_colormap_given_takes_precedence(self, cohort):
+        from manifold_genetics.scaffold import acquire_custom
+
+        (cohort / "mine.json").write_text(json.dumps({"population": {"B": "#123456"}}))
+
+        acquire_custom(
+            cohort / "out",
+            fit_plink=cohort / "cohort",
+            labels=cohort / "labels.csv",
+            colormap=cohort / "mine.json",
+        )
+
+        colours = json.loads((cohort / "out" / "colormap.json").read_text())
+        assert colours["population"]["B"] == "#123456"
+        assert set(colours["population"]) == {"A", "B", "C", "D"}
 
     def test_refuses_labels_that_do_not_match_the_genotypes(self, cohort):
         """The silent failure: a stale label file colours a fraction of the points."""
@@ -910,7 +982,7 @@ class TestInitCustom:
 class TestInitAou:
     """All of Us is controlled-access and lives in a workbench.
 
-    Its data comes from `gs://fc-aou-datasets-controlled` and needs
+    Its data comes from the release's controlled bucket and needs
     GOOGLE_PROJECT, gsutil and bq, which only exist inside the Researcher
     Workbench. What the command does once it is there -- the download, the FAM
     fix, the BigQuery metadata, the labels -- is tested against stubs in

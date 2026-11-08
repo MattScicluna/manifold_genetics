@@ -51,14 +51,16 @@ manifold-genetics acquire hgdp --archive hgdp_1kgp_full.tar.gz
 `--no-download` means never fetch: it still unpacks an archive already present.
 
 `custom` takes `--fit-plink` and labels, plus optionally `--project-plink`,
-`--preset` and `--n-pcs`. Labels are either one `--labels` describing both sets,
+`--preset`, `--n-pcs` and `--colormap`. Labels are either one `--labels` describing both sets,
 or `--fit-labels` and `--project-labels` when they differ, as in every UK
 Biobank config. It writes a colour for every label value -- 22 of them
 for UK Biobank's `self_described_ancestry` -- and refuses if fewer than half the
 genotyped samples appear in the label file, which is the failure that otherwise
 shows up as a figure colouring some of its points.
+`--colormap` names a colormap JSON whose colors take precedence over the published ones. Values it does not cover still get a generated color.
 
-`aou` fetches the All of Us V8 array genotypes from their bucket and labels
+`aou` fetches the All of Us array genotypes of the release attached to the
+workspace (from `$CDR_STORAGE_PATH/microarray/plink`, or `--bucket-root`) and labels
 every sample by self-reported race and ethnicity from the CDR, which needs the
 `aou` extra (`pip install 'manifold-genetics[aou]'`). It only works inside the
 Researcher Workbench: it checks the environment first — `GOOGLE_PROJECT`,
@@ -67,8 +69,9 @@ writes is the cohort alone; the manuscript's figures projected it onto HGDP+1KGP
 which is `acquire hgdp --archive gs://…/1KGPHGDP.tar.gz` followed by
 `preprocess ref/config.yaml aou/config.yaml --preset harmonise --fit-has-chr-prefix`
 (see [Preprocessing](preprocessing.md#all-of-us-in-the-researcher-workbench)).
-It is a port of the shell script that produced the published figures and has
-not yet been run inside the workbench itself (issue #124).
+It is a port of the shell script that produced the published figures, and has
+run inside the workbench on the v9 release (via the
+[`aou_prepare` workflow](workflows.md#all-of-us-verily-workbench)).
 
 All four take `--out DIR`, and none overwrites an existing `config.yaml`
 without `--force`.
@@ -76,7 +79,7 @@ without `--force`.
 ## Running a whole pipeline
 
 ```bash
-manifold-genetics run config.yaml [--dry-run] [--output DIR] [--skip-...] [-v]
+manifold-genetics run config.yaml [--dry-run] [--output DIR] [--skip-...] [--verbose]
 ```
 
 The entry point for real work. Reads a [config file](formats.md#the-config-file), applies
@@ -90,9 +93,9 @@ a few command-line overrides, runs the pipeline.
   the budget the fit streams: bounded memory, about nineteen times the wall
   clock. Lower it if a run is killed; raise it on a large node to keep a big
   cohort in memory.
-- `--skip-pca`, `--skip-admixture`, `--skip-metrics` add to the config's own
-  skip settings.
-- `-v` enables debug logging for this package only. It does not turn on debug
+- `--skip-pca`, `--skip-admixture`, `--skip-embedding`, `--skip-metrics` add to
+  the config's own skip settings.
+- `--verbose` enables debug logging for this package only. It does not turn on debug
   for numba and every other library in the process, which is what it used to do.
 
 ```bash
@@ -117,7 +120,7 @@ components.
 | `admixture` | PLINK prefixes | Q matrices per K |
 | `embed` | PCA CSV | embedding CSV (2-D by default, `--n-components 3` for 3-D) |
 | `plot` | embedding CSV + labels + colormap | scatter per label column |
-| `plot-3d` | 3-D embedding CSV + labels + colormap | rotatable HTML per label column |
+| `plot-3d` | 3-D embedding CSV + labels + colormap | rotatable HTML and MP4 per label column |
 | `plot-pca` | PCA CSV | PC-pair grid |
 | `plot-projection` | fit and project embeddings | both cohorts on one figure |
 | `plot-admixture` | Q matrices | stacked bar plots |
@@ -148,13 +151,17 @@ manifold-genetics plot-3d --input out/phate_3d.csv \
 `--n-components` works on `embed` and `pipeline`, for every method. It defaults
 to 2, so existing commands are unchanged.
 
+At biobank scale pass `--n-landmark 10000 --random-landmarking`. Without
+landmarks PHATE needs dense n × n memory, and a run that cannot fit is refused
+before it starts.
+
 ### Three-dimensional embeddings
 
 A 3-D scatter is only useful if you can turn it, so `plot-3d` writes a
 standalone interactive HTML file per label column rather than a PNG — open it in
 a browser and drag to rotate; hovering a point names its sample and label.
 
-It needs the optional `plotly` dependency:
+It needs the optional `interactive` extra (plotly, and ffmpeg for the video):
 
 ```bash
 uv sync --extra interactive     # or: pip install 'manifold-genetics[interactive]'
@@ -175,8 +182,14 @@ usually the shortest, and stretching it to fill a cube exaggerates the curvature
 two- to three-fold.
 
 When a pipeline run uses `n_components: 3`, the embedding-visualisation step
-writes these HTML figures alongside the PNGs automatically (`<method>_3d_by_<column>.html`),
+writes these HTML figures alongside the PNGs automatically (`project_<method>_3d_by_<column>.html`, and `fit_` for the fit set),
 provided plotly is installed; otherwise it logs a warning naming the extra.
+
+Beside each HTML, `plot-3d` writes a video of the embedding making one full
+turn (`.mp4`; `--video-format gif` for a GIF), for slides and supplementary
+material. `--fps` (24) and `--seconds` (12) set its length, `--elev` (20°) the
+camera's tilt, and `--no-video` skips it. Points stack as in the other figures:
+the colormap's first entries on top, Unknown underneath.
 
 Hover labels name the sample by default. `--no-hover-ids` leaves the identifiers
 out of the document altogether and shows only the label, which is what you want
@@ -235,13 +248,12 @@ produced the published figures, shipped inside the package, and needs `bash`,
 - `--fit-has-chr-prefix` when the fit set's chromosomes are already `chr1`,
   not `1` — true of the workbench HGDP+1KGP panel `acquire hgdp --archive`
   writes.
-- `--threads`, `--memory` (MB, default 100000), `--temp-dir`, `--cleanup` for
-  resources; `--tools-dir` for where the `harmonise` references live;
+- `--threads` (default: `SLURM_CPUS_PER_TASK`, or 4), `--memory` (MB, default
+  100000), `--temp-dir` (default: `OUT/data/temp`), `--cleanup` for resources; `--tools-dir` for where the `harmonise` references live;
   `--min-common-snps` (50,000) is the floor below which the run aborts.
 
 `harmonise` downloads its references at run time unless
-`manifold-genetics setup --preprocessing` has fetched them — and one of those
-downloads is currently broken upstream. See
+`manifold-genetics setup --preprocessing` has fetched them. See
 [Preprocessing](preprocessing.md), which also has the worked UK Biobank and
 All of Us examples.
 
@@ -264,11 +276,21 @@ Choose the fit samples by exactly one of:
   once across groups. `--include-rest` also adds every sample matched by no
   group.
 - `--fit-samples FILE` — a `FID IID` list chosen elsewhere.
-- `--geosketch N --pca CSV` — take N samples via geometric sketching (Hie et
-  al. 2019) on the PCA coordinates in CSV (`sample_id, dim_1, dim_2, ...`),
-  restricted to the samples in the project `.fam` first. `--n-pcs` limits how
-  many of the CSV's columns are used (default: all). Needs the `geosketch`
-  extra: `pip install 'manifold-genetics[geosketch]'`.
+- `--geosketch N` — take N samples via geometric sketching (Hie et al. 2019),
+  with no labels involved. Sketching runs in PC space, not on genotypes: PCA is
+  fitted on `--sketch-pool` samples drawn at random (default 100,000; the whole
+  cohort if it is smaller), every sample is projected in, and the sketch is
+  taken in those `--n-pcs` PCs (default 20). They are saved as
+  `OUT/sketch_pca.csv` and reused if the command is rerun. `--memory-gb` sets
+  the fit and projection memory budget (default 8). These PCs only choose the
+  sample; `run` refits PCA on it, as for any subsample.
+- `--geosketch N --pca CSV` — sketch in PCA coordinates computed elsewhere
+  (`sample_id, dim_1, dim_2, ...`), restricted to the samples in the project
+  `.fam` first. `--n-pcs` limits how many of the CSV's columns are used
+  (default: all).
+
+`--seed` (default 42) fixes the random draws: the samples taken for each group, the sketch pool and the sketch itself.
+`--force` overwrites an existing `config.yaml` in `--out`.
 
 ## Setup
 
@@ -277,20 +299,17 @@ manifold-genetics setup [--skip-plink1] [--preprocessing]
 ```
 
 Pre-fetches `plink2`, `plink` and `flashpca` into the per-user cache
-(`~/.cache/manifold-genetics/bin`, or the checkout's `bin/` when you are running
-from one). They are also fetched on first use, so this is optional — what it is
+(`~/.cache/manifold-genetics/bin` on Linux, `~/Library/Caches/manifold-genetics/bin`
+on macOS, or the checkout's `bin/` when you are running from one). They are also fetched on first use, so this is optional — what it is
 for is fetching them **before** submitting a job, because compute nodes usually
 have no internet. Needed for data *preparation*, not for the pipeline itself;
 see [Install](install.md#external-tools).
 
-`--preprocessing` also fetches the GIAB, WRayner and TOPMed references that
-`preprocess --preset harmonise` needs (about 2 GB, most of it TOPMed) into the
-cache's `preprocessing/` subdirectory. Every reference is attempted even when
-one fails. The WRayner URL currently returns 404 upstream, so today it places
-GIAB and TOPMed and then exits non-zero, naming the failed URL and the path
-where a hand-placed `HRC-1000G-check-bim.pl` goes;
-[Preprocessing](preprocessing.md#what-needs-internet) has the details.
-Re-running is safe: it fetches only what is still missing.
+`--preprocessing` also places the GIAB, WRayner and TOPMed references that
+`preprocess --preset harmonise` needs (about 4 GB, almost all of it TOPMed) in
+the cache's `preprocessing/` subdirectory. The WRayner checker ships with the
+package; the other two are downloaded. Every reference is attempted even when
+one fails, and re-running fetches only what is still missing.
 
 ## Exit codes and logging
 
@@ -298,5 +317,5 @@ Commands return 0 on success and non-zero on failure, with the reason on stderr
 rather than a traceback for the errors a user can actually act on — a missing
 config, an unknown key, absent input files.
 
-Logging goes to stderr at INFO by default and DEBUG under `-v`, scoped to the
+Logging goes to stderr at INFO by default and DEBUG under `--verbose`, scoped to the
 `manifold_genetics` logger.

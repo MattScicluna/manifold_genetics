@@ -23,12 +23,17 @@ What `acquire` writes and what `preprocess`, `subsample` and `run` read:
 ```
 <dir>/
   config.yaml            names every file below, relative to <dir>
-  colormap.json          whole_cohort   (or colormap_fit.json + colormap_project.json for projection)
+  colormap.json          one colormap for both sets (or colormap_fit.json + colormap_project.json)
+  sketch_pca.csv         subsample --geosketch without --pca: the PCs it sketched in
   data/
     fit_subset.{bed,bim,fam}
     project_subset.{bed,bim,fam}
-    labels.csv           whole_cohort   (or fit_labels.csv + project_labels.csv for projection)
+    labels.csv           one label file for both sets (or fit_labels.csv + project_labels.csv)
+    geographic.csv       only when the input names a geographic_coords file
 ```
+
+The split files, one per set, are written by every `subsample`, and by a
+`preprocess` given two configs or an input that already has split files.
 
 A `geographic_coords` file, when the input names one, is carried through both
 commands -- filtered to the output's project `.fam` -- since neither removes a
@@ -41,7 +46,7 @@ they cannot silently override what the new preset sets.
 take configs rather than PLINK prefixes: the config says where the labels and
 colormaps are. A label file must cover at least half of the `.fam` it is
 paired with — the rule `acquire` applies — and samples without a row are
-warned about and drawn grey; extra rows are fine. Both commands check this
+left out of the figures; extra rows are fine. Both commands check this
 before doing any work, so a label file that describes the wrong cohort fails
 in seconds, not after the shell has run. Each command rewrites the labels in
 its output directory from its input, so they always describe the genotypes
@@ -64,12 +69,15 @@ Under the hood this runs `preprocess_cross_projection.sh`, the shell script
 that produced the published figures, shipped inside the package. It needs
 `bash`, `plink2` and `plink` v1.9 — both binaries are fetched by
 `manifold-genetics setup`, or on first use where there is internet.
+Whenever the WRayner step runs, which is under `harmonise` and with no preset,
+it also needs a full `perl`. `preprocess` compiles the checker with `perl -c`
+before the shell starts, and stops if that fails.
 
 ### Presets
 
 | preset | what runs | reproduces |
 |---|---|---|
-| `--preset intersect-only` | indel removal, missingness (`--geno`), position intersection | the `examples/generic` flows |
+| `--preset intersect-only` | indel removal, missingness (`--geno`), position intersection | the generic-cohort flows |
 | `--preset harmonise` | WRayner/TOPMed allele checks, GIAB difficult regions, HLA, deduplication, MAF on the reference side only (`--skip-project-maf`), LD pruning, intersection; `--cleanup` | the All of Us flow |
 | *(none)* | the shell's defaults: every step on, MAF on both sides; add `--skip-*` flags | the UK Biobank flow is `--skip-wrayner --skip-project-maf` — `harmonise` minus WRayner, without `--cleanup` |
 
@@ -96,45 +104,23 @@ and a reproduction has to start from the same one.
 
 ### What needs internet
 
-`intersect-only` needs nothing beyond `plink2`. `harmonise` needs three
+`intersect-only` needs only `plink2` and `plink` v1.9, which are fetched on first use. `harmonise` needs three
 references — the GIAB difficult-regions bed, the WRayner
-`HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 2 GB
-together, most of it TOPMed) — which the shell downloads into the tool cache
-when they are missing. On a cluster whose compute nodes have no internet,
+`HRC-1000G-check-bim.pl` checker, and the TOPMed reference panel (about 4 GB,
+almost all of it TOPMed). The checker ships with the package; the shell
+downloads the other two into the tool cache when they are missing. On a cluster whose compute nodes have no internet,
 prefetch them on a login node:
 
 ```bash
 manifold-genetics setup --preprocessing
 ```
 
-**The WRayner download currently fails, everywhere.** Its upstream URL
-(`https://www.chg.ox.ac.uk/~wrayner/tools/HRC-1000G-check-bim-v4.3.0.zip`)
-returns 404 as of this release. `setup --preprocessing` attempts all three
-references regardless, so today it places GIAB and TOPMed, then exits non-zero
-with a message naming the WRayner URL and the exact path where a hand-placed
-checker goes. The shell itself fetches the same URL when it finds no checker,
-so `--preset harmonise` dies at its WRayner step on any machine, internet or
-not, until the file is in place. Until upstream is back:
-
-1. Place a copy of `HRC-1000G-check-bim.pl` (MIT-licensed; it circulates in
-   many imputation pipelines) at `<tools-dir>/wrayner/HRC-1000G-check-bim.pl`,
-   where `<tools-dir>` is the tool cache's `preprocessing/` subdirectory:
-
-    ```bash
-    python -c "from manifold_genetics.preprocessing.references import default_tools_dir; print(default_tools_dir())"
-    ```
-
-    Comment out its `--recode vcf` line — the one beginning
-    `print SH "$plink --bfile $newfile --real-ref-alleles --recode vcf` — as
-    the fetcher does, so it does not write a VCF nobody reads.
-
-2. Re-run `manifold-genetics setup --preprocessing`. It is idempotent: it
-   leaves GIAB, TOPMed and the hand-placed checker alone and fetches only
-   what is still missing.
-
-Or pass `--tools-dir DIR` to `preprocess` with a directory laid out the same
-way. `--skip-wrayner` sidesteps the whole step, which is what the UK Biobank
-flow does.
+The WRayner checker (v4.3.0, MIT-licensed, by William Rayner) ships with the
+package, because its upstream URL now returns 404: `preprocess` installs the
+bundled copy and needs no network for it. If WRayner runs but writes no
+corrections — a truncated or wrong TOPMed panel, say — `preprocess` stops rather
+than carry on unharmonised. `--skip-wrayner` skips the step, which is what the
+UK Biobank flow does.
 
 ### Resources
 
@@ -152,7 +138,7 @@ skipped. After an out-of-memory kill, a truncated `.bed` under
 `OUT/data/temp/` is not mistaken for a finished output — an incomplete
 intermediate is detected and redone on the next run. Every run also checks
 `OUT/data/temp/preprocess-inputs.json`, a sentinel recording the genotype
-prefixes and every flag that changes what gets filtered (`--preset`, `--maf`,
+prefixes and every flag that changes what gets filtered (the steps `--preset` turns off, `--maf`,
 `--geno`, the LD settings, the `--skip-*` flags, `--fit-has-chr-prefix`); if it
 disagrees with this run, `preprocess` refuses rather than mix intermediates
 made under different settings — `--force` does not override this, since it
@@ -202,10 +188,34 @@ Choose the samples by exactly one of:
     manifold-genetics subsample proj/config.yaml --fit-samples fit_samples.txt --out 10k/
     ```
 
-- `--geosketch N --pca CSV`: geometric sketching (Hie et al. 2019) on the PCA
-  coordinates of an earlier `run`, restricted to the project `.fam` first.
-  `--n-pcs` limits how many columns of the CSV are used (default: all). Needs
-  the `geosketch` extra: `pip install 'manifold-genetics[geosketch]'`.
+- `--geosketch N`: geometric sketching (Hie et al. 2019) — a fit set that
+  covers the cohort's genetic variation evenly instead of following its
+  majority, chosen without any label. It replaces a hand-picked `--group`
+  balance. Geosketch cannot run on genotypes (hundreds of thousands of
+  columns), so it runs on PCs, in three steps:
+
+    1. PCA is fitted on `--sketch-pool` samples drawn at random (default
+       100,000, or everyone if the cohort is smaller) and every sample is
+       projected in — `--n-pcs` PCs, default 20. Being random, the pool is as
+       imbalanced as the cohort, and so are these PCs. They are saved as
+       `OUT/sketch_pca.csv`, and a rerun reuses them rather than fitting again.
+    2. N samples are sketched in those PCs.
+    3. `run` fits a fresh PCA on the N chosen samples, as for any subsample,
+       and embeds them. The imbalanced PCs from step 1 are used for nothing
+       but the choice.
+
+    ```bash
+    manifold-genetics subsample proj/config.yaml --geosketch 60000 --out sketch_60k/
+    manifold-genetics run sketch_60k/config.yaml
+    ```
+
+    On UK Biobank (487k samples, 120k SNPs) the step-1 fit on 100,000 took
+    about 1.5 h and the projection 15 min; `--memory-gb` raises the budget
+    above the default 8 GB.
+
+- `--geosketch N --pca CSV`: sketch in PCA coordinates you already have,
+  restricted to the project `.fam` first. `--n-pcs` limits how many columns of
+  the CSV are used (default: all).
 
     ```bash
     manifold-genetics subsample proj/config.yaml --geosketch 50000 \
@@ -220,7 +230,8 @@ UK Biobank is `acquire custom` with your own paths — there is nothing for the
 package to fetch and no label schema to derive; the label CSV needs a
 `sample_id` column plus one column per grouping (see
 [Formats](formats.md#inputs)). Then intersect the two, skipping
-WRayner (no internet on the compute node) and MAF filtering on the biobank side:
+WRayner and MAF filtering on the biobank side, as the published UK Biobank
+preprocessing did:
 
 ```bash
 manifold-genetics acquire custom --fit-plink /path/to/hgdp_tgp --labels hgdp_metadata.csv --out ref/
@@ -235,13 +246,13 @@ on the fit side and 486,748 × 120,849 on the project side. Peak memory was
 
 ### All of Us, in the Researcher Workbench
 
-Four commands, each resumable, in a terminal or a notebook cell prefixed with
-`!`. The workbench has internet, so `harmonise` can fetch GIAB and TOPMed as it
-goes — but not WRayner, whose upstream URL is down (see
-[What needs internet](#what-needs-internet)): place `HRC-1000G-check-bim.pl`
-by hand or pass `--tools-dir` before running `preprocess`, or the run dies at
-that step. `acquire hgdp` writes the workbench's HGDP+1KGP panel with `chr`-prefixed
-chromosome names, as the published flow did, hence `--fit-has-chr-prefix`.
+The [`aou_prepare` workflow](workflows.md#all-of-us-verily-workbench) does this
+step on a workflow machine and is the tested route. By hand, it is four
+commands, each resumable, in a terminal or a notebook cell prefixed with `!`.
+The workbench has internet, so `harmonise` can fetch GIAB and TOPMed as it goes;
+the WRayner checker ships with the package. `acquire hgdp` writes the
+workbench's HGDP+1KGP panel with `chr`-prefixed chromosome names, as the
+published flow did, hence `--fit-has-chr-prefix`.
 
 ```bash
 manifold-genetics acquire hgdp --archive gs://fc-secure-47ccf5a8-b9ba-460a-aa03-dea8d260953b/Data/1KGPHGDP.tar.gz --out ref/
@@ -252,9 +263,8 @@ manifold-genetics run proj/config.yaml
 
 `acquire aou` needs the `aou` extra and checks the workbench environment first
 (`GOOGLE_PROJECT`, `WORKSPACE_CDR`, `gsutil`, `bq`), naming everything missing
-at once. Two honest caveats: it was written against the shell script that
-produced the published figures but has not yet been run inside the workbench
-(issue #124); and because that archive carries no relatedness metadata,
+at once. It has run inside the workbench on the v9 release, as part of
+`aou_prepare`. Because that archive carries no relatedness metadata,
 `acquire hgdp --archive` fits on all of its samples, where the public panel
 fits on the 3,400 unrelated.
 
@@ -268,4 +278,12 @@ manifold-genetics subsample proj/config.yaml --out 10k/ \
     --group "self_described_ancestry=^British$:10000" \
     --group "self_described_ancestry=^Irish$:5000"
 manifold-genetics run 10k/config.yaml
+```
+
+Or choose the fit set without labels, by geometric sketch (see
+[`--geosketch`](#subsample-choose-the-fit-samples)):
+
+```bash
+manifold-genetics subsample proj/config.yaml --geosketch 60000 --out sketch_60k/
+manifold-genetics run sketch_60k/config.yaml
 ```

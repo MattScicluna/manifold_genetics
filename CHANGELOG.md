@@ -19,6 +19,91 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `figures/embeddings/grids/`, with the panel embeddings in
   `embeddings/grids/`. A failed panel is drawn empty and reported, not fatal.
   Library users get `plot_embedding_grid`.
+
+- **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
+  after `analyse`. Rebuilds each experiment's fit set from its published
+  `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)
+  and draws the bar chart and every published embedding coloured by admixture,
+  2-D and 3-D, without re-embedding. `analyse` and `analyse_3d` are unchanged.
+  It runs on a GPU, in a new CUDA variant of the image published alongside the
+  CPU one with a `-gpu` tag suffix (`Dockerfile` takes `BASE` and `TORCH_INDEX`).
+
+- **UMAP and PCA beside PHATE in the workflows; 3-D in `analyse_3d.wdl`.**
+  `analyse.wdl` now draws 2-D PHATE, UMAP (`umap_n_neighbors` 15,
+  `umap_min_dist` 0.5) and PCA (PCs 1-2) of each experiment's fit set, all from
+  its 20 PCs. The 3-D figures move to a workflow of their own, `analyse_3d.wdl`,
+  which reads the PCA `analyse` published and draws PHATE, UMAP and PCs 1-3 as
+  HTML and MP4. `analyse` loses `make_3d`, `knn`, `t` and `n_landmark` (2-D
+  PHATE takes the config's settings, as before), and its `phate_*` resources
+  are now `embed_*`.
+
+- **Any-biobank workflow: `prepare.wdl`.** Step 1 for a cohort you already
+  have as PLINK files (UK Biobank, or your own), producing the same prepared
+  cohort as `aou_prepare.wdl`, which `analyse.wdl` takes unchanged. It runs the
+  same `preprocess --preset harmonise --skip-wrayner` step; what differs between
+  biobanks is the reference, the same HGDP+1KGP samples restricted to the
+  cohort's array positions. Example inputs for UK Biobank-style experiments
+  (`wdl/analyse.biobank.inputs.json`) and a miniwdl config for running the
+  workflows with Apptainer on a cluster (`wdl/miniwdl.apptainer.cfg`).
+  `topmed_reference` turns on WRayner against TOPMed, as in `aou_prepare.wdl`;
+  without it WRayner is skipped, as in the published UK Biobank flow.
+  The biobank's chromosomes may be `chr1` or `1` (CARTaGENE); `preprocess`
+  gives the same result for both, now covered by a test.
+
+- **`acquire custom` uses the published colours.** Label values with a
+  published colour (HGDP+1KGP, UK Biobank, All of Us) get it, in the published
+  legend order, instead of a generated one; others are still generated.
+  `--colormap FILE` gives colours that take precedence. The UK Biobank palette
+  (`examples/colormaps/ukbb.json`) is now in the package.
+
+- **All of Us workflows: `aou_prepare.wdl` and `analyse.wdl`.** For All of Us
+  researchers on Verily Workbench, starting from the release in their own
+  workspace. `aou_prepare` (once per release) acquires the release's arrays and
+  CDR demographics, intersects them with an HGDP+1KGP reference and writes the
+  prepared cohort to `<output_dir>/prepared/`. `analyse` runs experiments on a
+  prepared cohort — by default the manuscript's label-balanced and geosketch fit
+  sets — each as subsample + PCA, then PHATE and 2-D figures, published to `<output_dir>/<experiment>/`. The image now has the Google
+  Cloud CLI and the GIAB difficult-regions bed, so runs need only Google
+  services. The reference is internal for now (#172).
+
+- **A WDL version of the workflow (`manifold_genetics.wdl`)**, for Cromwell —
+  Verily Workbench workspaces that offer WDL workflows. Same container and
+  command as `main.nf`. Required: the PLINK files, one labels file, a colormap
+  and the container; the rest default to the published biobank settings
+  (fit-set embedding, knn 500, t 50, 10,000 random landmarks, no admixture —
+  `run_admixture` adds it). Returns `results.tar.gz` and the figures. Example
+  inputs in `wdl/`; CI validates it with womtool. `.gcloudignore` keeps a Cloud
+  Build upload to the package source, as `.dockerignore` does for the image.
+
+- **A Nextflow workflow (`main.nf`, `nextflow.config`) and its container
+  (`Dockerfile`).** Runs `manifold-genetics pipeline` as one job on Verily
+  Workbench, Google Batch or locally. One workflow, two profiles: `full`, and
+  `no_admixture` (`--skip-admixture`: no admixture step, plots or metrics). PLINK
+  prefixes, labels, colormaps and the main options are parameters; resources
+  are set per profile, with one retry at twice the memory after an OOM kill.
+  The image bakes in plink2, flashpca and plink 1.9, so runs download nothing;
+  `.dockerignore` admits only the package source. The single process sits in a
+  sub-workflow so the steps can be split into processes later. CI stub-runs both
+  profiles, runs `no_admixture` for real on the synthetic cohort, and builds the
+  image. See `docs/nextflow.md`.
+
+- **`plot-3d` writes a rotating video beside each HTML.** An interactive page
+  cannot go into slides or supplementary material, so every 3-D figure now
+  also gets `<prefix>_by_<column>.mp4`: one full turn (12 s at 24 fps by
+  default), stacked like the other figures, with a static legend. `--video-format
+  gif`, `--fps`, `--seconds`, `--elev`; `--no-video` for the HTML alone. Frames
+  are drawn with matplotlib (no browser); MP4 uses `imageio-ffmpeg`, now in the
+  `interactive` extra, and an environment without it still gets the HTML, with a
+  warning naming the install. Pipeline 3-D runs write the video too.
+
+- **`subsample --geosketch N` without labels or a prior run.** `--pca` is now
+  optional: without it, `subsample` fits PCA on `--sketch-pool` random samples
+  (default 100,000), projects the whole cohort, and sketches in those
+  `--n-pcs` PCs (default 20), saving them as `sketch_pca.csv`. A geometric
+  sketch of a biobank is now two commands, `subsample --geosketch` and `run`,
+  where it used to need an earlier label-chosen run to supply the PCs.
+  `--memory-gb` sets the budget for that fit.
+
 - **Embeddings can be three-dimensional.** `--n-components` on `embed` and
   `pipeline` sets the embedding dimensionality for every method (PHATE, UMAP,
   t-SNE, diffusion maps). It defaults to 2, so nothing that does not pass it
@@ -47,6 +132,157 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `figures/admixture/project_admixture_colored_embedding_3d.html`. Library
   users get `plot_admixture_embedding_3d`, which shares its layout, camera and
   aspect handling with `plot_embedding_3d`.
+
+### Changed
+
+- **The workflows on `main` default to the `main` image.** `aou_prepare`,
+  `analyse`, `analyse_3d` and `admixture` defaulted to the `verily-workflow`
+  image, which is built from another branch. They now default to `main`
+  (`main-gpu` for admixture), and `prepare.inputs.json`, `inputs.full.json`
+  and `inputs.no_admixture.json` pin `main` instead of tags that do not
+  exist or predate `--colormap`.
+
+- **The Nextflow workflow moved into `nextflow/`**: `main.nf`,
+  `nextflow.config` and the optional-input placeholders (from
+  `assets/nextflow/`). Run it as `nextflow run nextflow/main.nf ...`; the
+  config beside it is still picked up.
+
+- **The WDL example inputs moved into `wdl/`**, with the miniwdl config for
+  Apptainer. The workflows themselves stay at the repository root, where the
+  workflows registered in Verily Workbench expect them. Run them as
+  `miniwdl run analyse.wdl -i wdl/analyse.inputs.json`.
+
+- **PCA reads genotypes 4-6x faster, with identical results.** The python
+  backend's streaming fit re-reads the cohort about 40 times, and nearly all
+  its time went to decoding and standardising each chunk on one core. Each
+  variant's four standardised values are now computed once and the chunk is
+  filled by table lookup on up to 8 threads; the output is bit-for-bit the same.
+
+- **`geosketch` is a core dependency.** `subsample --geosketch` works on any
+  install; the `geosketch` extra is kept, empty, so existing install commands
+  still resolve. The package is pure Python and its dependencies were already
+  here or tiny (`fbpca`), so making it optional saved nothing and left
+  `--geosketch` failing with an `ImportError` on a default install.
+
+- **CI runs a WDL workflow, not only validates it.** The `container` job runs
+  `manifold_genetics.wdl` with miniwdl on the synthetic cohort, in the
+  image it just built, and checks the PCA, embedding and figures come back.
+
+### Fixed
+
+- **PCA pair grids fill the figure.** `plot-pca` drew every figure on a
+  5 x 5 grid and hid the unused panels, so 20 PCs (10 pairs) filled two rows
+  and left three blank, with the legend centred on the empty space. The grid
+  now takes as many rows as the pairs need (at most 5 columns, spread evenly):
+  20 PCs give 2 x 5, 14 give 2 x 4.
+
+- **`manifold_genetics.wdl` runs under miniwdl with Docker.** Its command
+  measured `TMPDIR` under `set -u`; miniwdl leaves it unset, so the task
+  stopped at once with "unbound variable". The new CI run found it.
+
+- **WRayner's harmonisation fits on disk at biobank scale.** Its generated
+  `Run-plink.sh` writes a full copy of the genotypes at each of five steps,
+  deletes the temporary ones only at the end, then splits the result per
+  chromosome; on All of Us v9 (~230 GB a copy) that peaked near 2 TB and filled
+  `aou_prepare`'s 1 TB disk. The shell now runs the same commands in the same
+  order but removes each temporary copy once the next step has read it, and
+  skips the per-chromosome split nothing reads — byte-identical output, about
+  half the peak. `aou_prepare`'s default disk is now 2 TB.
+
+- **WRayner's log no longer floods with one warning per X/Y/MT SNP.** The
+  checker expects numeric chromosome codes and printed `Argument "X" isn't
+  numeric` for every sex-chromosome SNP — tens of thousands of lines on a
+  biobank array, burying the lines that matter. That one warning is now
+  counted; everything else the checker prints still appears, and its exit
+  status still stops the run.
+
+- **`analyse.wdl` passes PCA results between its tasks on Google Batch.** Its
+  outputs were listed with `read_lines`, which the local Cromwell backend
+  honours but Google Batch does not: Cromwell copies back only the outputs it
+  can name before a task runs, so the PCA CSVs never reached the bucket and the
+  PHATE task failed copying them in. They are `glob`s now.
+
+- **A missing perl fails `preprocess` in seconds, not an hour in.** When
+  WRayner will run, `preprocess` now compiles the installed checker with
+  `perl -c` (which loads every module it uses) before starting the shell, and
+  stops with what to do — install perl, use the container, or pass
+  `--skip-wrayner` — instead of failing at the WRayner step deep into the run.
+  Runs that skip WRayner (the UK Biobank flow) are unaffected.
+
+- **The image runs the WRayner checker.** It needs Perl modules
+  (`IO::Uncompress::Gunzip`) that the slim base image's `perl-base` lacks, so
+  in the first All of Us WRayner run it died before checking anything, and
+  `preprocess` stopped as designed. The image now installs full `perl`, and CI
+  compiles the checker inside the image (`perl -c`).
+
+- **WRayner works again, and `aou_prepare` runs it.** The checker's upstream
+  URL returns 404, so `--preset harmonise` died at its WRayner step everywhere.
+  `HRC-1000G-check-bim` v4.3.0 (MIT, William Rayner) now ships with the package,
+  from the Internet Archive's copy of the original zip (checksum in
+  `preprocessing/vendor/README.md`), and `preprocess` installs it with no network.
+  If WRayner runs but writes no corrections — the checker exits 0 when it gives
+  up on a truncated or wrong panel — `preprocess` now stops instead of carrying on
+  unharmonised while reporting the step done. `aou_prepare.wdl` takes the TOPMed
+  panel as `topmed_reference` (an input, not part of the public image) and runs
+  WRayner when it is given, matching the published All of Us preprocessing;
+  without it the log says the check was skipped.
+
+- **Exact PHATE refuses a run that cannot fit, before it starts.** Without
+  landmarks (the default of `embed`) PHATE holds dense n × n operators: on UKBB
+  (n = 59,264) the fit peaked at ~1 × 8n² and the transform passed 2.2×; on
+  All of Us (n = 101,142) `embed` was OOM-killed at "Transforming", after the fit
+  had succeeded. The fit now compares 3 × 8n² with the memory actually available
+  — the tightest cgroup limit (a Slurm job or container) or `MemAvailable` — and
+  stops with the remedy (`--n-landmark 10000 --random-landmarking`).
+  Defaults are unchanged; `MANIFOLD_GENETICS_FORCE_EXACT=1` skips the check.
+
+- **PHATE never batches the fit samples.** Sliced into `embed_batch_size`
+  batches, the fit data stopped being the fit data to PHATE: every batch was
+  re-extended as new samples. On UKBB (59,264 fit samples) that kept the same
+  peak memory, took ~15× longer, and returned approximate coordinates instead of
+  the embedding. The fit data is now transformed whole; batching applies to new
+  samples only (#157).
+
+- **3-D plots stack groups like the 2-D ones.** The colormap's first entries
+  are drawn on top in 2-D; in 3-D they were drawn first and so buried, leaving
+  "More than one population" and "No information" over every All of Us group.
+  Groups are now added in reverse, with `legendrank` keeping the legend in
+  colormap order; Unknown is still drawn first and listed last.
+
+- **Label values the colormap does not list are drawn, in grey, as Unknown.**
+  Only empty labels reached the grey layer, so an unlisted value was drawn by
+  no layer at all: its points vanished from the figure while the warning said
+  they were grey. Fixed in the 2-D, PCA-pairs, projection and 3-D plots; the
+  legend's Unknown entry now covers them too.
+- **Generated colormaps never give two values one colour.** The palette wrapped
+  at ten, so an eleventh value reused the first one's colour. It now runs to
+  thirty fixed colours and generates distinct ones beyond that. Colormap
+  generation moved to `colormaps.py`; the old names still import from
+  `scaffold`.
+- **`acquire aou` keeps the published All of Us colours.** Colours followed
+  alphabetical position, so a category new in a release recoloured every one
+  after it: on v9, "American Indian or Alaska Native" sorted first and moved
+  every race group's colour. The manuscript's colours and legend order are now
+  fixed (`AOU_COLOURS`), the new category has its own, and only values never
+  seen before get generated colours.
+- **PCA holds one chunk at a time, not two.** A chunk was read while the
+  previous one was still bound to the loop variable, so streaming fits and
+  projections peaked at twice `--memory-gb`; at 80 GB on a 128 GB machine,
+  projecting 553,949 samples was killed. The streaming fit also squared each
+  chunk into a second array to sum it; it uses `einsum` now.
+- **`acquire custom` resolves relative paths from where it is run.** They were
+  written into `config.yaml` verbatim and then read against the config's own
+  directory, so `--labels raw/labels.csv --out ref/` looked in `ref/raw/`.
+
+- **`acquire aou` reads whichever All of Us release the workspace has.** It
+  was fixed to the v8 path `gs://fc-aou-datasets-controlled/v8/microarray/plink`,
+  which a Verily Workbench workspace cannot read: v9 lives in
+  `gs://vwb-aou-datasets-controlled/v9`. It now takes the release root from
+  `$CDR_STORAGE_PATH` (set by the workbench's `load-env.sh`) and reads
+  `microarray/plink/arrays.*` under it, falling back to the v8 path with a
+  warning when the variable is unset. `--bucket-root` names the directory
+  outright. The written `config.yaml` records the genotype path and CDR it came
+  from.
 
 ## [0.3.0] - 2026-09-16
 
@@ -251,8 +487,7 @@ not yet been verified end to end -- so expect further breaking changes before
 
 ### Added
 
-- **Guardrails against committing controlled-access data**
-  ([archive/working-with-agents.md](archive/working-with-agents.md)). A pre-commit hook and
+- **Guardrails against committing controlled-access data.** A pre-commit hook and
   a CI job run `scripts/check_sensitive_files.py`, written against this
   repository's own two incidents rather than as a generic secret scanner: it
   flags files whose header declares them private, genotype containers, long

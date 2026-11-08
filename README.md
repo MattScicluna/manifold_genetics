@@ -9,8 +9,8 @@ An end-to-end pipeline from PLINK genotypes to publication figures: PCA →
 admixture → manifold embedding → visualisation → metrics.
 
 <p align="center">
-  <img src="assets/ukbb_phate.png" width="30%" alt="UKBB PHATE embedding coloured by self-described ancestry"/>
-  <img src="assets/aou_phate.png" width="30%" alt="All of Us PHATE embedding coloured by ancestry"/>
+  <img src="assets/ukbb_phate_3d.gif" width="45%" alt="Rotating 3D UKBB PHATE embedding coloured by self-described ancestry"/>
+  <img src="assets/aou_phate_3d.gif" width="45%" alt="Rotating 3D All of Us PHATE embedding coloured by race/ethnicity"/>
 </p>
 
 ## Installation
@@ -43,7 +43,18 @@ manifold-genetics run config.yaml
 `acquire hgdp` fetches the public HGDP+1KGP cohort instead; `acquire custom`
 writes a config for PLINK files you already have. For raw biobank genotypes,
 `preprocess` filters and intersects SNPs and `subsample` chooses the fit
-samples, each writing a directory `run` accepts.
+samples — by label counts, a list, or a label-free geometric sketch — each
+writing a directory `run` accepts.
+
+## As a Nextflow workflow
+
+```bash
+nextflow run nextflow/main.nf -profile no_admixture --fit_plink data/fit --labels labels.csv --colormap colormap.json
+```
+
+See [Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/). The same
+pipeline is also a set of WDL workflows, including the All of Us ones; see
+[Workflows](https://mattscicluna.github.io/manifold_genetics/workflows/).
 
 ## Documentation and tutorials
 
@@ -67,8 +78,18 @@ BSD 3-Clause License (see [LICENSE](LICENSE)).
 
 ## Citation
 
-If you use this package in your research, please cite:
+If you use this package in your research, please cite the preprint:
 
-```
-[Your citation here]
+Scicluna M, Ni S, Córdova CMV, Grenier J-C, Poujol R, Kanoun ME, Rocha JF, Moon KR, Lemieux S, Wolf G, Krishnaswamy S, Hussin JG.
+PHATE-Derived Ancestry Coordinates Capture Continuous Population Structure in Human Genomic Data.
+*bioRxiv* (2026). [doi:10.64898/2026.10.29.762525](https://doi.org/10.64898/2026.10.29.762525)
+
+```bibtex
+@article{scicluna2026phate,
+  title   = {{PHATE}-Derived Ancestry Coordinates Capture Continuous Population Structure in Human Genomic Data},
+  author  = {Scicluna, Matthew and Ni, Shuang and C{\'o}rdova, C{\'e}sar Miguel Valdez and Grenier, Jean-Christophe and Poujol, Rapha{\"e}l and Kanoun, Mohamed Elyes and Rocha, Jo{\~a}o Felipe and Moon, Kevin R. and Lemieux, S{\'e}bastien and Wolf, Guy and Krishnaswamy, Smita and Hussin, Julie G.},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.10.29.762525}
+}
 ```
