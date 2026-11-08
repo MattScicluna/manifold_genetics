@@ -28,7 +28,7 @@ from .pipeline.steps import (
     run_pca,
 )
 from .utils.io import read_colormap
-from .utils.tools import ToolNotFoundError, ToolResolver
+from .utils.tools import FLASHPCA_SKIPPED, ToolInstallError, ToolNotFoundError, ToolResolver
 from .utils.validation import (
     validate_admixture_csv,
     validate_colormap_json,
@@ -663,23 +663,25 @@ def cmd_setup(args):
 
     resolver = ToolResolver()
     status = 0
-    tools = {}
+    failures = {}
     try:
-        tools.update(resolver.install_tools(include_plink1=not args.skip_plink1))
-    except ToolNotFoundError as exc:
-        # pbwt is built from source and does not need these, so a platform
-        # with no plink2 download (Linux aarch64) still gets pbwt.
-        print(f"Error: {exc}", file=sys.stderr)
+        tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+    except ToolInstallError as exc:
+        # Every tool was attempted; carry on so pbwt (built from source and
+        # independent of these) still gets built where a download is missing.
+        tools, failures = dict(exc.installed), dict(exc.failures)
         status = 1
     if args.pbwt:
         try:
             tools["pbwt"] = resolver.install_pbwt()
         except ToolNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
+            failures["pbwt"] = str(exc)
             status = 1
     print("External tools installed:")
     for name, path in tools.items():
-        print(f"  - {name}: {path}")
+        print(f"  - {name}: {FLASHPCA_SKIPPED if path is None else path}")
+    for name, message in failures.items():
+        print(f"Error: {name}: {message}", file=sys.stderr)
     if args.preprocessing:
         from .preprocessing.references import install_harmonisation_references
 

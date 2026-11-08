@@ -401,11 +401,13 @@ def test_cmd_setup_pbwt_builds_pbwt(monkeypatch, capsys):
 
 def test_cmd_setup_pbwt_still_builds_when_a_download_fails(monkeypatch, capsys):
     """Linux aarch64 has no plink2 download, which must not stop the pbwt build."""
-    from manifold_genetics.utils.tools import ToolNotFoundError
+    from manifold_genetics.utils.tools import ToolInstallError
 
     class FakeResolver:
         def install_tools(self, include_plink1):
-            raise ToolNotFoundError("No plink2 build is known for Linux/aarch64.")
+            raise ToolInstallError(
+                {"flashpca": None}, {"plink2": "No plink2 build is known for Linux/aarch64."}
+            )
 
         def install_pbwt(self):
             return "/bin/pbwt"
@@ -414,7 +416,8 @@ def test_cmd_setup_pbwt_still_builds_when_a_download_fails(monkeypatch, capsys):
     assert mg_cli.main(["setup", "--pbwt"]) == 1
     captured = capsys.readouterr()
     assert "pbwt: /bin/pbwt" in captured.out
-    assert "No plink2 build" in captured.err
+    assert "flashpca: skipped" in captured.out
+    assert "Error: plink2: No plink2 build" in captured.err
 
 
 def test_cmd_setup_pbwt_build_failure_exits_nonzero(monkeypatch, capsys):
@@ -432,6 +435,39 @@ def test_cmd_setup_pbwt_build_failure_exits_nonzero(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "plink2: /bin/plink2" in captured.out
     assert "Building pbwt needs" in captured.err
+
+
+def test_cmd_setup_reports_skipped_flashpca_and_succeeds(monkeypatch, capsys):
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2", "flashpca": None, "plink1": "/bin/plink"}
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    assert mg_cli.main(["setup"]) == 0
+    out = capsys.readouterr().out
+    assert "flashpca: skipped" in out
+    assert "python PCA backend needs no binary" in out
+    assert "plink1: /bin/plink" in out
+
+
+def test_cmd_setup_failure_exits_nonzero_after_reporting_the_rest(monkeypatch, capsys):
+    from manifold_genetics.utils.tools import ToolInstallError
+
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            raise ToolInstallError({"flashpca": None, "plink1": "/bin/plink"}, {"plink2": "404"})
+
+    calls = []
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    monkeypatch.setattr(
+        "manifold_genetics.preprocessing.references.install_harmonisation_references",
+        lambda: calls.append(True) or {},
+    )
+    assert mg_cli.main(["setup", "--preprocessing"]) == 1
+    captured = capsys.readouterr()
+    assert "plink1: /bin/plink" in captured.out
+    assert "Error: plink2: 404" in captured.err
+    assert calls == [True]
 
 
 def test_setup_preprocessing_flag_is_parsed(monkeypatch):
@@ -1197,3 +1233,19 @@ def test_run_memory_gb_overrides_both_budgets(tmp_path, monkeypatch, capsys):
     printed = capsys.readouterr().out
     assert "max_fit_memory_gb               3.0" in printed, printed
     assert "max_project_memory_gb           3.0" in printed, printed
+
+
+def test_cmd_setup_pbwt_on_macos_skips_flashpca_and_succeeds(monkeypatch, capsys):
+    class FakeResolver:
+        def install_tools(self, include_plink1):
+            return {"plink2": "/bin/plink2", "flashpca": None, "plink1": "/bin/plink"}
+
+        def install_pbwt(self):
+            return "/bin/pbwt"
+
+    monkeypatch.setattr(mg_cli, "ToolResolver", FakeResolver)
+    assert mg_cli.main(["setup", "--pbwt"]) == 0
+    captured = capsys.readouterr()
+    assert "flashpca: skipped" in captured.out
+    assert "pbwt: /bin/pbwt" in captured.out
+    assert "Error" not in captured.err

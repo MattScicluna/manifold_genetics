@@ -68,7 +68,10 @@ export MANIFOLD_GENETICS_TOOL_DIR=/project/shared/manifold-tools
 ```
 
 `manifold-genetics setup` does not touch your Python environment. It only
-fetches binaries.
+fetches binaries. It also fetches `flashpca` where a build exists, which is
+Linux x86-64 only. On macOS and other platforms it skips `flashpca` with a
+message and fetches the rest, since the default `python` PCA backend needs no
+binary.
 
 On a cluster that provides the tools through Environment Modules, load the
 module in your shell **before** running `manifold-genetics` (for example

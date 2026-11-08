@@ -182,6 +182,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **`setup` completes on macOS.** flashpca is published only for Linux x86-64,
+  so `manifold-genetics setup` stopped with an error at the flashpca download
+  and never fetched `plink`. On a platform without a flashpca build it now
+  skips flashpca with a message (the default python PCA backend needs no
+  binary) and fetches the other tools. Every tool is attempted even when one
+  fails, and the exit status is non-zero only for a real failure.
+
 - **PCA pair grids fill the figure.** `plot-pca` drew every figure on a
   5 x 5 grid and hid the unused panels, so 20 PCs (10 pairs) filled two rows
   and left three blank, with the legend centred on the empty space. The grid
