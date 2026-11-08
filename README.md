@@ -49,7 +49,7 @@ writing a directory `run` accepts.
 ## As a Nextflow workflow
 
 ```bash
-nextflow run main.nf -profile no_admixture --fit_plink data/fit --labels labels.csv --colormap colormap.json
+nextflow run nextflow/main.nf -profile no_admixture --fit_plink data/fit --labels labels.csv --colormap colormap.json
 ```
 
 See [Nextflow](https://mattscicluna.github.io/manifold_genetics/nextflow/). The same

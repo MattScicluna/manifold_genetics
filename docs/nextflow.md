@@ -1,10 +1,10 @@
 # Nextflow
 
-`main.nf` runs `manifold-genetics pipeline` as a Nextflow workflow, for Verily
-Workbench or any Nextflow executor.
+`nextflow/main.nf` runs `manifold-genetics pipeline` as a Nextflow workflow,
+for Verily Workbench or any Nextflow executor.
 
 ```bash
-nextflow run main.nf -profile no_admixture \
+nextflow run nextflow/main.nf -profile no_admixture \
     --fit_plink data/fit --project_plink data/project \
     --labels labels.csv --colormap colormap.json --outdir results/
 ```
@@ -15,9 +15,9 @@ Two profiles, one workflow:
 - `no_admixture` passes `--skip-admixture`: no admixture step, plots or metrics.
 
 Inputs are PLINK prefixes, labels and a colormap (or `fit_`/`project_` versions
-of each), as for `pipeline`. Other options are in `nextflow.config`; anything
-else goes through `--extra_args`. At biobank scale set `--n_landmark 10000
---random_landmarking true`.
+of each), as for `pipeline`. Other options are in `nextflow/nextflow.config`;
+anything else goes through `--extra_args`. At biobank scale set
+`--n_landmark 10000 --random_landmarking true`.
 
 ## Container
 
@@ -27,7 +27,7 @@ during a run. It is published on Docker Hub for `linux/amd64` as
 (`sha-<commit>`), and by version (`0.3.0`, `latest`) once a release is tagged:
 
 ```bash
-nextflow run main.nf -profile no_admixture,docker \
+nextflow run nextflow/main.nf -profile no_admixture,docker \
     --container mattscicluna/manifold-genetics:sha-97ca2ba ...
 ```
 

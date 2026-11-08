@@ -2,7 +2,7 @@ version 1.0
 
 ## manifold-genetics as a WDL workflow (Cromwell, e.g. Verily Workbench).
 ##
-## The same pipeline as main.nf: `manifold-genetics pipeline` in the project's
+## The same pipeline as nextflow/main.nf: `manifold-genetics pipeline` in the project's
 ## container. Defaults are the published biobank settings (fit-set embedding,
 ## knn 500, t 50, 10,000 random landmarks); run_admixture adds admixture, its
 ## plots and metrics (on CPU: the image's torch is the CPU build). extra_args is appended last, so it can override any
@@ -106,7 +106,8 @@ task pipeline {
         # Admixture's torch shares memory through a Unix socket under TMPDIR,
         # and a socket path is limited to ~104 bytes. Cromwell's per-task TMPDIR
         # can be longer, which fails as "no response from torch_shm_manager".
-        if [ "${#TMPDIR}" -gt 60 ]; then
+        # miniwdl leaves TMPDIR unset, which set -u would otherwise reject.
+        if [ -n "${TMPDIR:-}" ] && [ "${#TMPDIR}" -gt 60 ]; then
             TMPDIR="$(mktemp -d /tmp/mg.XXXXXX)"
             export TMPDIR
         fi

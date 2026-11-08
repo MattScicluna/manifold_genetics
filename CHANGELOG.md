@@ -9,6 +9,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
+  after `analyse`. Rebuilds each experiment's fit set from its published
+  `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)
+  and draws the bar chart and every published embedding coloured by admixture,
+  2-D and 3-D, without re-embedding. `analyse` and `analyse_3d` are unchanged.
+  It runs on a GPU, in a new CUDA variant of the image published alongside the
+  CPU one with a `-gpu` tag suffix (`Dockerfile` takes `BASE` and `TORCH_INDEX`).
+
 - **UMAP and PCA beside PHATE in the workflows; 3-D in `analyse_3d.wdl`.**
   `analyse.wdl` now draws 2-D PHATE, UMAP (`umap_n_neighbors` 15,
   `umap_min_dist` 0.5) and PCA (PCs 1-2) of each experiment's fit set, all from
@@ -117,6 +125,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The Nextflow workflow moved into `nextflow/`**: `main.nf`,
+  `nextflow.config` and the optional-input placeholders (from
+  `assets/nextflow/`). Run it as `nextflow run nextflow/main.nf ...`; the
+  config beside it is still picked up.
+
+- **The WDL workflows moved from the repository root into `wdl/`**, beside
+  their example inputs. Run them as `miniwdl run wdl/analyse.wdl ...`; on
+  Verily Workbench, add them again with the `wdl/` path, since workflows added
+  from the old root path no longer resolve.
+
 - **PCA reads genotypes 4-6x faster, with identical results.** The python
   backend's streaming fit re-reads the cohort about 40 times, and nearly all
   its time went to decoding and standardising each chunk on one core. Each
@@ -129,7 +147,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   here or tiny (`fbpca`), so making it optional saved nothing and left
   `--geosketch` failing with an `ImportError` on a default install.
 
+- **CI runs a WDL workflow, not only validates it.** The `container` job runs
+  `wdl/manifold_genetics.wdl` with miniwdl on the synthetic cohort, in the
+  image it just built, and checks the PCA, embedding and figures come back.
+
 ### Fixed
+
+- **`manifold_genetics.wdl` runs under miniwdl with Docker.** Its command
+  measured `TMPDIR` under `set -u`; miniwdl leaves it unset, so the task
+  stopped at once with "unbound variable". The new CI run found it.
 
 - **WRayner's harmonisation fits on disk at biobank scale.** Its generated
   `Run-plink.sh` writes a full copy of the genotypes at each of five steps,
