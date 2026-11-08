@@ -39,6 +39,7 @@ class PipelineResult:
     fit_embedding_figures: Tuple[Path, ...] = ()
     embedding_figures: Tuple[Path, ...] = ()
     projection_plot: Optional[Path] = None
+    embedding_grid_figures: Tuple[Path, ...] = ()
     admixture_figures: Mapping[str, Path] = field(default_factory=dict)
 
     # Steps whose failure was tolerated (spec constraint D)
@@ -54,6 +55,7 @@ class PipelineResult:
         )
         if self.projection_plot is not None:
             figures += (self.projection_plot,)
+        figures += tuple(self.embedding_grid_figures)
         figures += tuple(self.admixture_figures.values())
         return figures
 

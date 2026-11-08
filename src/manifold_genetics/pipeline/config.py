@@ -15,6 +15,15 @@ _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 
+# What each method's model takes, as build_embedding_model reads it. The grids
+# are always 2-D figures, so n_components is not settable in them.
+GRID_METHOD_PARAMS = {
+    "phate": ("knn", "t", "n_landmark", "random_landmarking", "embed_batch_size", "gamma"),
+    "umap": ("n_neighbors", "min_dist"),
+    "tsne": ("perplexity",),
+    "diffusion_map": ("knn",),
+}
+
 
 @dataclass(frozen=True)
 class IOConfig:
@@ -75,6 +84,12 @@ class VizConfig:
     admix_within_group_order: Optional[str] = "chron"
     projection_plot_fit_column: Optional[str] = None
     projection_plot_project_column: Optional[str] = None
+    # {method: params}: one column per method, each embedded with its own
+    # parameters. Treated read-only.
+    method_grid: Optional[dict] = None
+    # {param: [values]} for up to two PHATE parameters, rows then columns;
+    # scalar entries are fixed overrides. Treated read-only.
+    phate_grid: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +115,139 @@ class PipelineConfigs:
 
 def _as_path(value) -> Optional[Path]:
     return None if value is None else Path(value)
+
+
+# The run's settings that every PHATE grid panel inherits unless the grid sets
+# them. They decide what a panel costs, not what it shows, so a grid must not
+# silently fall back to exact, O(n^2) PHATE when the run uses landmarks.
+GRID_INHERITED_PHATE_PARAMS = ("n_landmark", "random_landmarking", "embed_batch_size")
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_positive_int(value) -> bool:
+    return _is_int(value) and value > 0
+
+
+# Per grid parameter: (accepts the value, what it must be).
+_GRID_PARAM_TYPES = {
+    "knn": (_is_positive_int, "a positive integer"),
+    "n_neighbors": (_is_positive_int, "a positive integer"),
+    "t": (lambda v: v == "auto" or _is_positive_int(v), "a positive integer or 'auto'"),
+    "n_landmark": (lambda v: v is None or _is_positive_int(v), "a positive integer or none"),
+    "random_landmarking": (lambda v: isinstance(v, bool), "true or false"),
+    "embed_batch_size": (lambda v: v is None or _is_positive_int(v), "a positive integer or none"),
+    "gamma": (_is_number, "a number"),
+    "min_dist": (_is_number, "a number"),
+    "perplexity": (lambda v: _is_number(v) and v > 0, "a positive number"),
+}
+
+
+def _check_grid_params(method: str, params, where: str) -> None:
+    unknown = sorted(set(params) - set(GRID_METHOD_PARAMS[method]))
+    if unknown:
+        raise ValueError(
+            f"Unknown {method} parameter(s) in {where}: {', '.join(unknown)}. "
+            f"Choose from: {', '.join(GRID_METHOD_PARAMS[method])}"
+        )
+    for key, value in params.items():
+        accepts, expected = _GRID_PARAM_TYPES[key]
+        for v in value if isinstance(value, list) else [value]:
+            if not accepts(v):
+                raise ValueError(f"{where}: {key} must be {expected}, got {v!r}")
+
+
+def check_landmarking(params, inherited=None) -> None:
+    """Refuse ``random_landmarking`` without ``n_landmark``.
+
+    Landmarking is disabled when ``n_landmark`` is None, so random landmarking
+    would silently do nothing. ``params`` may hold lists (a ``phate_grid``
+    sweep), and then any combination pairing the two is refused. ``inherited``
+    is the run's own embedding parameters: a grid that turns random landmarking
+    on and leaves ``n_landmark`` to the run takes the run's. An inherited
+    ``random_landmarking`` is not checked here, because a panel without
+    landmarks drops it (``grid_phate_params``).
+    """
+
+    def as_list(value):
+        return value if isinstance(value, list) else [value]
+
+    if not any(as_list(params.get("random_landmarking"))):
+        return
+    source = params if "n_landmark" in params else (inherited or {})
+    if any(n is None for n in as_list(source.get("n_landmark"))):
+        raise ValueError(
+            "random_landmarking is set but n_landmark is not. Landmarking is disabled "
+            "when n_landmark is none, so random_landmarking would have no effect."
+        )
+
+
+def grid_phate_params(inherited, overrides) -> dict:
+    """One PHATE grid panel's parameters: ``inherited`` from the run, then the
+    panel's own ``overrides``.
+
+    A panel whose ``n_landmark`` is None runs without landmarks, so an inherited
+    ``random_landmarking`` is dropped there rather than contradicting it. An
+    explicit one is refused earlier, by ``check_landmarking``.
+    """
+    overrides = dict(overrides or {})
+    params = {**(inherited or {}), **overrides}
+    if params.get("n_landmark") is None and "random_landmarking" not in overrides:
+        params.pop("random_landmarking", None)
+    return params
+
+
+def validate_method_grid(method_grid, run_params=None) -> None:
+    """``{method: params or None}`` naming known methods and their parameters.
+
+    ``run_params`` are the run's embedding parameters, which a PHATE panel
+    inherits its landmarking from.
+    """
+    if not isinstance(method_grid, dict) or not method_grid:
+        raise ValueError("method_grid must map at least one method to its parameters")
+    for method, params in method_grid.items():
+        if method not in GRID_METHOD_PARAMS:
+            raise ValueError(
+                f"Unknown method in method_grid: {method!r}. "
+                f"Choose from: {', '.join(_EMBEDDING_METHODS)}"
+            )
+        if params is not None and not isinstance(params, dict):
+            raise ValueError(f"method_grid[{method!r}] must be a mapping of parameters")
+        if any(isinstance(v, list) for v in (params or {}).values()):
+            raise ValueError(
+                f"method_grid[{method!r}] takes one value per parameter. "
+                "Sweep a PHATE parameter with phate_grid instead."
+            )
+        _check_grid_params(method, params or {}, "method_grid")
+        if method == "phate":
+            check_landmarking(params or {}, run_params)
+
+
+def validate_phate_grid(phate_grid, run_params=None) -> None:
+    """``{param: [values] | value}`` with one or two swept (list-valued) parameters.
+
+    ``run_params`` are the run's embedding parameters, which every panel
+    inherits its landmarking from.
+    """
+    if not isinstance(phate_grid, dict) or not phate_grid:
+        raise ValueError("phate_grid must map PHATE parameters to lists of values")
+    _check_grid_params("phate", phate_grid, "phate_grid")
+    swept = [k for k, v in phate_grid.items() if isinstance(v, list)]
+    if not 1 <= len(swept) <= 2:
+        raise ValueError(
+            "phate_grid must give a list of values for one or two parameters "
+            f"(the rows, then the columns); got {len(swept)}: {', '.join(swept) or 'none'}"
+        )
+    for key in swept:
+        if not phate_grid[key]:
+            raise ValueError(f"phate_grid[{key!r}] is an empty list")
+    check_landmarking(phate_grid, run_params)
 
 
 def build_configs(
@@ -128,6 +276,8 @@ def build_configs(
     admix_within_group_order: Optional[str] = "chron",
     projection_plot_fit_column: Optional[str] = None,
     projection_plot_project_column: Optional[str] = None,
+    method_grid: Optional[dict] = None,
+    phate_grid: Optional[dict] = None,
     skip_pca: bool = False,
     skip_admixture: bool = False,
     skip_embedding: bool = False,
@@ -186,6 +336,10 @@ def build_configs(
         raise ValueError(f"k_min ({k_min}) must be <= k_max ({k_max})")
     if n_pcs <= 0:
         raise ValueError(f"n_pcs must be a positive integer, got {n_pcs}")
+    if method_grid is not None:
+        validate_method_grid(method_grid, embedding_params)
+    if phate_grid is not None:
+        validate_phate_grid(phate_grid, embedding_params)
 
     io = IOConfig(
         fit_plink=Path(fit_plink),
@@ -217,6 +371,8 @@ def build_configs(
             admix_within_group_order=admix_within_group_order,
             projection_plot_fit_column=projection_plot_fit_column,
             projection_plot_project_column=projection_plot_project_column,
+            method_grid=method_grid,
+            phate_grid=phate_grid,
         ),
         skips=SkipConfig(
             skip_pca=skip_pca,

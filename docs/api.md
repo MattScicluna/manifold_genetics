@@ -51,6 +51,8 @@ Both metrics compare distances between sampled pairs of samples in the embedding
 
 ::: manifold_genetics.visualization.plotting.plot_embedding
 
+::: manifold_genetics.visualization.plotting.plot_embedding_grid
+
 ::: manifold_genetics.visualization.plotting.plot_embedding_3d
 
 ::: manifold_genetics.visualization.plotting.visualize_3d

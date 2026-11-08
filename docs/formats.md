@@ -98,9 +98,32 @@ embedding:
   knn: 100                    # method-specific: see the accepted keys below
   t: 3
 
+visualization:
+  method_grid:                # optional: methods side by side, each with its own parameters
+    phate: {knn: 25, t: auto}
+    umap: {n_neighbors: 15, min_dist: 0.1}
+    tsne: {perplexity: 30}
+  phate_grid:                 # optional: PHATE over one or two parameters (rows, then columns)
+    knn: [5, 25, 100]
+    t: [3, 10, auto]
+
 skip:
   admixture: true
 ```
+
+The two grids are comparison figures: every panel is its own 2-D embedding of
+the same PCA coordinates the run embeds, with one legend for the whole grid and
+one figure per colormap column. Every PHATE panel, in either grid, uses the
+run's `n_landmark`, `random_landmarking` and `embed_batch_size` (from the
+`embedding` section or the preset) unless the grid sets them, so a grid of a
+large cohort is landmarked whenever the run is, whichever method the run uses.
+When the run's method is PHATE, `phate_grid` also starts from the run's other
+PHATE settings. A scalar entry (`gamma: 0`) fixes a parameter across the grid.
+Grid parameters are checked like the `embedding` section's: `n_landmark: none`
+turns landmarking off, and `random_landmarking` without an `n_landmark` is
+rejected. Each panel is a full embedding, so a 3×3 grid costs nine. A panel
+that fails is left empty and named in the run's failed steps rather than losing
+the figure.
 
 The preset supplies the embedding settings that follow from it, so most files
 are shorter than this. An unknown key is rejected with a suggestion rather than
@@ -121,7 +144,8 @@ The example leaves out the other keys a config accepts:
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
 - `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
 - `visualization`: `admix_group_column`, `admix_within_group_order`,
-  `projection_plot_fit_column` and `projection_plot_project_column`.
+  `projection_plot_fit_column`, `projection_plot_project_column`, `method_grid`
+  and `phate_grid`.
 - `skip`: `pca`, `admixture`, `embedding`, `pca_visualization`, `visualization`,
   `admixture_visualization` and `metrics`.
 
@@ -136,12 +160,14 @@ outputs/
 │   ├── project_pca_<n>.csv
 │   └── flashpca_outputs/        the projectable model: loadings, means, SDs
 ├── embeddings/
-│   └── phate_2d.csv             sample_id, dim_1, dim_2
-│                                (phate_3d.csv when n_components: 3)
+│   ├── phate_2d.csv             sample_id, dim_1, dim_2
+│   │                            (phate_3d.csv when n_components: 3)
+│   └── grids/                   one CSV per grid panel, when a grid is configured
 ├── figures/
 │   ├── pca/                     PC-pair grids
 │   ├── embeddings/              one scatter per colormap column
-│   │                            (plus rotatable HTML and MP4 for a 3-D embedding)
+│   │   │                        (plus rotatable HTML and MP4 for a 3-D embedding)
+│   │   └── grids/               method_grid_by_<col>.png, phate_grid_by_<col>.png
 │   └── admixture/               bar plots and admixture-colored embeddings
 ├── admixture/                   only when the admixture stage runs
 │   ├── fit.2.csv … fit.10.csv   ancestry proportions, one file per K
