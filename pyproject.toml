@@ -72,7 +72,11 @@ aou = [
 # is now a core dependency.
 geosketch = []
 docs = [
-    "mkdocs>=1.6",
+    # MkDocs 2.0 drops the plugin system that mkdocstrings and mkdocs-jupyter use.
+    "mkdocs>=1.6,<2",
+    # On Python 3.10 the newest mkdocstrings is 1.0.6, which builds Highlight without
+    # the `md` argument pymdown-extensions 12 requires: api.md fails to render.
+    "pymdown-extensions<12; python_version < '3.11'",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
     # Renders docs/tutorial.ipynb, and executes it during the build so a tutorial
