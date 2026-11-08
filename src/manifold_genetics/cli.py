@@ -27,7 +27,7 @@ from .pipeline.steps import (
     run_pca,
 )
 from .utils.io import read_colormap
-from .utils.tools import ToolResolver
+from .utils.tools import FLASHPCA_SKIPPED, ToolInstallError, ToolResolver
 from .utils.validation import (
     validate_admixture_csv,
     validate_colormap_json,
@@ -634,10 +634,18 @@ def cmd_setup(args):
     setup_logging(args.verbose)
 
     resolver = ToolResolver()
-    tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+    status = 0
+    try:
+        tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+        failures = {}
+    except ToolInstallError as exc:
+        tools, failures = exc.installed, exc.failures
+        status = 1
     print("External tools installed:")
     for name, path in tools.items():
-        print(f"  - {name}: {path}")
+        print(f"  - {name}: {FLASHPCA_SKIPPED if path is None else path}")
+    for name, message in failures.items():
+        print(f"Error: {name}: {message}", file=sys.stderr)
     if args.preprocessing:
         from .preprocessing.references import install_harmonisation_references
 
@@ -651,7 +659,7 @@ def cmd_setup(args):
         print("Harmonisation references installed:")
         for name, path in references.items():
             print(f"  - {name}: {path}")
-    return 0
+    return status
 
 
 def cmd_embed(args):
