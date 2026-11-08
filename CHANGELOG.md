@@ -51,8 +51,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   CDR demographics, intersects them with an HGDP+1KGP reference and writes the
   prepared cohort to `<output_dir>/prepared/`. `analyse` runs experiments on a
   prepared cohort — by default the manuscript's label-balanced and geosketch fit
-  sets — each as subsample + PCA, then PHATE and figures (2-D, 3-D HTML and
-  MP4), published to `<output_dir>/<experiment>/`. The image now has the Google
+  sets — each as subsample + PCA, then PHATE and 2-D figures, published to `<output_dir>/<experiment>/`. The image now has the Google
   Cloud CLI and the GIAB difficult-regions bed, so runs need only Google
   services. The reference is internal for now (#172).
 

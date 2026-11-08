@@ -23,7 +23,7 @@ Below are PHATE embeddings for UK Biobank and All of Us cohorts.
 |---|---|
 | **PCA** | components, which are passed to the embedding method |
 | **Admixture** | ancestry proportions per K, via neural-admixture |
-| **Embedding** | 2-D coordinates from PHATE, UMAP, t-SNE or diffusion maps |
+| **Embedding** | 2-D or 3-D coordinates from PHATE, UMAP, t-SNE or diffusion maps |
 | **Visualisation** | scatter plots by any label column, admixture bar plots |
 | **Metrics** | geographic and admixture preservation |
 

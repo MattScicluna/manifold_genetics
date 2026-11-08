@@ -30,6 +30,8 @@ This test should take about two minutes.
 
 ```bash
 pip install 'manifold-genetics[admixture]'   # torch + neural-admixture
+pip install 'manifold-genetics[interactive]' # plotly + ffmpeg, for 3-D HTML and MP4 figures
+pip install 'manifold-genetics[aou]'         # pandas-gbq, for `acquire aou` on All of Us
 ```
 
 `admixture` installs [neural admixture](https://github.com/AI-sandbox/neural-admixture) and its dependencies.
@@ -49,6 +51,8 @@ from a full cohort, intersect variants across cohorts, and handle strand flips.
 You do not normally have to fetch them yourself. The first time something needs
 one it is downloaded and cached per user — `~/.cache/manifold-genetics/bin` on
 Linux, `~/Library/Caches/manifold-genetics/bin` on macOS — and reused after that.
+When you run from a clone, they go to the checkout's `bin/` instead.
+`preprocess` also needs a full `perl` whenever it runs the WRayner check: see [Preprocessing](preprocessing.md).
 
 If the machine that runs the pipeline has no internet, as compute nodes on a
 cluster may not, pre-fetch them from one that does:
@@ -70,8 +74,8 @@ On a cluster that provides the tools through Environment Modules, load the
 module in your shell **before** running `manifold-genetics` (for example
 `module load plink`); the binary is then on `PATH`, where it is found. The
 resolver does not run `module load` itself: a child shell cannot change the
-running process's `PATH`. Alternatively, point `PLINK_PATH` or `FLASHPCA_PATH`
-at the executable.
+running process's `PATH`. Alternatively, point `PLINK_PATH` (plink2), `PLINK1_PATH`
+(plink v1.9) or `FLASHPCA_PATH` at the executable.
 
 ## Developing on the repository
 
