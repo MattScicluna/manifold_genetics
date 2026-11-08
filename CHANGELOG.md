@@ -9,6 +9,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Haplotype painting as an alternative to genotype PCA** (#191). A new
+  `painting` config section and `data.phased_vcf` key paint one phased VCF per
+  chromosome with `pbwt -paint`, sum the coancestry matrix over chromosomes,
+  normalize it and reduce it by PCA. The coordinates replace the genotype PCA as
+  the embedding input, so the embedding, figures and metrics run unchanged. The
+  fit cohort's rows fit the PCA and the project cohort's rows are projected
+  through it, with the whole painted set as donors. Also available as
+  `manifold-genetics paint`. pbwt publishes no binaries, so
+  `manifold-genetics setup --pbwt` builds it from a pinned commit. See
+  `docs/painting.md`.
+
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published
   `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)

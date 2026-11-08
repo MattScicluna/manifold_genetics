@@ -85,6 +85,7 @@ nav:
   - Install: install.md
   - Quickstart: quickstart.md
   - Preprocessing: preprocessing.md
+  - Haplotype painting: painting.md
   - Nextflow: nextflow.md
   - Workflows (WDL): workflows.md
   - Tutorial: tutorial.ipynb

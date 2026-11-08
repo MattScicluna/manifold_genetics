@@ -77,6 +77,10 @@ resolver does not run `module load` itself: a child shell cannot change the
 running process's `PATH`. Alternatively, point `PLINK_PATH` (plink2), `PLINK1_PATH`
 (plink v1.9) or `FLASHPCA_PATH` at the executable.
 
+[Haplotype painting](painting.md) also needs pbwt. It has no published
+binaries, so `manifold-genetics setup --pbwt` builds it from source into the
+same directory, or you can point `PBWT_PATH` at a copy you built yourself.
+
 ## Developing on the repository
 
 The clone above is all you need. To work on the documentation as well:

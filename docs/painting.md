@@ -1,0 +1,145 @@
+# Haplotype painting
+
+Genotype PCA is driven by allele frequency differences, which accumulate slowly.
+Two groups that split a few hundred years ago differ very little in frequency,
+so PCA tends to merge them. They do differ in which long haplotype segments
+they share, because recent common ancestors leave long shared segments behind.
+Haplotype painting measures that sharing directly, and it can separate groups
+that genotype PCA cannot, such as regional subpopulations within one country.
+
+The pipeline paints with [pbwt](https://github.com/richarddurbin/pbwt)'s
+`-paint` command, which approximates ChromoPainter's all-against-all painting.
+ChromoPainter's cost grows with the square of the sample size, while pbwt finds
+the matching segments in close to linear time. When painting is enabled, its
+coordinates replace the genotype PCA as the input to the embedding. Everything
+after that, from the embedding to the figures and metrics, runs unchanged.
+
+## What you need
+
+**Phased VCFs, one per chromosome.** PLINK 1 files do not keep phase, so
+painting cannot start from the `.bed` files the rest of the pipeline reads. Each
+file must hold exactly one chromosome, because pbwt stops reading a VCF at the
+first change of chromosome and would otherwise paint only the first one without
+any error. pbwt also does not check that genotypes are phased: an unphased VCF
+is painted as if it were phased and gives a result that looks normal and is
+wrong. Missing genotypes are read as the reference allele, so impute or filter
+them first.
+
+**pbwt itself.** pbwt publishes no binaries, so `setup` builds a pinned version
+from source, which takes under a minute and needs a C compiler, `make` and zlib:
+
+```bash
+manifold-genetics setup --pbwt
+```
+
+It goes into the same tool directory as the other binaries. A pbwt already on
+`PATH`, or named by `PBWT_PATH`, is used as well. pbwt is licensed under
+Apache 2.0.
+
+## Turning it on
+
+Two additions to the config:
+
+```yaml
+data:
+  # ... the usual fit_plink, project_plink, labels, colormap, output_dir
+  phased_vcf: data/chr{chr}.vcf.gz
+
+painting:
+  enabled: true
+  matrix: chunkcounts      # or chunklengths
+  log: true
+  chromosomes: 1-22        # substituted for {chr} (the default)
+```
+
+`fit_plink` and `project_plink` are still required. Their `.fam` files say which
+painted samples belong to which cohort, and admixture still reads their
+genotypes. The number of components comes from `pca: n_pcs`, as it does for the
+genotype PCA.
+
+The same thing is available as a standalone command, which writes the usual
+coordinate CSV for `embed` to read:
+
+```bash
+manifold-genetics paint --phased-vcf 'data/chr{chr}.vcf.gz' \
+    --fit-plink data/fit --project-plink data/project \
+    --fit-output out/fit_painting.csv --output out/project_painting.csv --n-pcs 20
+```
+
+## What it computes
+
+1. **Paint each chromosome**, every sample against every other:
+   `pbwt -readVcfGT chr<c>.vcf.gz -writeSamples chr<c>.samples -paint chr<c>`.
+   pbwt writes one row per recipient and one column per donor, and it has
+   already summed the two haplotypes of each sample, so the matrix is per
+   individual. It names samples `IND1 … INDn` in VCF order, which is why the
+   sample names are written alongside.
+2. **Sum the chosen matrix over chromosomes.** `chunkcounts` counts the copied
+   segments and `chunklengths` measures their length in sites. Counts are what
+   fineSTRUCTURE models, so they are the default here. Every chromosome must list the same samples in the
+   same order, or the sum would be meaningless, so a mismatch stops the run.
+3. **Fill the diagonal.** pbwt never lets a sample copy from itself, so the
+   diagonal is zero for a reason unrelated to ancestry. Left as zero it would be
+   a feature that only one sample has, and the PCA would spend variance on it.
+   Each diagonal entry becomes the mean of its row instead.
+4. **Normalize each row to sum to one.** A row then describes how a sample's
+   genome is copied rather than how much of it was painted.
+5. **Optionally take `log(1 + n p)`**, where `p` is the proportion and `n` the
+   number of donors. A few close relatives can dominate a row, and the log keeps
+   them from dominating the leading components. Multiplying by `n` makes uniform
+   copying equal to one, so the transform does not change with cohort size.
+6. **Reduce by PCA** to `n_pcs` components, capped at one fewer than the number
+   of fit samples.
+
+## Fit and project cohorts
+
+Painting is all against all within the painted set, so it has no model to
+project a separate cohort through in the way genotype PCA does. What carries
+over is the shape of the data. Every row is one recipient's copying profile
+over the same donors, the whole painted set. So the fit cohort's rows fit the
+PCA, and the project cohort's rows are projected through it, as a project
+cohort's genotypes are projected through loadings fitted elsewhere.
+
+This means every sample of both cohorts must be in the phased VCFs, and the run
+stops if one is not, rather than quietly shrink a cohort. Sample names in the
+VCF may be either the `.fam` IID or `FID_IID`, which covers the usual ways a
+PLINK export names samples. Coordinates are written under the IID, which is what the labels
+file uses. A sample in the VCF that is in neither cohort is still painted and
+still serves as a donor, which is how a reference panel added to the VCF
+sharpens the painting without appearing in the figures.
+
+The presets work as they do with genotype PCA. `whole_cohort` embeds the project
+cohort's painting coordinates, `subsample` embeds the fit cohort's, and
+`projection` fits the embedding on the fit cohort and applies it to the project
+cohort.
+
+## Outputs
+
+```
+outputs/painting/
+├── pbwt/
+│   ├── chr1.chunkcounts.out          pbwt's own output, reused by a rerun
+│   ├── chr1.chunklengths.out
+│   ├── chr1.samples                  sample names, in VCF order
+│   └── chr1.log                      pbwt's log
+├── coancestry_chunkcounts.csv        summed matrix, recipients by donors
+├── fit_painting_pca_<n>.csv          sample_id, dim_1 … dim_<n>
+└── project_painting_pca_<n>.csv
+```
+
+A chromosome is repainted only when its outputs are missing, older than its VCF,
+or `painting: force: true` is set. With `skip: pca: true` the painting is
+skipped too, and the cached coordinates are embedded. The PC-pair grids in
+`figures/pca/` show the painting components, since those are what the embedding
+read.
+
+## Limits
+
+pbwt's `-paint` holds four dense n × n matrices of doubles while it runs. That
+is about 3 GB at 10,000 samples and 80 GB at 50,000, and the pipeline holds
+another copy while it builds the features. Painting a whole biobank at once is
+therefore out of reach. Paint a subsample, or the cohort you want to resolve at
+fine scale, alongside a modest reference panel.
+
+Painting is not yet part of the WDL workflows, and the container image does not
+include pbwt.

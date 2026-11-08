@@ -8,7 +8,7 @@ the CLI and example scripts use this function to ensure consistency.
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from .orchestrator import Pipeline
 from .result import PipelineResult
@@ -29,6 +29,13 @@ def run_pipeline(
     project_colormap: Optional[Union[str, Path]] = None,
     # Geographic coordinates for metrics
     geographic_coords: Optional[Union[str, Path]] = None,
+    # Haplotype painting, in place of genotype PCA
+    phased_vcf: Optional[Union[str, Path]] = None,
+    painting: bool = False,
+    painting_matrix: str = "chunkcounts",
+    painting_log: bool = True,
+    painting_chromosomes: Optional[Union[str, int, List]] = None,
+    force_painting: bool = False,
     # PCA parameters
     n_pcs: int = 50,
     pca_backend: str = "python",
@@ -86,6 +93,13 @@ def run_pipeline(
         fit_colormap: Optional override colormap JSON for fit dataset
         project_colormap: Optional override colormap JSON for project dataset
         geographic_coords: Optional path to geographic coordinates CSV for metrics
+        phased_vcf: Phased VCF per chromosome, a path containing ``{chr}``
+        painting: Paint ``phased_vcf`` with pbwt and embed the coancestry PCA
+            instead of the genotype PCA. ``skip_pca`` then skips the painting.
+        painting_matrix: 'chunkcounts' (default) or 'chunklengths'
+        painting_log: Log-transform the row-normalised coancestry matrix
+        painting_chromosomes: Chromosomes substituted for ``{chr}`` (default 1-22)
+        force_painting: Repaint chromosomes whose pbwt output is cached
         n_pcs: Number of principal components (default: 50)
         pca_backend: 'flashpca' (external binary) or 'python' (in process)
         max_fit_memory_gb: GB budget for the dense standardised matrix when
@@ -187,6 +201,7 @@ def run_pipeline(
         admixture_backend=admixture_backend,
         projection_plot_fit_column=projection_plot_fit_column,
         projection_plot_project_column=projection_plot_project_column,
+        phased_vcf=phased_vcf,
     )
 
     # Run pipeline with all parameters
@@ -212,6 +227,11 @@ def run_pipeline(
         admix_threads=admix_threads,
         admix_gpus=admix_gpus,
         admix_batch_size=admix_batch_size,
+        painting=painting,
+        painting_matrix=painting_matrix,
+        painting_log=painting_log,
+        painting_chromosomes=painting_chromosomes,
+        force_painting=force_painting,
     )
 
     logger.info("Pipeline execution complete")

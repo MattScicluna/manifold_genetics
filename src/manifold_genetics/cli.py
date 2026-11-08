@@ -24,6 +24,7 @@ from .pipeline.steps import (
     run_admixture_metrics_step,
     run_embedding,
     run_geographic_metrics_step,
+    run_painting,
     run_pca,
 )
 from .utils.io import read_colormap
@@ -200,6 +201,33 @@ def cmd_pca(args):
     n_samples = pca_coords.shape[0]
     n_pcs = pca_coords.shape[1] - 1  # Exclude sample_id column
     print(f"Shape: ({n_samples}, {n_pcs}) [excluding sample_id column]")
+    return 0
+
+
+def cmd_paint(args):
+    """Run haplotype painting command."""
+    setup_logging(args.verbose)
+
+    from .painting.pbwt import parse_chromosomes
+
+    coords = run_painting(
+        args.phased_vcf,
+        chromosomes=parse_chromosomes(args.chromosomes),
+        pbwt_dir=args.pbwt_dir,
+        project_output=args.output,
+        fit_output=args.fit_output,
+        coancestry_output=args.coancestry_output,
+        fit_plink=args.fit_plink,
+        project_plink=args.project_plink,
+        matrix=args.matrix,
+        log=not args.no_log,
+        n_pcs=args.n_pcs,
+        force=args.force,
+    )
+    print(f"Painting coordinates: {args.output}")
+    if args.fit_output:
+        print(f"Fit painting coordinates: {args.fit_output}")
+    print(f"Shape: ({coords.shape[0]}, {coords.shape[1] - 1}) [excluding sample_id column]")
     return 0
 
 
@@ -635,6 +663,8 @@ def cmd_setup(args):
 
     resolver = ToolResolver()
     tools = resolver.install_tools(include_plink1=not args.skip_plink1)
+    if args.pbwt:
+        tools["pbwt"] = resolver.install_pbwt()
     print("External tools installed:")
     for name, path in tools.items():
         print(f"  - {name}: {path}")
@@ -1086,6 +1116,71 @@ def main(argv: Optional[List[str]] = None):
     )
     pca_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     pca_parser.set_defaults(func=cmd_pca)
+
+    # Haplotype painting command
+    paint_parser = subparsers.add_parser(
+        "paint",
+        help="Haplotype painting with pbwt, an alternative to genotype PCA",
+        description=(
+            "Paint phased VCFs all against all with pbwt, sum the coancestry matrix\n"
+            "over chromosomes, and reduce it by PCA. Writes the same\n"
+            "sample_id, dim_1, ..., dim_N CSV as `pca`, so `embed` takes it as is.\n\n"
+            "--phased-vcf must contain {chr}: pbwt paints only the first chromosome\n"
+            "of a file. Needs pbwt (`manifold-genetics setup --pbwt`)."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  # Every sample in the VCFs, autosomes 1-22\n"
+            "  manifold-genetics paint --phased-vcf 'data/chr{chr}.vcf.gz' \\\n"
+            "      --output results/painting/painting_pca_20.csv --n-pcs 20\n\n"
+            "  # Fit on one cohort, project another (both must be in the VCFs)\n"
+            "  manifold-genetics paint --phased-vcf 'data/chr{chr}.vcf.gz' \\\n"
+            "      --fit-plink data/fit --project-plink data/project \\\n"
+            "      --fit-output results/painting/fit.csv --output results/painting/project.csv"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    paint_parser.add_argument(
+        "--phased-vcf", required=True, help="Phased VCF path containing {chr}, one per chromosome"
+    )
+    paint_parser.add_argument(
+        "--chromosomes",
+        default="1-22",
+        help="Chromosomes substituted for {chr}, e.g. 1-22 or 1-3,7 (default: 1-22)",
+    )
+    paint_parser.add_argument("--output", required=True, help="Output CSV (project cohort)")
+    paint_parser.add_argument("--fit-output", help="CSV for the fit cohort's coordinates")
+    paint_parser.add_argument(
+        "--coancestry-output", help="CSV for the summed matrix, recipients by donors"
+    )
+    paint_parser.add_argument(
+        "--fit-plink",
+        help="PLINK prefix whose .fam names the fit cohort (default: every painted sample)",
+    )
+    paint_parser.add_argument(
+        "--project-plink",
+        help="PLINK prefix whose .fam names the project cohort (default: the fit cohort)",
+    )
+    paint_parser.add_argument(
+        "--pbwt-dir",
+        default="pbwt_outputs",
+        help="Directory for pbwt's per-chromosome outputs, reused on a rerun (default: ./pbwt_outputs)",
+    )
+    paint_parser.add_argument(
+        "--matrix",
+        choices=["chunkcounts", "chunklengths"],
+        default="chunkcounts",
+        help="Which pbwt matrix to reduce (default: chunkcounts)",
+    )
+    paint_parser.add_argument(
+        "--no-log", action="store_true", help="Skip the log transform of the coancestry matrix"
+    )
+    paint_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")
+    paint_parser.add_argument(
+        "--force", action="store_true", help="Repaint chromosomes even when cached"
+    )
+    paint_parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    paint_parser.set_defaults(func=cmd_paint)
 
     # Admixture command
     admix_parser = subparsers.add_parser(
@@ -1810,6 +1905,8 @@ def main(argv: Optional[List[str]] = None):
             "  plink2   (~20 MB)\n"
             "  flashpca (~2 MB, Linux x86-64 only)\n"
             "  plink    (~2 MB, plink v1.9 — skip with --skip-plink1)\n\n"
+            "With --pbwt, also builds pbwt from source for haplotype painting. It\n"
+            "publishes no binaries, so this needs a C compiler, make and zlib.\n\n"
             "With --preprocessing, also fetches the GIAB, WRayner and TOPMed\n"
             "references the harmonise preset needs (~4 GB, most of it the TOPMed\n"
             "reference), so preprocess can run its harmonisation step on a\n"
@@ -1831,6 +1928,11 @@ def main(argv: Optional[List[str]] = None):
             "Also fetch the GIAB, WRayner and TOPMed references the harmonise preset needs "
             "(~4 GB, most of it the TOPMed reference)"
         ),
+    )
+    setup_parser.add_argument(
+        "--pbwt",
+        action="store_true",
+        help="Also build pbwt from source, for haplotype painting (needs a C compiler and make)",
     )
     setup_parser.add_argument("--verbose", action="store_true", help="Verbose output")
     setup_parser.set_defaults(func=cmd_setup)

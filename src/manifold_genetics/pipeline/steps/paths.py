@@ -8,7 +8,7 @@ checkpoint logic depend on them (spec constraint B).
 from pathlib import Path
 from typing import Dict
 
-from ..config import AdmixtureConfig, EmbeddingConfig, IOConfig, PCAConfig
+from ..config import AdmixtureConfig, EmbeddingConfig, IOConfig, PaintingConfig, PCAConfig
 
 
 def pca_output_paths(io: IOConfig, pca: PCAConfig) -> Dict[str, Path]:
@@ -17,6 +17,24 @@ def pca_output_paths(io: IOConfig, pca: PCAConfig) -> Dict[str, Path]:
         "fit_pca": d / f"fit_pca_{pca.n_pcs}.csv",
         "project_pca": d / f"project_pca_{pca.n_pcs}.csv",
         "flashpca_dir": d / "flashpca_outputs",
+    }
+
+
+def painting_output_paths(io: IOConfig, pca: PCAConfig, painting: PaintingConfig) -> Dict:
+    """Where the painting step writes. The coordinate CSVs mirror the PCA step's.
+
+    ``pbwt_roots`` maps each chromosome to the root pbwt writes under, so its
+    files are ``<root>.chunkcounts.out`` and so on.
+    """
+    d = io.output_dir / "painting"
+    pbwt_dir = d / "pbwt"
+    return {
+        "dir": d,
+        "pbwt_dir": pbwt_dir,
+        "pbwt_roots": {c: pbwt_dir / f"chr{c}" for c in painting.chromosomes},
+        "coancestry": d / f"coancestry_{painting.matrix}.csv",
+        "fit_pca": d / f"fit_painting_pca_{pca.n_pcs}.csv",
+        "project_pca": d / f"project_painting_pca_{pca.n_pcs}.csv",
     }
 
 

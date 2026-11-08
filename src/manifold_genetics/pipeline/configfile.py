@@ -28,6 +28,11 @@ A config looks like::
     skip:
       admixture: true
 
+    painting:                  # optional; replaces genotype PCA as the embedding input
+      enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
+      matrix: chunkcounts      # or chunklengths
+      log: true
+
 Two decisions worth knowing:
 
 * **Paths resolve relative to the config file**, not the working directory, so an
@@ -112,6 +117,9 @@ _DATA_KEYS = {
     "fit_colormap": "fit_colormap",
     "project_colormap": "project_colormap",
     "geographic_coords": "geographic_coords",
+    # One phased VCF per chromosome, as a path containing "{chr}". Read only
+    # when the painting section enables painting.
+    "phased_vcf": "phased_vcf",
 }
 _PATH_KEYS = set(_DATA_KEYS)
 
@@ -132,6 +140,13 @@ _ADMIXTURE_KEYS = {
     "threads": "admix_threads",
     "num_gpus": "admix_gpus",
     "batch_size": "admix_batch_size",
+}
+_PAINTING_KEYS = {
+    "enabled": "painting",
+    "matrix": "painting_matrix",
+    "log": "painting_log",
+    "chromosomes": "painting_chromosomes",
+    "force": "force_painting",
 }
 _VIZ_KEYS = {
     "admix_group_column": "admix_group_column",
@@ -165,7 +180,16 @@ _EMBEDDING_PARAMS = {
     "perplexity",
 }
 
-_SECTIONS = {"preset", "data", "pca", "admixture", "embedding", "visualization", "skip"}
+_SECTIONS = {
+    "preset",
+    "data",
+    "pca",
+    "painting",
+    "admixture",
+    "embedding",
+    "visualization",
+    "skip",
+}
 
 
 def _reject_unknown(given, allowed, where: str) -> None:
@@ -251,6 +275,7 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
 
     for name, mapping in (
         ("pca", _PCA_KEYS),
+        ("painting", _PAINTING_KEYS),
         ("admixture", _ADMIXTURE_KEYS),
         ("visualization", _VIZ_KEYS),
         ("skip", _SKIP_KEYS),

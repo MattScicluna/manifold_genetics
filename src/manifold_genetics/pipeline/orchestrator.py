@@ -7,14 +7,21 @@ Coordinates PCA, Admixture, Embeddings, Visualization, and Metrics.
 import dataclasses
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
-from .config import AdmixtureConfig, EmbeddingConfig, PCAConfig, build_configs
+from .config import (
+    AdmixtureConfig,
+    EmbeddingConfig,
+    PCAConfig,
+    build_configs,
+    build_painting_config,
+)
 from .result import PipelineResult
 from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
-from .steps.paths import metrics_output_paths, pca_output_paths
+from .steps.painting import run_painting_step
+from .steps.paths import metrics_output_paths, painting_output_paths, pca_output_paths
 from .steps.pca import PCAStepResult, run_pca_step
 from .steps.viz import (
     run_admixture_embedding_viz_step,
@@ -41,15 +48,18 @@ def _run_viz(name: str, failed: list, fn):
         return None
 
 
-def _resolve_skipped_pca(io, pca: PCAConfig) -> PCAStepResult:
+def _resolve_skipped_pca(paths) -> PCAStepResult:
     """Build a ``PCAStepResult`` from cached PCA output when ``--skip-pca`` is set.
+
+    ``paths`` is ``pca_output_paths(...)``, or ``painting_output_paths(...)``
+    when painting stands in for PCA. Both name the CSVs ``fit_pca`` and
+    ``project_pca``.
 
     Populates whichever of the fit/project CSVs exist on disk and leaves the
     other ``None``. Never raises: callers that actually need one of these
     paths for a step that is about to run must check the result themselves
     and fail with their own clear message (spec constraint C).
     """
-    paths = pca_output_paths(io, pca)
     fit_pca = paths["fit_pca"] if paths["fit_pca"].exists() else None
     project_pca = paths["project_pca"] if paths["project_pca"].exists() else None
     return PCAStepResult(fit_pca=fit_pca, project_pca=project_pca, skipped=True)
@@ -90,6 +100,7 @@ class Pipeline:
         admixture_backend: Optional[object] = None,
         projection_plot_fit_column: Optional[str] = None,
         projection_plot_project_column: Optional[str] = None,
+        phased_vcf: Optional[Union[str, Path]] = None,
     ):
         """
         Initialize pipeline.
@@ -110,6 +121,8 @@ class Pipeline:
                               runs neural-admixture in its own child process)
             projection_plot_fit_column: Column from fit colormap to use for projection plot
             projection_plot_project_column: Column from project colormap to use for projection plot
+            phased_vcf: Phased VCF per chromosome, a path containing ``{chr}``.
+                Read only when ``run(painting=True)``.
 
         Note:
             Must provide either (labels + colormap) OR (fit_labels + project_labels + fit_colormap + project_colormap)
@@ -139,6 +152,7 @@ class Pipeline:
             geographic_coords=geographic_coords,
             projection_plot_fit_column=projection_plot_fit_column,
             projection_plot_project_column=projection_plot_project_column,
+            phased_vcf=phased_vcf,
         )
 
         self._io = configs.io
@@ -189,6 +203,11 @@ class Pipeline:
         admix_threads: Optional[int] = None,
         admix_gpus: Optional[int] = None,
         admix_batch_size: Optional[int] = 400,
+        painting: bool = False,
+        painting_matrix: str = "chunkcounts",
+        painting_log: bool = True,
+        painting_chromosomes: Optional[Union[str, int, List]] = None,
+        force_painting: bool = False,
     ) -> PipelineResult:
         """
         Run full pipeline.
@@ -219,6 +238,13 @@ class Pipeline:
             skip_metrics: Skip metrics computation
             admix_threads: Threads to use for neural admixture (None = auto-detect)
             admix_gpus: Number of GPUs for neural admixture (None = auto-detect)
+            painting: Paint the phased VCFs with pbwt and embed the coancestry
+                PCA instead of the genotype PCA. ``skip_pca`` then skips the
+                painting and reuses its cached coordinates.
+            painting_matrix: 'chunkcounts' or 'chunklengths'
+            painting_log: Log-transform the row-normalised coancestry matrix
+            painting_chromosomes: Chromosomes substituted for ``{chr}`` (default 1-22)
+            force_painting: Repaint chromosomes whose pbwt output is cached
 
         Returns:
             PipelineResult: The typed outputs of every stage that ran. Fields
@@ -235,7 +261,22 @@ class Pipeline:
             max_fit_memory_gb=max_fit_memory_gb,
             max_project_memory_gb=max_project_memory_gb,
         )
-        pca_paths = pca_output_paths(io, pca_cfg)
+        # Validated before any step runs, so a bad painting setting fails at
+        # once as a configuration error rather than partway through a run.
+        painting_cfg = build_painting_config(
+            phased_vcf=io.phased_vcf,
+            enabled=painting,
+            matrix=painting_matrix,
+            log=painting_log,
+            chromosomes=painting_chromosomes,
+            force=force_painting,
+        )
+        # Painting stands in for PCA: its coordinates go wherever the PCA's
+        # would, so the PCA figures and the embedding read them unchanged.
+        if painting_cfg.enabled:
+            pca_paths = painting_output_paths(io, pca_cfg, painting_cfg)
+        else:
+            pca_paths = pca_output_paths(io, pca_cfg)
         # admix_group_column / admix_within_group_order are run()-time parameters,
         # not init-time ones — self._viz_config only carries the init-time
         # projection-plot columns, so those two fields are overridden per call.
@@ -247,16 +288,28 @@ class Pipeline:
             admix_within_group_order=admix_within_group_order,
         )
 
-        # ---- Step 1: PCA ----
-        if not skip_pca:
+        # ---- Step 1: PCA, or haplotype painting in its place ----
+        r_paint = None
+        if skip_pca:
+            # Skipped — resolve expected paths so embedding can still run
+            r_pca = _resolve_skipped_pca(pca_paths)
+        elif painting_cfg.enabled:
+            logger.info("=" * 70)
+            logger.info("STEP 1: HAPLOTYPE PAINTING (in place of PCA)")
+            logger.info("=" * 70)
+
+            r_paint = run_painting_step(io, pca_cfg, painting_cfg)
+            r_pca = PCAStepResult(
+                fit_pca=r_paint.fit_pca,
+                project_pca=r_paint.project_pca,
+                coords_df=r_paint.coords_df,
+            )
+        else:
             logger.info("=" * 70)
             logger.info("STEP 1: PCA")
             logger.info("=" * 70)
 
             r_pca = run_pca_step(io, pca_cfg)
-        else:
-            # PCA skipped — resolve expected paths so embedding can still run
-            r_pca = _resolve_skipped_pca(io, pca_cfg)
 
         # ---- Step 1.5: PCA Visualization (independent of PCA computation) ----
         pca_figures = ()
@@ -423,6 +476,7 @@ class Pipeline:
             embedding=r_emb,
             geographic_metrics=r_geo,
             admixture_metrics=r_admix_metrics,
+            painting=r_paint,
             pca_figures=pca_figures,
             fit_embedding_figures=fit_embedding_figures,
             embedding_figures=embedding_figures,
