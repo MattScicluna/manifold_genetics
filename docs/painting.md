@@ -56,7 +56,7 @@ data:
 
 painting:
   enabled: true
-  method: finestructure    # or hc, see below
+  method: hc               # or finestructure, see below
   chromosomes: 1-22        # substituted for {chr} (the default)
 ```
 
@@ -103,30 +103,7 @@ from itself. How the matrices become PCA features follows one of two published
 recipes, chosen by `method`. Neither row-normalizes the matrix, and neither
 centers its columns.
 
-### `finestructure` (the default)
-
-This is the PCA of the coancestry matrix from fineSTRUCTURE
-([Lawson et al. 2012](https://doi.org/10.1371/journal.pgen.1002453)), as the
-fineSTRUCTURE R library implements it in `mypca`
-([FinestructureLibrary.R](https://people.maths.bris.ac.uk/~madjl/finestructure/finestructureR.html)):
-
-> Normalise for PCA by setting the diagonal to be the average of the rows, then
-> zero meaning by substracting the row mean (so the diagonal ends up as zero)
-
-1. **Sum the chunk counts** (`chunkcounts`) over chromosomes. Counts are what
-   fineSTRUCTURE models.
-2. **Fill the diagonal** with the mean of the row's off-diagonal entries.
-3. **Center each row** on its mean.
-4. **Decompose** `X Xᵀ`, which `mypca` does with `eigen(xN %*% t(xN))`. The
-   pipeline takes the same components from an SVD `X = U D Vᵀ` and writes the
-   scores `U D`, which are on the scale of genotype PC scores. `mypca` reports
-   `U`, which differs only by one scale factor per component.
-
-Lawson et al. show that in the unlinked limit this matrix is approximately
-proportional to the one Eigenstrat decomposes, so the components match genotype
-PCA there and add haplotype information when markers are linked.
-
-### `hc`
+### `hc` (the default)
 
 These are the haplotype components of
 [Yang, Durbin, Iversen and Lawson (2025)](https://doi.org/10.1038/s41467-025-57601-3),
@@ -152,6 +129,48 @@ samples:
 
 The first `hc` component carries the overall level of copying, which is close
 to constant across samples, so population structure starts on the second.
+
+### `finestructure`
+
+This is the PCA of the coancestry matrix from fineSTRUCTURE
+([Lawson et al. 2012](https://doi.org/10.1371/journal.pgen.1002453)), as the
+fineSTRUCTURE R library implements it in `mypca`
+([FinestructureLibrary.R](https://people.maths.bris.ac.uk/~madjl/finestructure/finestructureR.html)):
+
+> Normalise for PCA by setting the diagonal to be the average of the rows, then
+> zero meaning by substracting the row mean (so the diagonal ends up as zero)
+
+1. **Sum the chunk counts** (`chunkcounts`) over chromosomes. Counts are what
+   fineSTRUCTURE models.
+2. **Fill the diagonal** with the mean of the row's off-diagonal entries.
+3. **Center each row** on its mean.
+4. **Decompose** `X Xᵀ`, which `mypca` does with `eigen(xN %*% t(xN))`. The
+   pipeline takes the same components from an SVD `X = U D Vᵀ` and writes the
+   scores `U D`, which are on the scale of genotype PC scores. `mypca` reports
+   `U`, which differs only by one scale factor per component.
+
+Lawson et al. show that in the unlinked limit this matrix is approximately
+proportional to the one Eigenstrat decomposes, so the components match genotype
+PCA there and add haplotype information when markers are linked.
+
+### Which to use
+
+`hc` is the default. It is the recipe pbwt's own authors give for its output,
+it is the one shown to work at biobank scale, and on the 1000 Genomes high
+coverage panel (chromosome 22 only, 3,202 samples) it separated populations
+within each continent better than `finestructure` did. Five-nearest-neighbor
+accuracy for population labels on the first five components, with the PCA fit
+on one continent at a time:
+
+| | AFR | AMR | EAS | EUR | SAS |
+|---|---|---|---|---|---|
+| genotype PCA | 0.57 | 0.56 | 0.48 | 0.45 | 0.27 |
+| `finestructure` | 0.74 | 0.69 | 0.84 | 0.81 | 0.44 |
+| `hc` | 0.83 | 0.95 | 0.89 | 0.89 | 0.70 |
+
+`hc` was also the more stable of the two when the painted set changed. Use
+`finestructure` to match a fineSTRUCTURE analysis, or for chromosomes other
+than the autosomes, which `hc` cannot weight.
 
 Either way, the number of components is `n_pcs`, capped at one fewer than the
 number of fit samples. Up to 5,000 fit samples the SVD is exact, and above that
@@ -201,11 +220,35 @@ read.
 
 ## Limits
 
-pbwt's `-paint` holds four dense n × n matrices of doubles while it runs. That
-is about 3 GB at 10,000 samples and 80 GB at 50,000, and the pipeline holds
-another copy while it builds the features. Painting a whole biobank at once is
-therefore out of reach. Paint a subsample, or the cohort you want to resolve at
-fine scale, alongside a modest reference panel.
+pbwt paints one chromosome at a time, so the time for a genome is the sum over
+chromosomes, and peak memory is that of the largest one. Measured on an Apple
+M2 Max for chromosome 22 of the 1000 Genomes high coverage panel
+(190,184 biallelic SNPs with MAF of at least 1%):
+
+| samples | `-paint` time | `-paint` peak memory |
+|---|---|---|
+| 500 | 5 s | 0.19 GB |
+| 1,000 | 11 s | 0.38 GB |
+| 2,000 | 24 s | 0.79 GB |
+| 3,202 | 41 s | 1.37 GB |
+
+Time grows close to linearly over this range, and in proportion to the number
+of sites. Chromosome 22 is about 1.5% of the autosomal sequence, so the 22
+autosomes take roughly 60 to 70 times as long at this density. Memory has two
+parts: the matches pbwt stores, about 0.34 MB per sample here (linear in the
+samples and in the chromosome's sites), and the four
+dense n × n matrices of doubles `-paint` writes (32 n² bytes). The second
+dominates past about 10,000 samples: extrapolated, `-paint` needs about 6 GB at
+10,000 samples, 80 GB at 50,000 and 300 GB at 100,000. The pipeline then holds
+the summed matrix, its features and the SVD, about 15 copies of an n × n matrix
+at 3,202 samples. Painting a whole biobank with `-paint` is therefore out of
+reach. Paint a subsample, or the cohort you want to resolve at fine scale,
+alongside a modest reference panel.
+
+pbwt's `-paintSparse` writes the same values (identical on the benchmark above)
+as a list of nonzero entries and never holds the n × n matrices, so its memory
+stays linear in the samples. It is what Yang et al. used for the UK Biobank.
+The pipeline does not use it yet.
 
 Painting is not yet part of the WDL workflows, and the container image does not
 include pbwt.

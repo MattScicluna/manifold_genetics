@@ -21,7 +21,8 @@ from typing import Mapping, Optional, Sequence, Union
 import pandas as pd
 
 from ...painting.matrix import (
-    build_features,
+    chromosome_weight,
+    features_from_sum,
     method_matrix,
     read_paint_matrix,
     read_pbwt_samples,
@@ -60,11 +61,15 @@ class PaintingStepResult:
 
 
 def _paint_all(
-    pbwt: str, vcfs: Mapping[str, Path], roots: Mapping[str, Path], matrix: str, force: bool
+    pbwt: str, vcfs: Mapping[str, Path], roots: Mapping[str, Path], method: str, force: bool
 ):
-    """Paint every chromosome. Returns ``(sample_ids, {chromosome: matrix})``."""
+    """Paint every chromosome and sum its weighted matrix. Returns ``(sample_ids, summed)``.
+
+    Summed one chromosome at a time, so at most two N x N matrices are held.
+    """
+    matrix = method_matrix(method)
     sample_ids = None
-    matrices = {}
+    summed = None
     for chrom, vcf in vcfs.items():
         outputs = paint_chromosome(pbwt, vcf, roots[chrom], force=force)
         ids = read_pbwt_samples(outputs["samples"])
@@ -82,8 +87,10 @@ def _paint_all(
                 f"{outputs[matrix]} has {len(labels)} rows but pbwt listed {len(ids)} samples. "
                 "Painting assumes diploid samples."
             )
-        matrices[chrom] = values
-    return sample_ids, matrices
+        weighted = values * chromosome_weight(method, values, chrom)
+        summed = weighted if summed is None else summed + weighted
+        del values, weighted
+    return sample_ids, summed
 
 
 def _cohort_rows(sample_ids: Sequence[str], plink: Optional[PathLike], cohort: str):
@@ -104,7 +111,7 @@ def run_painting(
     coancestry_output: Optional[PathLike] = None,
     fit_plink: Optional[PathLike] = None,
     project_plink: Optional[PathLike] = None,
-    method: str = "finestructure",
+    method: str = "hc",
     n_pcs: int = 50,
     force: bool = False,
     pbwt: Optional[str] = None,
@@ -137,13 +144,12 @@ def run_painting(
 
         pbwt = ToolResolver().resolve_pbwt()
 
-    matrix = method_matrix(method)
+    method_matrix(method)  # an unknown method fails before any painting
     vcfs = expand_phased_vcf(phased_vcf, chromosomes)
     pbwt_dir = Path(pbwt_dir)
     roots = {c: pbwt_dir / f"chr{c}" for c in chromosomes}
-    sample_ids, per_chromosome = _paint_all(pbwt, vcfs, roots, matrix, force)
-    summed, features = build_features(per_chromosome, method, labels=sample_ids)
-    del per_chromosome
+    sample_ids, summed = _paint_all(pbwt, vcfs, roots, method, force)
+    features = features_from_sum(summed, method, labels=sample_ids)
     logger.info(f"Painted {len(sample_ids)} samples on {len(vcfs)} chromosome(s)")
 
     if coancestry_output:

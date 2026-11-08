@@ -204,7 +204,7 @@ class Pipeline:
         admix_gpus: Optional[int] = None,
         admix_batch_size: Optional[int] = 400,
         painting: bool = False,
-        painting_method: str = "finestructure",
+        painting_method: str = "hc",
         painting_chromosomes: Optional[Union[str, int, List]] = None,
         force_painting: bool = False,
     ) -> PipelineResult:
@@ -240,7 +240,7 @@ class Pipeline:
             painting: Paint the phased VCFs with pbwt and embed the coancestry
                 PCA instead of the genotype PCA. ``skip_pca`` then skips the
                 painting and reuses its cached coordinates.
-            painting_method: 'finestructure' (default) or 'hc', the published recipe
+            painting_method: 'hc' (default) or 'finestructure', the published recipe
                 that turns the painting into PCA features (see docs/painting.md)
             painting_chromosomes: Chromosomes substituted for ``{chr}`` (default 1-22)
             force_painting: Repaint chromosomes whose pbwt output is cached

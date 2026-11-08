@@ -50,7 +50,7 @@ class PaintingConfig:
     """
 
     enabled: bool = False
-    method: str = "finestructure"
+    method: str = "hc"
     chromosomes: Tuple[str, ...] = tuple(str(c) for c in range(1, 23))
     force: bool = False
 
@@ -138,7 +138,7 @@ def build_configs(
     geographic_coords=None,
     phased_vcf=None,
     painting: bool = False,
-    painting_method: str = "finestructure",
+    painting_method: str = "hc",
     painting_chromosomes=None,
     force_painting: bool = False,
     n_pcs: int = 50,
@@ -270,7 +270,7 @@ def build_painting_config(
     *,
     phased_vcf=None,
     enabled: bool = False,
-    method: str = "finestructure",
+    method: str = "hc",
     chromosomes=None,
     force: bool = False,
 ) -> PaintingConfig:

@@ -79,7 +79,9 @@ def test_hc_coancestry_is_in_centimorgans(painted):
 
 def test_paints_every_sample_and_writes_coordinates(painted):
     tmp_path, pbwt = painted
-    coords = paint(tmp_path, pbwt, coancestry_output=tmp_path / "coancestry.csv")
+    coords = paint(
+        tmp_path, pbwt, method="finestructure", coancestry_output=tmp_path / "coancestry.csv"
+    )
 
     assert list(coords.columns) == ["sample_id", "dim_1", "dim_2", "dim_3"]
     assert list(coords["sample_id"]) == SAMPLES
@@ -109,6 +111,7 @@ def test_fit_and_project_cohorts_come_from_the_fam_files(painted):
         fit_plink=tmp_path / "fit",
         project_plink=tmp_path / "project",
         fit_output=tmp_path / "fit.csv",
+        method="finestructure",
     )
     fit = pd.read_csv(tmp_path / "fit.csv")
 
@@ -191,7 +194,8 @@ def test_painting_config_validation():
         build_painting_config(method="chunkcounts")
     with pytest.raises(ValueError, match="autosomes 1-22, not X"):
         build_painting_config(method="hc", chromosomes="21,22,X")
-    assert build_painting_config(chromosomes="X").chromosomes == ("X",)  # finestructure
+    cfg = build_painting_config(method="finestructure", chromosomes="X")
+    assert cfg.chromosomes == ("X",)
 
     cfg = build_painting_config(enabled=True, phased_vcf="c{chr}.vcf", chromosomes="21-22")
     assert cfg.chromosomes == ("21", "22")

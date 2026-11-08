@@ -45,6 +45,8 @@ __all__ = [
     "build_features",
     "centimorgan_weight",
     "check_rows",
+    "chromosome_weight",
+    "features_from_sum",
     "finestructure_features",
     "hc_features",
     "method_matrix",
@@ -95,26 +97,32 @@ def read_paint_matrix(path: PathLike) -> Tuple[List[str], np.ndarray]:
                 f"with RECIPIENT, but starts with {header[:1]}"
             )
         columns = header[1:]
-        labels: List[str] = []
-        rows: List[List[float]] = []
-        for line_number, line in enumerate(fh, start=2):
-            parts = line.split()
-            if not parts:
-                continue
-            if len(parts) != len(columns) + 1:
-                raise ValueError(
-                    f"{path}:{line_number} has {len(parts) - 1} values; the header names "
-                    f"{len(columns)} donors"
-                )
-            labels.append(parts[0])
-            rows.append([float(v) for v in parts[1:]])
-
-    if labels != columns:
-        raise ValueError(
+        n = len(columns)
+        not_square = ValueError(
             f"{path} is not a square recipient-by-donor matrix: its row labels do not "
             "match its column labels in order"
         )
-    matrix = np.asarray(rows, dtype=np.float64).reshape(len(labels), len(columns))
+        # Filled row by row, so parsing holds one N x N array rather than
+        # N x N Python floats, which cost several times as much.
+        matrix = np.empty((n, n), dtype=np.float64)
+        labels: List[str] = []
+        for line_number, line in enumerate(fh, start=2):
+            parts = line.split(None, 1)
+            if not parts:
+                continue
+            values = np.array(parts[1].split() if len(parts) > 1 else [], dtype=np.float64)
+            if values.size != n:
+                raise ValueError(
+                    f"{path}:{line_number} has {values.size} values; the header names "
+                    f"{n} donors"
+                )
+            if len(labels) >= n:
+                raise not_square
+            matrix[len(labels)] = values
+            labels.append(parts[0])
+
+    if labels != columns:
+        raise not_square
     return labels, matrix
 
 
@@ -234,6 +242,23 @@ def check_rows(matrix: np.ndarray, labels: Sequence[str] = ()) -> None:
         )
 
 
+def chromosome_weight(method: str, matrix: np.ndarray, chromosome: str) -> float:
+    """What one chromosome's matrix is multiplied by before the sum over chromosomes.
+
+    One for ``finestructure``, which sums chunk counts as they are, and the
+    centimorgan weight ``g_c / K_c`` for ``hc``.
+    """
+    method_matrix(method)
+    return centimorgan_weight(matrix, chromosome) if method == "hc" else 1.0
+
+
+def features_from_sum(summed: np.ndarray, method: str, labels: Sequence[str] = ()) -> np.ndarray:
+    """The PCA features of a matrix already weighted and summed over chromosomes."""
+    method_matrix(method)
+    check_rows(summed, labels)
+    return hc_features(summed) if method == "hc" else finestructure_features(summed)
+
+
 def build_features(
     matrices: Mapping[str, np.ndarray], method: str, labels: Sequence[str] = ()
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -241,15 +266,10 @@ def build_features(
 
     ``matrices`` maps chromosome to the matrix ``method_matrix(method)`` names.
     ``summed`` is the matrix written as the coancestry CSV: chunk counts for
-    ``finestructure`` and chunk lengths in centimorgans for ``hc``.
+    ``finestructure`` and chunk lengths in centimorgans for ``hc``. The
+    pipeline sums one chromosome at a time instead, so that it never holds
+    more than two N x N matrices while summing.
     """
-    method_matrix(method)
-    chroms = list(matrices)
-    mats = [matrices[c] for c in chroms]
-    if method == "hc":
-        summed = sum_matrices(mats, [centimorgan_weight(m, c) for c, m in zip(chroms, mats)])
-        check_rows(summed, labels)
-        return summed, hc_features(summed)
-    summed = sum_matrices(mats)
-    check_rows(summed, labels)
-    return summed, finestructure_features(summed)
+    weights = [chromosome_weight(method, m, c) for c, m in matrices.items()]
+    summed = sum_matrices(list(matrices.values()), weights)
+    return summed, features_from_sum(summed, method, labels)

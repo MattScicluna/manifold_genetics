@@ -68,7 +68,7 @@ def painting_pca(
     fit_rows: Sequence[int],
     project_rows: Sequence[int],
     n_components: int,
-    method: str = "finestructure",
+    method: str = "hc",
     random_state: int = 42,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Uncentered SVD of ``fit_rows`` of ``features``, then coordinates for both cohorts.

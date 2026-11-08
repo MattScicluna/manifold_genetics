@@ -1180,11 +1180,11 @@ def main(argv: Optional[List[str]] = None):
     paint_parser.add_argument(
         "--method",
         choices=["finestructure", "hc"],
-        default="finestructure",
+        default="hc",
         help=(
             "How the painting becomes PCA features: finestructure (chunk counts, "
             "Lawson et al. 2012) or hc (chunk lengths, Yang et al. 2025) "
-            "(default: finestructure)"
+            "(default: hc)"
         ),
     )
     paint_parser.add_argument("--n-pcs", type=int, default=50, help="Number of PCs")

@@ -120,7 +120,7 @@ The example leaves out the other keys a config accepts:
 - `data`: `fit_labels`, `project_labels`, `fit_colormap` and `project_colormap`.
   Each overrides `labels` or `colormap` for one cohort. `phased_vcf` names the
   phased VCFs for haplotype painting, as a path containing `{chr}`.
-- `painting`: `enabled`, `method` (`finestructure`, the default, or `hc`),
+- `painting`: `enabled`, `method` (`hc`, the default, or `finestructure`),
   `chromosomes` (default `1-22`) and `force`. When `enabled` is true, the painting coordinates replace the genotype
   PCA as the embedding input. See [Haplotype painting](painting.md).
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.

@@ -30,7 +30,7 @@ A config looks like::
 
     painting:                  # optional; replaces genotype PCA as the embedding input
       enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
-      method: finestructure    # or hc
+      method: hc               # or finestructure
 
 Two decisions worth knowing:
 
