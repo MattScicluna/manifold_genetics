@@ -16,6 +16,47 @@ _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 _PAINTING_METHODS = ("finestructure", "hc")
 _PAINTING_MISSING = ("error", "drop")
+_EMBEDDING_INIT = ("none", "genotype")
+_PAINTING_COMBINE = ("concat", "kernel_sum", "kernel_product")
+_PAINTING_COMBINE_NORMS = ("degree", "markov")
+
+
+def check_embedding_init(method: str, params: Optional[dict], painting_enabled: bool) -> None:
+    """Validate the EXPERIMENTAL ``init`` and ``init_blend`` embedding params.
+
+    ``init: genotype`` starts painting PHATE's final MDS from the genotype-PCA
+    PHATE layout, so it needs painting on and PHATE as the method.
+    ``init_blend`` (alpha in [0, 1]) needs ``init: genotype``.
+
+    Raises:
+        ValueError: an unknown ``init``, an ``init_blend`` out of range or without
+            ``init: genotype``, or ``init`` with painting off or another method.
+    """
+    params = params or {}
+    init = params.get("init")
+    init = "none" if init is None else init
+    blend = params.get("init_blend")
+    if init not in _EMBEDDING_INIT:
+        raise ValueError(
+            f"Unknown embedding init: {init!r}. Choose from: {', '.join(_EMBEDDING_INIT)}"
+        )
+    if blend is not None:
+        if isinstance(blend, bool) or not isinstance(blend, (int, float)) or not 0 <= blend <= 1:
+            raise ValueError(f"embedding init_blend must be a number in [0, 1], got {blend!r}")
+        if init != "genotype":
+            raise ValueError(
+                "embedding init_blend blends in the genotype layout, so it needs init: genotype"
+            )
+    if init == "genotype":
+        if method != "phate":
+            raise ValueError(
+                f"embedding init: genotype works only with method phate, not {method!r}"
+            )
+        if not painting_enabled:
+            raise ValueError(
+                "embedding init: genotype starts the painting PHATE from the genotype "
+                "PHATE layout, so it needs painting enabled (painting: enabled: true)"
+            )
 
 
 @dataclass(frozen=True)
@@ -63,6 +104,16 @@ class PaintingConfig:
     force: bool = False
     missing: str = "error"
     pbwt_dir: Optional[Path] = None
+    # EXPERIMENTAL: combine the top ``combine_pcs`` genotype PCs with the top
+    # painting PCs (see docs/painting.md). ``concat`` embeds the two blocks side
+    # by side, each scaled to equal weight. ``kernel_sum`` adds PHATE's two
+    # affinity matrices, ``combine_weight`` being the genotype's share and
+    # ``combine_norm`` how each is scaled first. ``kernel_product`` is
+    # alternating diffusion. None is off.
+    combine_genotype: Optional[str] = None
+    combine_pcs: int = 10
+    combine_weight: float = 0.5
+    combine_norm: str = "degree"
 
 
 @dataclass(frozen=True)
@@ -153,6 +204,10 @@ def build_configs(
     force_painting: bool = False,
     painting_missing: str = "error",
     painting_pbwt_dir=None,
+    painting_combine_genotype: Optional[str] = None,
+    painting_combine_pcs: int = 10,
+    painting_combine_weight: float = 0.5,
+    painting_combine_norm: str = "degree",
     n_pcs: int = 50,
     force_pca: bool = False,
     k_min: int = 2,
@@ -233,7 +288,14 @@ def build_configs(
         force=force_painting,
         missing=painting_missing,
         pbwt_dir=painting_pbwt_dir,
+        combine_genotype=painting_combine_genotype,
+        combine_pcs=painting_combine_pcs,
+        combine_weight=painting_combine_weight,
+        combine_norm=painting_combine_norm,
+        n_pcs=n_pcs,
     )
+    check_embedding_init(embedding, embedding_params, painting_cfg.enabled)
+    check_painting_combine(painting_cfg, embedding, embedding_input, embedding_params)
 
     io = IOConfig(
         fit_plink=Path(fit_plink),
@@ -289,6 +351,11 @@ def build_painting_config(
     force: bool = False,
     missing: str = "error",
     pbwt_dir=None,
+    combine_genotype: Optional[str] = None,
+    combine_pcs: int = 10,
+    combine_weight: float = 0.5,
+    combine_norm: str = "degree",
+    n_pcs: Optional[int] = None,
 ) -> PaintingConfig:
     """Validate the painting settings into a ``PaintingConfig``. No filesystem access.
 
@@ -327,6 +394,41 @@ def build_painting_config(
                 "the data section, for example phased_vcf: data/chr{chr}.vcf.gz"
             )
         expand_phased_vcf(phased_vcf, names)  # raises when {chr} is missing
+    if combine_genotype in (None, False, "none"):
+        combine_genotype = None
+    elif combine_genotype not in _PAINTING_COMBINE:
+        raise ValueError(
+            f"Unknown painting combine_genotype: {combine_genotype!r}. Choose from: "
+            f"none, {', '.join(_PAINTING_COMBINE)}"
+        )
+    if combine_genotype is not None:
+        if not enabled:
+            raise ValueError(
+                "painting combine_genotype combines the genotype PCA with the painting, "
+                "so it needs painting enabled (painting: enabled: true)"
+            )
+        if isinstance(combine_pcs, bool) or not isinstance(combine_pcs, int) or combine_pcs < 1:
+            raise ValueError(
+                f"painting combine_pcs must be a positive integer, got {combine_pcs!r}"
+            )
+        if n_pcs is not None and combine_pcs > n_pcs:
+            raise ValueError(
+                f"painting combine_pcs ({combine_pcs}) is more than pca n_pcs ({n_pcs}), "
+                "the number of components each view has"
+            )
+        if (
+            isinstance(combine_weight, bool)
+            or not isinstance(combine_weight, (int, float))
+            or not 0 <= combine_weight <= 1
+        ):
+            raise ValueError(
+                f"painting combine_weight must be a number in [0, 1], got {combine_weight!r}"
+            )
+        if combine_norm not in _PAINTING_COMBINE_NORMS:
+            raise ValueError(
+                f"Unknown painting combine_norm: {combine_norm!r}. Choose from: "
+                f"{', '.join(_PAINTING_COMBINE_NORMS)}"
+            )
     return PaintingConfig(
         enabled=bool(enabled),
         method=method,
@@ -334,4 +436,43 @@ def build_painting_config(
         force=bool(force),
         missing=missing,
         pbwt_dir=_as_path(pbwt_dir),
+        combine_genotype=combine_genotype,
+        combine_pcs=int(combine_pcs),
+        combine_weight=float(combine_weight),
+        combine_norm=combine_norm,
     )
+
+
+def check_painting_combine(
+    painting: PaintingConfig, method: str, input_mode: str, params: Optional[dict]
+) -> None:
+    """The kernel modes of ``combine_genotype`` build PHATE's own kernels, embed
+    one cohort and have no landmarks, so they need PHATE, an ``input_mode`` other
+    than ``both``, and ``n_landmark`` unset.
+
+    Raises:
+        ValueError: a kernel mode with another method, ``both``, or landmarks.
+    """
+    mode = painting.combine_genotype
+    if mode is None or not mode.startswith("kernel"):
+        return
+    if method != "phate":
+        raise ValueError(
+            f"painting combine_genotype: {mode} combines PHATE's affinity matrices, so it "
+            f"works only with embedding method phate, not {method!r}. Use concat for "
+            "other methods."
+        )
+    if input_mode == "both":
+        raise ValueError(
+            f"painting combine_genotype: {mode} cannot place a second cohort in the "
+            "embedding, so it needs embedding input_mode fit or project, not both "
+            "(the projection preset)"
+        )
+    if (params or {}).get("n_landmark") is not None:
+        raise ValueError(
+            f"painting combine_genotype: {mode} runs exact PHATE, so it needs " "n_landmark: none"
+        )
+    if ((params or {}).get("init") or "none") != "none":
+        raise ValueError(
+            f"painting combine_genotype: {mode} and embedding init cannot be used together"
+        )

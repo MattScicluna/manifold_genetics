@@ -32,6 +32,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`project_painting_<method>_pca_<n>.csv`), and `painting: pbwt_dir` lets
   runs share pbwt's output. See `docs/painting.md`.
 
+- **EXPERIMENTAL: combining painting with genotype PCA.** Two ways to bring
+  back the continental structure painting PHATE loses, both of which also run
+  the genotype PCA that painting replaces. `embedding: init: genotype` starts
+  painting PHATE's final MDS from the genotype PHATE layout (optionally on a
+  blend of the two distance matrices, `init_blend`), and writes that layout and
+  a Procrustes report next to the embedding. `painting: combine_genotype`
+  combines the top `combine_pcs` PCs of each: `concat` embeds them side by side
+  with each block scaled to equal weight (any method), `kernel_sum` adds
+  PHATE's two affinity matrices (`combine_weight`, `combine_norm`) and
+  `kernel_product` uses alternating diffusion (both PHATE only, exact, one
+  cohort). Results on HGDP+1KGP are in `docs/painting.md`. These may change or
+  go away.
+
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published
   `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)

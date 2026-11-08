@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
+import numpy as np
 import pandas as pd
 
 from ...painting.matrix import (
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "PaintingStepResult",
     "check_samples",
+    "combine_with_genotype",
     "painting_output_paths",
     "run_painting",
     "run_painting_step",
@@ -293,3 +295,75 @@ def run_painting_step(
         coancestry=paths["coancestry"],
         coords_df=coords,
     )
+
+
+def _read_block(path: PathLike, n: int, what: str) -> pd.DataFrame:
+    df = pd.read_csv(path, dtype={"sample_id": str}).set_index("sample_id")
+    if df.shape[1] < n:
+        raise ValueError(
+            f"painting combine_pcs is {n}, but the {what} coordinates in {path} have only "
+            f"{df.shape[1]} components"
+        )
+    return df.iloc[:, :n]
+
+
+def combine_with_genotype(
+    *,
+    genotype_fit: PathLike,
+    genotype_project: Optional[PathLike],
+    painting_fit: PathLike,
+    painting_project: Optional[PathLike],
+    n: int,
+    fit_output: PathLike,
+    project_output: Optional[PathLike],
+):
+    """EXPERIMENTAL: the top ``n`` genotype PCs and top ``n`` painting PCs side by side.
+
+    Each block is centered and divided by its root mean squared row norm, both
+    taken on the fit cohort and applied to both cohorts, so each block carries
+    the same total weight and no column is rescaled within a block. Scaling
+    every column to unit variance instead weights minor PCs as heavily as the
+    first ones, and it gave worse embeddings on HGDP+1KGP.
+
+    The rows are the painting's samples, each of which must also have a
+    genotype row. Writes ``sample_id, dim_1 ... dim_<2n>`` CSVs (genotype
+    block first) and returns the (fit, project) paths written, project None
+    when no project input was given.
+    """
+    stats = {}
+    for what, fit in (("genotype", genotype_fit), ("painting", painting_fit)):
+        block = _read_block(fit, n, what).to_numpy(float)
+        mean = block.mean(axis=0)
+        scale = float(np.sqrt(((block - mean) ** 2).sum(axis=1).mean())) or 1.0
+        stats[what] = (mean, scale)
+
+    def combine(geno_path, paint_path, out):
+        paint = _read_block(paint_path, n, "painting")
+        geno = _read_block(geno_path, n, "genotype")
+        missing = paint.index.difference(geno.index)
+        if len(missing):
+            raise ValueError(
+                f"{len(missing)} painted samples have no genotype PCA row in {geno_path} "
+                f"(e.g. {list(missing[:3])})"
+            )
+        geno = geno.loc[paint.index]
+        parts = []
+        for what, block in (("genotype", geno), ("painting", paint)):
+            mean, scale = stats[what]
+            parts.append((block.to_numpy(float) - mean) / scale)
+        x = np.hstack(parts)
+        df = pd.DataFrame(x, columns=[f"dim_{i + 1}" for i in range(x.shape[1])])
+        df.insert(0, "sample_id", list(paint.index))
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out, index=False)
+        return Path(out)
+
+    fit_out = combine(genotype_fit, painting_fit, fit_output)
+    project_out = None
+    if genotype_project is not None and painting_project is not None:
+        project_out = combine(genotype_project, painting_project, project_output)
+    logger.info(
+        f"EXPERIMENTAL combine_genotype: {n} genotype + {n} painting PCs, each block "
+        f"scaled to equal weight, in {fit_out}"
+    )
+    return fit_out, project_out

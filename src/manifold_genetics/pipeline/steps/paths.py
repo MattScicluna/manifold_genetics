@@ -42,6 +42,9 @@ def painting_output_paths(io: IOConfig, pca: PCAConfig, painting: PaintingConfig
         "coancestry": d / f"coancestry_{method}.csv",
         "fit_pca": d / f"fit_painting_{method}_pca_{n}.csv",
         "project_pca": d / f"project_painting_{method}_pca_{n}.csv",
+        # EXPERIMENTAL painting: combine_genotype. k genotype PCs + k painting PCs.
+        "fit_combined": d / f"fit_combined_genotype_{method}_{painting.combine_pcs}x2.csv",
+        "project_combined": d / f"project_combined_genotype_{method}_{painting.combine_pcs}x2.csv",
     }
 
 
@@ -67,6 +70,21 @@ def embedding_output_paths(io: IOConfig, emb: EmbeddingConfig) -> Dict[str, Path
     paths = {"embedding": d / f"{emb.method}_{n_components}d.csv"}
     if emb.input_mode == "both":
         paths["fit_embedding"] = d / f"{emb.method}_fit_{n_components}d.csv"
+    return paths
+
+
+def embedding_init_output_paths(io: IOConfig, emb: EmbeddingConfig) -> Dict[str, Path]:
+    """EXPERIMENTAL ``embedding: init: genotype``: the genotype PHATE layout the
+    painting PHATE starts from, and a JSON report of how far the points moved.
+    """
+    n_components = int(emb.params.get("n_components", 2))
+    d = io.output_dir / "embeddings"
+    paths = {
+        "genotype_embedding": d / f"{emb.method}_init_genotype_{n_components}d.csv",
+        "report": d / f"{emb.method}_init_report_{n_components}d.json",
+    }
+    if emb.input_mode == "both":
+        paths["genotype_fit_embedding"] = d / f"{emb.method}_init_genotype_fit_{n_components}d.csv"
     return paths
 
 

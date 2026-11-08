@@ -49,6 +49,8 @@ from typing import Any, Dict, Mapping, Optional, Union
 
 import yaml
 
+from .config import PaintingConfig, check_embedding_init, check_painting_combine
+
 __all__ = [
     "ConfigFileError",
     "PRESETS",
@@ -149,6 +151,11 @@ _PAINTING_KEYS = {
     "force": "force_painting",
     "missing": "painting_missing",
     "pbwt_dir": "painting_pbwt_dir",
+    # EXPERIMENTAL: combine the genotype PCA with the painting.
+    "combine_genotype": "painting_combine_genotype",
+    "combine_pcs": "painting_combine_pcs",
+    "combine_weight": "painting_combine_weight",
+    "combine_norm": "painting_combine_norm",
 }
 # Resolved against the config file's directory, like the data section's paths.
 _PAINTING_PATH_KEYS = {"pbwt_dir"}
@@ -182,6 +189,9 @@ _EMBEDDING_PARAMS = {
     "n_neighbors",
     "min_dist",
     "perplexity",
+    # EXPERIMENTAL, PHATE with painting only (see docs/painting.md).
+    "init",
+    "init_blend",
 }
 
 _SECTIONS = {
@@ -321,6 +331,21 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
             "random_landmarking is set but n_landmark is not. Landmarking is disabled "
             "when n_landmark is none, so random_landmarking would have no effect."
         )
+
+    try:
+        check_embedding_init(
+            kwargs.get("embedding", "phate"), params, bool(kwargs.get("painting", False))
+        )
+        combine = kwargs.get("painting_combine_genotype")
+        if isinstance(combine, str):
+            check_painting_combine(
+                PaintingConfig(combine_genotype=combine),
+                kwargs.get("embedding", "phate"),
+                kwargs.get("embedding_input", "both"),
+                params,
+            )
+    except ValueError as exc:
+        raise ConfigFileError(str(exc)) from None
 
     kwargs["embedding_params"] = params
     return kwargs

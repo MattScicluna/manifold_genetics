@@ -296,3 +296,101 @@ The pipeline does not use it yet.
 
 Painting is not yet part of the WDL workflows, and the container image does not
 include pbwt.
+
+## Experimental: combining painting with genotype PCA
+
+Painting PHATE separates populations well but loses some of the continental
+structure that genotype PCA PHATE shows. The options below try to keep both.
+They are experimental: they may change or be removed, and the numbers are from
+one panel. Each one also runs the genotype PCA that painting replaces, on the
+same cohorts and at its usual paths (`pca/fit_pca_<n>.csv`), so `fit_plink`
+and `project_plink` must hold the genotypes. With painting input, `t: 10` is a
+better PHATE setting than the presets' `t: 3`.
+
+All results below are on the HGDP and 1000 Genomes panel described above,
+4,089 samples, exact PHATE on 10 components from each view. They are scored on
+the 3,398 unrelated samples in 2-D: the silhouette of the seven regions,
+five-nearest-neighbor accuracy for populations, and the pipeline's geographic
+preservation metric.
+
+### Genotype initialization
+
+```yaml
+embedding:
+  method: phate
+  init: genotype       # none (the default) or genotype
+  init_blend: 0.5      # optional, in [0, 1]
+```
+
+PHATE ends with a metric MDS of the potential distances, which it always
+starts from classic MDS. With `init: genotype` the pipeline first runs PHATE,
+with the same settings, on the genotype PCA, then fits painting PHATE as usual
+but runs its MDS from the genotype layout of the fit samples, rescaled to the
+potential distances by a least-squares scalar. With `init_blend` set to alpha,
+the MDS target is `alpha * D_geno / mean + (1 - alpha) * D_paint / mean`
+instead, where `D_geno` is the distance in the genotype layout, so alpha 1
+reproduces the genotype layout. With landmarks, PHATE's MDS places the
+landmarks, and the start is the genotype layout averaged over the samples
+assigned to each landmark. The genotype layout is written to
+`embeddings/phate_init_genotype_<k>d.csv`, and
+`embeddings/phate_init_report_<k>d.json` gives the Procrustes disparity between
+it and the result (0 is the same shape, 1 is unrelated).
+
+On HGDP and 1000 Genomes (`hc`, knn 100, t 10) it made no difference: the MDS
+converged to the same layout as plain painting PHATE, at a Procrustes disparity
+from the genotype layout of 0.435 against 0.437 without the start, and with the
+same scores.
+
+### Combining the two views
+
+```yaml
+painting:
+  enabled: true
+  combine_genotype: kernel_sum   # concat, kernel_sum or kernel_product
+  combine_pcs: 10                # components taken from each view
+  combine_weight: 0.25           # kernel_sum: the genotype's share
+  combine_norm: degree           # kernel_sum: degree or markov
+```
+
+- **`concat`** embeds the top `combine_pcs` genotype PCs and painting PCs side
+  by side. Each block is centered and divided by its root mean squared row
+  norm, taken on the fit cohort, so the two blocks carry equal weight while
+  the components within a block keep their relative scale. Scaling every
+  column to unit variance instead did worse. It works with every embedding
+  method and every preset, and writes
+  `painting/<cohort>_combined_genotype_<method>_<n>x2.csv`.
+- **`kernel_sum`** builds PHATE's alpha-decay kernel on each view, with the
+  run's `knn`, and adds them: `w * K_geno + (1 - w) * K_paint` with `w` the
+  `combine_weight`. PHATE then runs its diffusion, potential and MDS on the
+  sum. `combine_norm: degree` divides each kernel by its mean row sum, which
+  keeps its shape, so a weight of 1 or 0 gives exactly the PHATE of one view.
+  `markov` row-normalizes and symmetrizes each kernel, so every sample has the
+  same total weight in both views. The two mostly scored within 0.03 of each other,
+  and `degree` is the default because its weight is easier to read.
+- **`kernel_product`** is alternating diffusion (Lederman and Talmon 2018): one
+  diffusion step in each view, `P_geno P_paint`, symmetrized. Two samples are
+  then close only when they are close in both views. `combine_weight` and
+  `combine_norm` are not used.
+
+The kernel modes need PHATE, exact (`n_landmark: none`), and one cohort
+(`whole_cohort` or `subsample` without landmarks), because they cannot place
+new samples in the embedding.
+
+| | painting | knn, t | region silhouette | population 5-NN | geographic |
+|---|---|---|---|---|---|
+| genotype PCA alone | | 100, 10 | 0.37 | 0.69 | 0.66 |
+| `hc` alone | `hc` | 100, 10 | 0.32 | 0.72 | 0.64 |
+| `concat` | `hc` | 100, 10 | 0.42 | 0.79 | 0.70 |
+| `concat` | `finestructure` | 100, 10 | 0.58 | 0.76 | 0.79 |
+| `kernel_sum`, weight 0.25 | `hc` | 30, auto | 0.49 | 0.79 | 0.70 |
+| `kernel_sum`, weight 0.25, `markov` | `hc` | 30, auto | 0.49 | 0.79 | 0.71 |
+| `kernel_product` | `hc` | 30, auto | 0.47 | 0.76 | 0.80 |
+| `kernel_product` | `finestructure` | 100, auto | 0.71 | 0.72 | 0.69 |
+
+`kernel_sum` with a genotype weight of 0.25 matches `concat` on populations
+and geography and separates the regions better, but only at knn 30: at knn 100
+every weight scored below `concat` on geography (0.61 to 0.67). Weights of 0.5
+and 0.75 were worse for `hc`. `kernel_product` gives the clearest continental
+arcs and the best geographic score with `hc`, at some cost in population
+accuracy. `concat` is the least sensitive to `knn` and `t` and the only option
+for methods other than PHATE.
