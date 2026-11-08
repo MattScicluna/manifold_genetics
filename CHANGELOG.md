@@ -18,7 +18,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   legend, and one figure is written per colormap column to
   `figures/embeddings/grids/`, with the panel embeddings in
   `embeddings/grids/`. A failed panel is drawn empty and reported, not fatal.
-  Library users get `plot_embedding_grid`.
+  Library users get `plot_embedding_grid`. PHATE panels in either grid use the
+  run's landmarking unless the grid sets it, and grid parameters are checked
+  like the `embedding` section's.
 
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published

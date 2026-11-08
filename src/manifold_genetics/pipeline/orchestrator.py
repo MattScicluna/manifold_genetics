@@ -245,9 +245,9 @@ class Pipeline:
         # Checked before anything runs: a typo here must not surface hours in,
         # after PCA and admixture.
         if method_grid is not None:
-            validate_method_grid(method_grid)
+            validate_method_grid(method_grid, embedding_params)
         if phate_grid is not None:
-            validate_phate_grid(phate_grid)
+            validate_phate_grid(phate_grid, embedding_params)
 
         io = self._io
         pca_cfg = PCAConfig(
@@ -394,7 +394,8 @@ class Pipeline:
                     viz_cfg,
                     pca=r_pca,
                     input_mode=embedding_input,
-                    base_params=embedding_params if embedding == "phate" else None,
+                    run_method=embedding,
+                    run_params=embedding_params,
                 ),
             )
             if grid_result is not None:

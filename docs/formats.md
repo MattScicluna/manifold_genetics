@@ -113,11 +113,17 @@ skip:
 
 The two grids are comparison figures: every panel is its own 2-D embedding of
 the same PCA coordinates the run embeds, with one legend for the whole grid and
-one figure per colormap column. `phate_grid` starts from the run's own PHATE
-settings, so a preset's landmarking applies to every panel; a scalar entry
-(`gamma: 0`) fixes a parameter across the grid. Each panel is a full embedding,
-so a 3×3 grid costs nine. A panel that fails is left empty and named in the
-run's failed steps rather than losing the figure.
+one figure per colormap column. Every PHATE panel, in either grid, uses the
+run's `n_landmark`, `random_landmarking` and `embed_batch_size` (from the
+`embedding` section or the preset) unless the grid sets them, so a grid of a
+large cohort is landmarked whenever the run is, whichever method the run uses.
+When the run's method is PHATE, `phate_grid` also starts from the run's other
+PHATE settings. A scalar entry (`gamma: 0`) fixes a parameter across the grid.
+Grid parameters are checked like the `embedding` section's: `n_landmark: none`
+turns landmarking off, and `random_landmarking` without an `n_landmark` is
+rejected. Each panel is a full embedding, so a 3×3 grid costs nine. A panel
+that fails is left empty and named in the run's failed steps rather than losing
+the figure.
 
 The preset supplies the embedding settings that follow from it, so most files
 are shorter than this. An unknown key is rejected with a suggestion rather than

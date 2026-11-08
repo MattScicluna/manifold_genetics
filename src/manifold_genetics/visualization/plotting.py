@@ -96,6 +96,51 @@ def warn_about_unmatched_labels(values, color_dict, label_column: str) -> None:
         )
 
 
+def _scatter_by_label(ax, merged_df, label_col, color_dict, point_size, alpha):
+    """Draw one 2-D scatter coloured by ``label_col``, as every 2-D figure does.
+
+    Samples with no colour (``uncoloured``) go underneath in grey, then the
+    colormap's values in reverse, so its first entries end up on top. Values are
+    compared as strings, so a numeric-looking label column (``1``, ``2``) still
+    matches a JSON colormap's string keys.
+
+    Returns the colormap keys present, in colormap order, and whether any sample
+    was drawn grey: what a legend for this panel needs.
+    """
+    values = merged_df[label_col]
+    missing_mask = uncoloured(values, color_dict)
+    if missing_mask.any():
+        ax.scatter(
+            merged_df.loc[missing_mask, "dim_1"],
+            merged_df.loc[missing_mask, "dim_2"],
+            s=point_size,
+            alpha=alpha * 0.5,  # More transparent for background
+            color="lightgray",
+            edgecolors="none",
+            label="Unknown",
+            rasterized=True,
+            zorder=1,  # Low z-order for background
+        )
+
+    as_str = values.astype(str)
+    present = set(as_str[~missing_mask])
+    color_groups = [k for k in color_dict if str(k) in present]
+    for label in reversed(color_groups):
+        mask = ~missing_mask & (as_str == str(label))
+        ax.scatter(
+            merged_df.loc[mask, "dim_1"],
+            merged_df.loc[mask, "dim_2"],
+            s=point_size,
+            alpha=alpha,
+            color=color_dict[label],
+            edgecolors="none",
+            label=label,
+            rasterized=True,
+            zorder=2,  # Higher z-order for foreground
+        )
+    return color_groups, bool(missing_mask.any())
+
+
 def plot_embedding(
     embedding: Union[pd.DataFrame, str, Path],
     labels: Union[pd.DataFrame, str, Path],
@@ -163,51 +208,14 @@ def plot_embedding(
             logger.warning(f"Column '{label_col}' not found in labels, skipping")
             continue
 
-        # FIRST: Plot samples with missing data in gray (background layer)
-        missing_mask = uncoloured(merged_df[label_col], color_dict)
-        if missing_mask.sum() > 0:
-            ax.scatter(
-                merged_df.loc[missing_mask, "dim_1"],
-                merged_df.loc[missing_mask, "dim_2"],
-                s=point_size,
-                alpha=alpha * 0.5,  # More transparent for background
-                color="lightgray",
-                edgecolors="none",
-                label="Unknown",
-                rasterized=True,
-                zorder=1,  # Low z-order for background
-            )
-
-        # SECOND: Plot each color group separately (foreground layer)
-        # Use the ordering from the color_dict (Python 3.7+ preserves insertion order)
-        # Plot in REVERSE order so that the first items in colormap appear on top
         warn_about_unmatched_labels(merged_df[label_col], color_dict, label_col)
-        color_groups = [k for k in color_dict.keys() if k in merged_df[label_col].values]
-        for label in reversed(color_groups):
-            mask = merged_df[label_col] == label
-            label_data = merged_df[mask]
-            color = color_dict.get(label, "#D3D3D3")  # Default to gray
+        color_groups, any_missing = _scatter_by_label(
+            ax, merged_df, label_col, color_dict, point_size, alpha
+        )
 
-            ax.scatter(
-                label_data["dim_1"],
-                label_data["dim_2"],
-                s=point_size,
-                alpha=alpha,
-                color=color,
-                edgecolors="none",
-                label=label,
-                rasterized=True,
-                zorder=2,  # Higher z-order for foreground
-            )
-
-        # THIRD: Create legend using Patches instead of scatter handles
-        # This ensures legend follows the color_dict order
-        legend_elements = [
-            Patch(facecolor=color_dict[g], label=g)
-            for g in color_dict.keys()
-            if g in merged_df[label_col].values
-        ]
-        if missing_mask.any():
+        # Legend from Patches, so it follows the color_dict order
+        legend_elements = [Patch(facecolor=color_dict[g], label=g) for g in color_groups]
+        if any_missing:
             legend_elements.append(Patch(facecolor="lightgray", label="Unknown"))
 
         # Remove ticks, tick labels, axis labels, and titles
@@ -591,35 +599,11 @@ def plot_embedding_grid(
                     warn_about_unmatched_labels(merged[label_column], color_dict, label_column)
                     warned = True
 
-                # Same layering as plot_embedding: missing labels underneath,
-                # then the colormap in reverse so its first entries end up on top.
-                missing = merged[label_column].isna()
-                if missing.any():
-                    any_missing = True
-                    ax.scatter(
-                        merged.loc[missing, "dim_1"],
-                        merged.loc[missing, "dim_2"],
-                        s=point_size,
-                        alpha=alpha * 0.5,
-                        color="lightgray",
-                        edgecolors="none",
-                        rasterized=True,
-                        zorder=1,
-                    )
-                values = set(merged[label_column].dropna())
-                present |= values
-                for value in reversed([k for k in color_dict if k in values]):
-                    mask = merged[label_column] == value
-                    ax.scatter(
-                        merged.loc[mask, "dim_1"],
-                        merged.loc[mask, "dim_2"],
-                        s=point_size,
-                        alpha=alpha,
-                        color=color_dict[value],
-                        edgecolors="none",
-                        rasterized=True,
-                        zorder=2,
-                    )
+                groups, cell_missing = _scatter_by_label(
+                    ax, merged, label_column, color_dict, point_size, alpha
+                )
+                present.update(groups)
+                any_missing |= cell_missing
 
             if axis_names is not None and axis_names[i][j]:
                 ax.set_xlabel(f"{axis_names[i][j]} 1", fontsize=8)
