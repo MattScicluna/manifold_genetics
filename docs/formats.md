@@ -113,8 +113,9 @@ skip:
 ```
 
 The two grids are comparison figures: every panel is its own 2-D embedding of
-the same PCA coordinates the run embeds, with one legend for the whole grid and
-one figure per colormap column. Every PHATE panel, in either grid, uses the
+the same coordinates the run embeds (the genotype PCA, or the painting's PCA
+when `painting` is enabled), with one legend for the whole grid and one figure
+per colormap column. Every PHATE panel, in either grid, uses the
 run's `n_landmark`, `random_landmarking` and `embed_batch_size` (from the
 `embedding` section or the preset) unless the grid sets them, so a grid of a
 large cohort is landmarked whenever the run is, whichever method the run uses.
