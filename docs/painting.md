@@ -39,10 +39,9 @@ On Fedora or RHEL the packages are `gcc make zlib-devel`, and on macOS the
 Xcode command line tools provide all three. The build was tested on Linux
 x86-64 and aarch64 (Debian 13, `python:3.12-slim`) and on macOS arm64. On Linux
 aarch64 there is no plink2 download, so `setup` reports that as an error and
-exits non-zero, but it still builds pbwt. On macOS arm64, `setup --pbwt`
-currently exits non-zero too, because of flashpca, although pbwt builds. The
-default PCA backend does not use flashpca, so the error can be ignored until
-the fix in pull request #213 is released.
+exits non-zero, but it still builds pbwt. On macOS, `setup --pbwt` skips
+flashpca, which is published only for Linux x86-64 and which the default PCA
+backend does not use, and exits zero.
 
 It goes into the same tool directory as the other binaries. A pbwt already on
 `PATH`, or named by `PBWT_PATH`, is used as well. pbwt is licensed under
@@ -257,7 +256,8 @@ pbwt's output is the same for both methods, and it is by far the slow part.
 or settings in separate output directories paint only once. A relative
 `pbwt_dir` is resolved against the config file's directory. The PC-pair grids in
 `figures/pca/` show the painting components, since those are what the embedding
-read.
+read. The comparison grids (`visualization: phate_grid` and `method_grid`)
+embed the painting components too.
 
 ## Limits
 
