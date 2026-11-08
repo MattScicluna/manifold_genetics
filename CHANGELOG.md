@@ -137,11 +137,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `assets/nextflow/`). Run it as `nextflow run nextflow/main.nf ...`; the
   config beside it is still picked up.
 
-- **The WDL workflows moved from the repository root into `wdl/`**, beside
-  their example inputs. Run them as `miniwdl run wdl/analyse.wdl ...`. On
-  Verily Workbench, add new workflows with the `wdl/` path. Workflows already
-  registered at the root path keep working: they run from the `verily-workflow`
-  branch, which keeps the old layout until release 0.4.0.
+- **The WDL example inputs moved into `wdl/`**, with the miniwdl config for
+  Apptainer. The workflows themselves stay at the repository root, where the
+  workflows registered in Verily Workbench expect them. Run them as
+  `miniwdl run analyse.wdl -i wdl/analyse.inputs.json`.
 
 - **PCA reads genotypes 4-6x faster, with identical results.** The python
   backend's streaming fit re-reads the cohort about 40 times, and nearly all
@@ -156,7 +155,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `--geosketch` failing with an `ImportError` on a default install.
 
 - **CI runs a WDL workflow, not only validates it.** The `container` job runs
-  `wdl/manifold_genetics.wdl` with miniwdl on the synthetic cohort, in the
+  `manifold_genetics.wdl` with miniwdl on the synthetic cohort, in the
   image it just built, and checks the PCA, embedding and figures come back.
 
 ### Fixed

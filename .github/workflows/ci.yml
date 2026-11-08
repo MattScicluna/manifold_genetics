@@ -290,7 +290,7 @@ jobs:
           mkdir -p /tmp/syn /tmp/wdl_run
           docker run --rm -v /tmp/syn:/syn manifold-genetics:ci \
             manifold-genetics acquire synthetic --out /syn
-          miniwdl run wdl/manifold_genetics.wdl \
+          miniwdl run manifold_genetics.wdl \
             fit_bed=/tmp/syn/data/fit_subset.bed fit_bim=/tmp/syn/data/fit_subset.bim \
             fit_fam=/tmp/syn/data/fit_subset.fam \
             project_bed=/tmp/syn/data/project_subset.bed project_bim=/tmp/syn/data/project_subset.bim \
@@ -324,17 +324,17 @@ jobs:
       - name: Validate with womtool
         run: |
           curl -sSL -o womtool.jar https://github.com/broadinstitute/cromwell/releases/download/92/womtool-92.jar
-          for wdl in wdl/*.wdl; do
+          for wdl in *.wdl; do
             java -jar womtool.jar validate "$wdl"
           done
           for inputs in wdl/inputs.*.json; do
-            java -jar womtool.jar validate wdl/manifold_genetics.wdl -i "$inputs"
+            java -jar womtool.jar validate manifold_genetics.wdl -i "$inputs"
           done
-          java -jar womtool.jar validate wdl/aou_prepare.wdl -i wdl/aou_prepare.inputs.json
-          java -jar womtool.jar validate wdl/analyse.wdl -i wdl/analyse.inputs.json
-          java -jar womtool.jar validate wdl/analyse.wdl -i wdl/analyse.biobank.inputs.json
-          java -jar womtool.jar validate wdl/analyse_3d.wdl -i wdl/analyse_3d.inputs.json
-          java -jar womtool.jar validate wdl/analyse_3d.wdl -i wdl/analyse_3d.biobank.inputs.json
-          java -jar womtool.jar validate wdl/admixture.wdl -i wdl/admixture.inputs.json
-          java -jar womtool.jar validate wdl/admixture.wdl -i wdl/admixture.biobank.inputs.json
-          java -jar womtool.jar validate wdl/prepare.wdl -i wdl/prepare.inputs.json
+          java -jar womtool.jar validate aou_prepare.wdl -i wdl/aou_prepare.inputs.json
+          java -jar womtool.jar validate analyse.wdl -i wdl/analyse.inputs.json
+          java -jar womtool.jar validate analyse.wdl -i wdl/analyse.biobank.inputs.json
+          java -jar womtool.jar validate analyse_3d.wdl -i wdl/analyse_3d.inputs.json
+          java -jar womtool.jar validate analyse_3d.wdl -i wdl/analyse_3d.biobank.inputs.json
+          java -jar womtool.jar validate admixture.wdl -i wdl/admixture.inputs.json
+          java -jar womtool.jar validate admixture.wdl -i wdl/admixture.biobank.inputs.json
+          java -jar womtool.jar validate prepare.wdl -i wdl/prepare.inputs.json
