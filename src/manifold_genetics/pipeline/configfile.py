@@ -49,7 +49,14 @@ from typing import Any, Dict, Mapping, Optional, Union
 
 import yaml
 
-from .config import PaintingConfig, check_embedding_init, check_painting_combine
+from .config import (
+    PaintingConfig,
+    check_embedding_init,
+    check_landmarking,
+    check_painting_combine,
+    validate_method_grid,
+    validate_phate_grid,
+)
 
 __all__ = [
     "ConfigFileError",
@@ -164,6 +171,9 @@ _VIZ_KEYS = {
     "admix_within_group_order": "admix_within_group_order",
     "projection_plot_fit_column": "projection_plot_fit_column",
     "projection_plot_project_column": "projection_plot_project_column",
+    # Comparison figures, validated by load_config and build_configs.
+    "method_grid": "method_grid",
+    "phate_grid": "phate_grid",
 }
 _SKIP_KEYS = {
     "pca": "skip_pca",
@@ -320,17 +330,32 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
         else:
             params[key] = value
 
-    if isinstance(params.get("n_landmark"), str):
-        if params["n_landmark"].lower() == "none":
-            params["n_landmark"] = None
-        else:
-            params["n_landmark"] = int(params["n_landmark"])
+    _normalise_embedding_params(params)
+    try:
+        check_landmarking(params)
+    except ValueError as exc:
+        raise ConfigFileError(str(exc)) from None
 
-    if params.get("random_landmarking") and params.get("n_landmark") is None:
-        raise ConfigFileError(
-            "random_landmarking is set but n_landmark is not. Landmarking is disabled "
-            "when n_landmark is none, so random_landmarking would have no effect."
-        )
+    # The grids' parameters are embedding parameters too: the same spelling of
+    # none, and checked here, against the run's own settings they inherit, so a
+    # mistake is reported when the file is read rather than after PCA.
+    method_grid, phate_grid = kwargs.get("method_grid"), kwargs.get("phate_grid")
+    try:
+        if isinstance(method_grid, Mapping):
+            method_grid = {
+                method: _normalise_embedding_params(dict(p)) if isinstance(p, Mapping) else p
+                for method, p in method_grid.items()
+            }
+        if method_grid is not None:
+            validate_method_grid(method_grid, params)
+            kwargs["method_grid"] = method_grid
+        if isinstance(phate_grid, Mapping):
+            phate_grid = _normalise_embedding_params(dict(phate_grid))
+        if phate_grid is not None:
+            validate_phate_grid(phate_grid, params)
+            kwargs["phate_grid"] = phate_grid
+    except ValueError as exc:
+        raise ConfigFileError(str(exc)) from None
 
     try:
         check_embedding_init(
@@ -349,3 +374,25 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
 
     kwargs["embedding_params"] = params
     return kwargs
+
+
+def _normalise_n_landmark(value):
+    if isinstance(value, str):
+        return None if value.lower() == "none" else int(value)
+    return value
+
+
+def _normalise_embedding_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Accept YAML's ``n_landmark: none``, which is a string, as None.
+
+    Also inside a ``phate_grid`` list (``n_landmark: [none, 2000]``). Changes
+    ``params`` in place and returns it.
+    """
+    if "n_landmark" in params:
+        value = params["n_landmark"]
+        params["n_landmark"] = (
+            [_normalise_n_landmark(v) for v in value]
+            if isinstance(value, list)
+            else _normalise_n_landmark(value)
+        )
+    return params

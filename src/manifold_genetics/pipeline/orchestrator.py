@@ -17,6 +17,8 @@ from .config import (
     build_painting_config,
     check_embedding_init,
     check_painting_combine,
+    validate_method_grid,
+    validate_phate_grid,
 )
 from .result import PipelineResult
 from .steps.admixture import run_admixture_step
@@ -28,6 +30,7 @@ from .steps.pca import PCAStepResult, run_pca_step
 from .steps.viz import (
     run_admixture_embedding_viz_step,
     run_admixture_viz_step,
+    run_embedding_grid_viz_step,
     run_embedding_viz_step,
     run_pca_viz_step,
 )
@@ -215,6 +218,8 @@ class Pipeline:
         painting_combine_pcs: int = 10,
         painting_combine_weight: float = 0.5,
         painting_combine_norm: str = "degree",
+        method_grid: Optional[Dict] = None,
+        phate_grid: Optional[Dict] = None,
     ) -> PipelineResult:
         """
         Run full pipeline.
@@ -263,6 +268,10 @@ class Pipeline:
             painting_combine_pcs: PCs taken from each view (default 10)
             painting_combine_weight: The genotype's share in 'kernel_sum'
             painting_combine_norm: 'degree' or 'markov' scaling for 'kernel_sum'
+            method_grid: Optional {method: params} for a figure comparing methods
+                side by side, one column each
+            phate_grid: Optional {param: [values]} for a figure of PHATE over one
+                or two parameters (rows, then columns)
 
         Returns:
             PipelineResult: The typed outputs of every stage that ran. Fields
@@ -271,6 +280,13 @@ class Pipeline:
                 truthiness. Figure families are empty rather than None.
         """
         failed = []
+
+        # Checked before anything runs: a typo here must not surface hours in,
+        # after PCA and admixture.
+        if method_grid is not None:
+            validate_method_grid(method_grid, embedding_params)
+        if phate_grid is not None:
+            validate_phate_grid(phate_grid, embedding_params)
 
         io = self._io
         pca_cfg = PCAConfig(
@@ -312,6 +328,8 @@ class Pipeline:
             self._viz_config,
             admix_group_column=admix_group_column,
             admix_within_group_order=admix_within_group_order,
+            method_grid=method_grid,
+            phate_grid=phate_grid,
         )
 
         # ---- Step 1: PCA, or haplotype painting in its place ----
@@ -487,6 +505,29 @@ class Pipeline:
                     projection_plot = emb_viz_result.projection_plot
                 failed.extend(emb_viz_result.failed_substeps)
 
+        # ---- Step 4.2: Embedding comparison grids (each panel is its own embedding) ----
+        embedding_grid_figures = ()
+        if not skip_visualization and (method_grid or phate_grid):
+            logger.info("=" * 70)
+            logger.info("STEP 4.2: EMBEDDING GRIDS")
+            logger.info("=" * 70)
+
+            grid_result = _run_viz(
+                "embedding_grid_viz",
+                failed,
+                lambda: run_embedding_grid_viz_step(
+                    io,
+                    viz_cfg,
+                    pca=r_pca,
+                    input_mode=embedding_input,
+                    run_method=embedding,
+                    run_params=embedding_params,
+                ),
+            )
+            if grid_result is not None:
+                embedding_grid_figures = tuple(grid_result.figures)
+                failed.extend(grid_result.failed_substeps)
+
         # ---- Step 4.5: Admixture-Colored Embedding Visualization (requires embedding) ----
         if not skip_admixture_visualization and not skip_embedding and not skip_admixture:
             logger.info("=" * 70)
@@ -559,6 +600,7 @@ class Pipeline:
             fit_embedding_figures=fit_embedding_figures,
             embedding_figures=embedding_figures,
             projection_plot=projection_plot,
+            embedding_grid_figures=embedding_grid_figures,
             admixture_figures=admixture_figures,
             failed_steps=tuple(failed),
         )

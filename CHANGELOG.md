@@ -45,6 +45,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cohort). Results on HGDP+1KGP are in `docs/painting.md`. These may change or
   go away.
 
+- **Comparison grids in a pipeline run.** Two optional keys in the config's
+  `visualization` section. `method_grid` maps methods to their parameters
+  (`phate: {knn: 25}`, `umap: {n_neighbors: 15}`, `tsne: {perplexity: 30}`)
+  and draws them side by side; `phate_grid` sweeps PHATE over one or two
+  parameters (`knn: [5, 25, 100]`, `t: [3, 10, auto]`) as rows and columns.
+  Each panel embeds the same PCA coordinates as the run (the painting's when
+  painting is enabled), the grid shares one
+  legend, and one figure is written per colormap column to
+  `figures/embeddings/grids/`, with the panel embeddings in
+  `embeddings/grids/`. A failed panel is drawn empty and reported, not fatal.
+  Library users get `plot_embedding_grid`. PHATE panels in either grid use the
+  run's landmarking unless the grid sets it, and grid parameters are checked
+  like the `embedding` section's.
+
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published
   `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)
@@ -194,6 +208,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   image it just built, and checks the PCA, embedding and figures come back.
 
 ### Fixed
+
+- **`setup` completes on macOS.** flashpca is published only for Linux x86-64,
+  so `manifold-genetics setup` stopped with an error at the flashpca download
+  and never fetched `plink`. On a platform without a flashpca build it now
+  skips flashpca with a message (the default python PCA backend needs no
+  binary) and fetches the other tools. Every tool is attempted even when one
+  fails, and the exit status is non-zero only for a real failure.
 
 - **PCA pair grids fill the figure.** `plot-pca` drew every figure on a
   5 x 5 grid and hid the unused panels, so 20 PCs (10 pairs) filled two rows

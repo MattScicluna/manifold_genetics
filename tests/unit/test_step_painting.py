@@ -562,3 +562,35 @@ def test_paint_subcommand(painted, monkeypatch, capsys):
 
     assert list(pd.read_csv(out).columns) == ["sample_id", "dim_1", "dim_2"]
     assert "Shape: (6, 2)" in capsys.readouterr().out
+
+
+def test_embedding_grids_embed_the_painting_coordinates(painted, monkeypatch):
+    """phate_grid / method_grid take the painting's PCA when painting is on."""
+    import manifold_genetics.pipeline.orchestrator as orch
+
+    tmp_path, pbwt = painted
+    monkeypatch.setenv("MANIFOLD_GENETICS_TOOL_DIR", str(tmp_path / "bin"))
+    write_fam(tmp_path / "fit", ["A1", "A2", "B1", "B2"])
+    write_fam(tmp_path / "project", SAMPLES)
+
+    seen = {}
+
+    def fake_grids(io, viz, *, pca, **kwargs):
+        seen["pca"], seen["viz"] = pca, viz
+        return None
+
+    monkeypatch.setattr(orch, "run_pca_step", lambda *a, **k: pytest.fail("genotype PCA ran"))
+    monkeypatch.setattr(orch, "run_embedding_grid_viz_step", fake_grids)
+
+    _run_painting_pipeline(
+        tmp_path,
+        skip_embedding=True,
+        skip_visualization=False,
+        phate_grid={"knn": [2, 3], "t": [5, "auto"]},
+        method_grid={"phate": {"knn": 2}, "umap": {"n_neighbors": 3}},
+    )
+
+    out = tmp_path / "out" / "painting"
+    assert seen["pca"].project_pca == out / "project_painting_hc_pca_2.csv"
+    assert seen["pca"].fit_pca == out / "fit_painting_hc_pca_2.csv"
+    assert seen["viz"].phate_grid == {"knn": [2, 3], "t": [5, "auto"]}
