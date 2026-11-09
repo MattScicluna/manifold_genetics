@@ -248,6 +248,11 @@ class PHATE(EmbeddingBase):
         return self._format_output(embedding, sample_ids, output_path)
 
 
+def _check_genotype_weight(weight) -> None:
+    if isinstance(weight, bool) or not 0.0 <= weight <= 1.0:
+        raise ValueError(f"The genotype weight must be in [0, 1], got {weight!r}")
+
+
 def mix_kernels(K_genotype, K_painting, weight: float):
     """``weight * K_genotype / d_genotype + (1 - weight) * K_painting / d_painting``.
 
@@ -262,8 +267,7 @@ def mix_kernels(K_genotype, K_painting, weight: float):
     K_g, K_p = sparse.csr_matrix(K_genotype), sparse.csr_matrix(K_painting)
     if K_g.shape != K_p.shape:
         raise ValueError(f"The kernels differ in shape: {K_g.shape} and {K_p.shape}")
-    if isinstance(weight, bool) or not 0.0 <= weight <= 1.0:
-        raise ValueError(f"The genotype weight must be in [0, 1], got {weight!r}")
+    _check_genotype_weight(weight)
     K = weight * (K_g / float(K_g.sum(axis=1).mean())) + (1.0 - weight) * (
         K_p / float(K_p.sum(axis=1).mean())
     )
@@ -300,8 +304,7 @@ class GenotypePaintingPHATE(PHATE):
                 "PHATE on mixed genotype and painting affinities is exact only: set "
                 f"n_landmark to none (got {self.n_landmark})"
             )
-        if isinstance(genotype_weight, bool) or not 0.0 <= genotype_weight <= 1.0:
-            raise ValueError(f"The genotype weight must be in [0, 1], got {genotype_weight!r}")
+        _check_genotype_weight(genotype_weight)
         self.genotype = genotype
         self.genotype_weight = float(genotype_weight)
         self.painting_knn = int(painting_knn)

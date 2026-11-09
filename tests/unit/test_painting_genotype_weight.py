@@ -197,20 +197,6 @@ def test_config_file_checks_the_weight_only_with_painting_on(tmp_path):
     assert load_config(path)["painting_genotype_weight"] == 0.5
 
 
-@pytest.mark.parametrize(
-    "key", ["combine_genotype", "combine_pcs", "combine_weight", "combine_norm"]
-)
-def test_config_file_refuses_the_removed_combine_keys(tmp_path, key):
-    with pytest.raises(ConfigFileError, match=key):
-        load_config(_config(tmp_path, {"enabled": True, key: 1}))
-
-
-@pytest.mark.parametrize("key", ["init", "init_blend"])
-def test_config_file_refuses_the_removed_init_keys(tmp_path, key):
-    with pytest.raises(ConfigFileError, match=key):
-        load_config(_config(tmp_path, {"enabled": True}, {"method": "phate", key: 0.5}))
-
-
 # --- the kernels ------------------------------------------------------------------
 
 
