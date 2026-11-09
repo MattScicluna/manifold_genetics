@@ -71,9 +71,10 @@ def test_genotype_weight_refuses_anything_else(weight):
         build_painting_config(genotype_weight=weight)
 
 
-def test_painting_knn_defaults_to_30_and_must_be_a_positive_integer():
-    assert build_painting_config().knn == PAINTING_DEFAULT_KNN == 30
-    assert build_painting_config(knn=10).knn == 10
+def test_painting_knn_defaults_to_5_and_must_be_a_positive_integer():
+    assert build_painting_config().knn is None
+    assert build_painting_config().mixing_knn == PAINTING_DEFAULT_KNN == 5
+    assert build_painting_config(knn=10).mixing_knn == 10
     for bad in (0, -3, 2.5, "ten", True):
         with pytest.raises(ValueError, match="painting knn must be a positive integer"):
             build_painting_config(knn=bad)
@@ -248,6 +249,21 @@ def test_mix_kernels_validates():
         mix_kernels(eye, np.eye(4), 0.5)
 
 
+def test_only_the_mixed_graph_is_checked_for_connectivity():
+    """A small painting knn splits the painting's own graph, as expected. PHATE
+    warns only when the mixed graph is disconnected."""
+    import warnings
+
+    paint = blobs(0, spread=50.0)  # four far-apart groups, split at painting knn 3
+    kwargs = dict(genotype_weight=0.5, painting_knn=3, **PHATE_PARAMS)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        GenotypePaintingPHATE(genotype=blobs(5, spread=0.5), **kwargs).fit(paint)
+    assert not [w for w in caught if "disconnected" in str(w.message)]
+    with pytest.warns(RuntimeWarning, match="Graph is disconnected"):
+        GenotypePaintingPHATE(genotype=blobs(5, spread=50.0), **kwargs).fit(paint)
+
+
 @pytest.mark.parametrize("weight, view", [(1.0, "genotype"), (0.0, "painting")])
 def test_weight_one_or_zero_reproduces_single_view_phate(weight, view):
     geno, paint = blobs(5), blobs(0)
@@ -360,14 +376,33 @@ def _run(tmp_path, cohorts, monkeypatch, real_embedding=False, painting=True, **
     return seen
 
 
-def test_weight_zero_embeds_the_painting_with_painting_knn(tmp_path, cohorts, monkeypatch):
+def test_weight_zero_embeds_the_painting_with_embedding_knn(tmp_path, cohorts, monkeypatch):
     _, paint = cohorts
     seen = _run(tmp_path, cohorts, monkeypatch, embedding_params={"knn": 100})
     assert (seen["pca_runs"], seen["paint_runs"]) == (0, 1)
     assert seen["pca"].project_pca == paint.project_pca
-    assert seen["emb"].params == {"knn": PAINTING_DEFAULT_KNN, "t": PAINTING_DEFAULT_T}
-    seen = _run(tmp_path, cohorts, monkeypatch, painting_knn=12)
-    assert seen["emb"].params["knn"] == 12
+    assert seen["emb"].params == {"knn": 100, "t": PAINTING_DEFAULT_T}
+    seen = _run(tmp_path, cohorts, monkeypatch, painting_knn=12, embedding_params={"knn": 100})
+    assert seen["emb"].params == {"knn": 100, "t": PAINTING_DEFAULT_T}
+
+
+@pytest.mark.parametrize("weight", [0, 1])
+def test_painting_knn_is_reported_unused_outside_mixing(
+    tmp_path, cohorts, monkeypatch, caplog, weight
+):
+    caplog.set_level("INFO")
+    _run(tmp_path, cohorts, monkeypatch, painting_genotype_weight=weight, painting_knn=12)
+    assert "painting knn 12 is unused" in caplog.text
+    caplog.clear()
+    _run(tmp_path, cohorts, monkeypatch, painting_genotype_weight=weight)
+    assert "is unused" not in caplog.text
+
+
+def test_weight_between_defaults_painting_knn_to_5(tmp_path, cohorts, monkeypatch, caplog):
+    caplog.set_level("INFO")
+    seen = _run(tmp_path, cohorts, monkeypatch, painting_genotype_weight=0.5)
+    assert seen["emb"].params[GENOTYPE_KERNEL_PARAM].painting_knn == 5
+    assert "is unused" not in caplog.text
 
 
 def test_weight_zero_leaves_other_methods_alone(tmp_path, cohorts, monkeypatch):
@@ -474,10 +509,17 @@ def _embedded(seen):
     return pd.read_csv(seen["result"].embedding_file, dtype={"sample_id": str})
 
 
-def test_weight_zero_is_plain_painting_phate(tmp_path, cohorts, monkeypatch):
+def test_weight_zero_is_plain_painting_phate_with_embedding_knn(tmp_path, cohorts, monkeypatch):
     _, paint = cohorts
-    seen = _run(tmp_path, cohorts, monkeypatch, real_embedding=True)
-    expected = PHATE(knn=PAINTING_DEFAULT_KNN, t=PAINTING_DEFAULT_T, n_landmark=None)
+    seen = _run(
+        tmp_path,
+        cohorts,
+        monkeypatch,
+        real_embedding=True,
+        painting_knn=5,
+        embedding_params={"knn": 20},
+    )
+    expected = PHATE(knn=20, t=PAINTING_DEFAULT_T, n_landmark=None)
     expected.fit(paint.project_pca)
     pd.testing.assert_frame_equal(_embedded(seen), expected.transform(paint.project_pca))
 

@@ -32,7 +32,7 @@ A config looks like::
       enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
       method: hc               # or finestructure
       genotype_weight: 0       # 0 painting only, 1 genotype PCA only
-      knn: 30                  # the painting kernel's PHATE knn
+      knn: 5                   # the painting kernel's PHATE knn, used only when mixing
       missing: error           # or drop: leave out cohort samples the VCFs lack
       pbwt_dir: shared/pbwt    # optional; share pbwt's output between runs
 

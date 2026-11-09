@@ -38,10 +38,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   K = w · K_genotype / d_genotype + (1 − w) · K_painting / d_painting,
   symmetrized, as a precomputed affinity: K_genotype is PHATE's alpha-decay
   kernel on the top 10 genotype PCs with `embedding: knn`, K_painting the same
-  kernel on the painting coordinates with `painting: knn` (default 30), and
-  each is divided by its mean degree d. At 0 no genotype PCA runs and PHATE
-  embeds the painting with `painting: knn`, and at 1 the run embeds the top 10
-  genotype PCs and does not paint. Between 0 and 1 the run must be exact PHATE
+  kernel on the painting coordinates with `painting: knn` (default 5), and
+  each is divided by its mean degree d. `painting: knn` applies only between
+  0 and 1: at 0 no genotype PCA runs and PHATE embeds the painting with
+  `embedding: knn` as before, and at 1 the run embeds the top 10 genotype PCs
+  and does not paint. Set at 0 or 1, `painting: knn` is unused and the run
+  logs that. PHATE's warning that the painting's own graph is disconnected,
+  expected at a small `painting: knn`, is silenced, since only the
+  mixed graph has to be connected. Between 0 and 1 the run must be exact PHATE
   on one cohort: other methods, `input_mode: both` (the `projection` preset),
   landmarks and non-PHATE `method_grid` panels are refused when the config is
   read. Grid PHATE panels mix the same kernels. When painting provides the

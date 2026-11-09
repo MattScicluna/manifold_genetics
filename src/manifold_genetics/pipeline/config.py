@@ -19,9 +19,9 @@ _PAINTING_MISSING = ("error", "drop")
 # Top genotype PCs the genotype kernel is built on when painting.genotype_weight
 # is above 0, and that a weight of 1 embeds.
 GENOTYPE_WEIGHT_COMPONENTS = 10
-# painting.knn: the painting kernel's nearest neighbors when PHATE embeds the
-# painting, alone (genotype_weight 0) or mixed with the genotype PCA.
-PAINTING_DEFAULT_KNN = 30
+# painting.knn: the painting kernel's nearest neighbors when PHATE mixes it with
+# the genotype kernel (0 < genotype_weight < 1). Painting alone takes embedding.knn.
+PAINTING_DEFAULT_KNN = 5
 # The embedding params key that carries a GenotypeKernel to build_embedding_model
 # and to the grids' PHATE panels. Set by the pipeline, never by a config file.
 GENOTYPE_KERNEL_PARAM = "genotype_kernel"
@@ -85,9 +85,12 @@ class PaintingConfig:
     ``GENOTYPE_WEIGHT_COMPONENTS`` genotype PCs and skips painting. In between
     is PHATE only (``check_genotype_weight``).
 
-    ``knn`` is the painting kernel's number of nearest neighbors whenever PHATE
-    embeds the painting, alone or mixed. ``embedding.knn`` is the genotype
-    kernel's.
+    ``knn`` is the painting kernel's number of nearest neighbors when PHATE
+    mixes the two kernels, ``PAINTING_DEFAULT_KNN`` when ``None``. A small
+    value keeps the painting's local structure without the genotype kernel's
+    broad neighborhoods, which ``embedding.knn`` sets. At weights 0 and 1 there
+    is no painting kernel to mix, so PHATE takes ``embedding.knn`` and ``knn``
+    is unused.
     """
 
     enabled: bool = False
@@ -97,7 +100,7 @@ class PaintingConfig:
     missing: str = "error"
     pbwt_dir: Optional[Path] = None
     genotype_weight: float = 0.0
-    knn: int = PAINTING_DEFAULT_KNN
+    knn: Optional[int] = None
 
     @property
     def paints(self) -> bool:
@@ -108,6 +111,11 @@ class PaintingConfig:
     def mixes(self) -> bool:
         """Whether the embedding mixes the genotype and painting kernels: 0 < w < 1."""
         return self.enabled and 0 < self.genotype_weight < 1
+
+    @property
+    def mixing_knn(self) -> int:
+        """The painting kernel's knn when mixing: ``knn``, or the default when unset."""
+        return PAINTING_DEFAULT_KNN if self.knn is None else self.knn
 
 
 @dataclass(frozen=True)
@@ -359,7 +367,7 @@ def build_configs(
     painting_missing: str = "error",
     painting_pbwt_dir=None,
     painting_genotype_weight: float = 0.0,
-    painting_knn: int = PAINTING_DEFAULT_KNN,
+    painting_knn: Optional[int] = None,
     n_pcs: int = 50,
     force_pca: bool = False,
     k_min: int = 2,
@@ -516,7 +524,7 @@ def build_painting_config(
     missing: str = "error",
     pbwt_dir=None,
     genotype_weight: float = 0.0,
-    knn: int = PAINTING_DEFAULT_KNN,
+    knn: Optional[int] = None,
 ) -> PaintingConfig:
     """Validate the painting settings into a ``PaintingConfig``. No filesystem access.
 
@@ -525,7 +533,7 @@ def build_painting_config(
             chromosome with no known genetic length, an unparseable chromosome list, or painting
             enabled without a ``phased_vcf`` containing ``{chr}``, or a
             ``genotype_weight`` that is not a number in [0, 1], or a ``knn``
-            that is not a positive integer.
+            that is neither None nor a positive integer.
     """
     # Imported here: the painting package pulls in sklearn, which the rest of
     # this module has no need for.
@@ -550,7 +558,7 @@ def build_painting_config(
             f"painting genotype_weight must be a number from 0 (painting only) to 1 "
             f"(genotype PCA only), got {genotype_weight!r}"
         )
-    if not _is_positive_int(knn):
+    if knn is not None and not _is_positive_int(knn):
         raise ValueError(f"painting knn must be a positive integer, got {knn!r}")
     names = tuple(parse_chromosomes(chromosomes))
     if method == "hc":

@@ -149,12 +149,11 @@ The example leaves out the other keys a config accepts:
   `drop`, for cohort samples the phased VCFs lack), `pbwt_dir` (where pbwt's
   output goes, to share it between runs), `genotype_weight` (0, the default,
   to 1: the genotype PCA kernel's share of PHATE's affinity, PHATE only
-  between 0 and 1) and `knn` (30, the default: the painting kernel's PHATE
-  knn). When `enabled` is true, the painting coordinates replace the genotype
-  PCA as the embedding input, PHATE's `t` defaults to 10 unless the
-  `embedding` section or the preset sets it, and PHATE builds the painting's
-  graph with `painting: knn` rather than `embedding: knn`. See
-  [Haplotype painting](painting.md).
+  between 0 and 1) and `knn` (5, the default: the painting kernel's PHATE
+  knn, used only when `genotype_weight` is between 0 and 1). When `enabled` is
+  true, the painting coordinates replace the genotype PCA as the embedding
+  input, and PHATE's `t` defaults to 10 unless the `embedding` section or the
+  preset sets it. See [Haplotype painting](painting.md).
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
 - `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
 - `visualization`: `admix_group_column`, `admix_within_group_order`,

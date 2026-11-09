@@ -6,6 +6,7 @@ Wrapper for the PHATE algorithm with a consistent API.
 
 import logging
 import os
+import warnings
 from pathlib import Path
 from typing import Optional, Union
 
@@ -307,7 +308,13 @@ class GenotypePaintingPHATE(PHATE):
         self.genotype_components = int(genotype_components)
 
     def view_kernel(self, X: np.ndarray, knn: int):
-        """The affinity matrix PHATE itself builds on ``X`` with ``knn``."""
+        """The affinity matrix PHATE itself builds on ``X`` with ``knn``.
+
+        PHATE's warning that this one view's graph is disconnected is silenced:
+        a small ``painting_knn`` splits the painting's graph into populations by
+        design, and only the mixed graph needs to be connected, which PHATE
+        checks, and warns about, when it fits the mixed kernel.
+        """
         view = phate.PHATE(
             knn=knn,
             decay=self.decay,
@@ -317,7 +324,9 @@ class GenotypePaintingPHATE(PHATE):
             n_jobs=self.n_jobs,
             verbose=0,
         )
-        view.fit(X)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Graph is disconnected", RuntimeWarning)
+            view.fit(X)
         return view.graph.kernel
 
     def _genotype_rows(self) -> np.ndarray:

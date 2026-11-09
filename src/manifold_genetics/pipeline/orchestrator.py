@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Union
 
 from .config import (
     GENOTYPE_KERNEL_PARAM,
-    PAINTING_DEFAULT_KNN,
     PAINTING_DEFAULT_T,
     AdmixtureConfig,
     EmbeddingConfig,
@@ -231,7 +230,7 @@ class Pipeline:
         painting_missing: str = "error",
         painting_pbwt_dir: Optional[Union[str, Path]] = None,
         painting_genotype_weight: float = 0.0,
-        painting_knn: int = PAINTING_DEFAULT_KNN,
+        painting_knn: Optional[int] = None,
         method_grid: Optional[Dict] = None,
         phate_grid: Optional[Dict] = None,
     ) -> PipelineResult:
@@ -281,8 +280,10 @@ class Pipeline:
                 PCA only). Between the two, PHATE runs on the weighted sum of
                 the two kernels, so only exact PHATE on one cohort (see
                 docs/painting.md).
-            painting_knn: The painting kernel's PHATE knn (default 30), alone
-                or mixed. ``embedding_params["knn"]`` is the genotype kernel's.
+            painting_knn: The painting kernel's PHATE knn when mixing, for a
+                ``genotype_weight`` between 0 and 1 (default
+                ``PAINTING_DEFAULT_KNN``, 5). ``embedding_params["knn"]`` is the
+                genotype kernel's, and the only knn at weights 0 and 1.
             method_grid: Optional {method: params} for a figure comparing methods
                 side by side, one column each
             phate_grid: Optional {param: [values]} for a figure of PHATE over one
@@ -340,10 +341,13 @@ class Pipeline:
         if painting_cfg.paints and embedding == "phate" and "t" not in params:
             logger.info(f"Painting input: PHATE t defaults to {PAINTING_DEFAULT_T}")
             embedding_params = {**params, "t": PAINTING_DEFAULT_T}
-        # Painting alone: the painting kernel, PHATE's only one, takes painting.knn.
-        if painting_cfg.paints and weight == 0 and embedding == "phate":
-            logger.info(f"Painting input: PHATE knn is painting.knn, {painting_cfg.knn}")
-            embedding_params = {**(embedding_params or {}), "knn": painting_cfg.knn}
+        # painting.knn is the painting kernel's only when mixing. At weights 0
+        # and 1 PHATE has one kernel, built with embedding.knn.
+        if painting_cfg.enabled and not painting_cfg.mixes and painting_cfg.knn is not None:
+            logger.info(
+                f"painting knn {painting_cfg.knn} is unused: it applies only when "
+                f"genotype_weight is between 0 and 1 (here {weight:g})"
+            )
         # admix_group_column / admix_within_group_order are run()-time parameters,
         # not init-time ones — self._viz_config only carries the init-time
         # projection-plot columns, so those two fields are overridden per call.
@@ -410,7 +414,7 @@ class Pipeline:
                 )
             else:
                 kernel = GenotypeKernel(
-                    genotype=geno_input, weight=weight, painting_knn=painting_cfg.knn
+                    genotype=geno_input, weight=weight, painting_knn=painting_cfg.mixing_knn
                 )
                 embedding_params = {**(embedding_params or {}), GENOTYPE_KERNEL_PARAM: kernel}
 

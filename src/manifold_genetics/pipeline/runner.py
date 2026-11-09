@@ -38,7 +38,7 @@ def run_pipeline(
     painting_missing: str = "error",
     painting_pbwt_dir: Optional[Union[str, Path]] = None,
     painting_genotype_weight: float = 0.0,
-    painting_knn: int = 30,
+    painting_knn: Optional[int] = None,
     # PCA parameters
     n_pcs: int = 50,
     pca_backend: str = "python",
@@ -113,7 +113,8 @@ def run_pipeline(
         painting_genotype_weight: The genotype kernel's share of PHATE's
             affinity, from 0 (painting only, the default) to 1 (genotype PCA
             only). See docs/painting.md.
-        painting_knn: The painting kernel's PHATE knn (default 30)
+        painting_knn: The painting kernel's PHATE knn when mixing, for a
+            ``genotype_weight`` between 0 and 1 (default 5). Unused otherwise.
         n_pcs: Number of principal components (default: 50)
         pca_backend: 'flashpca' (external binary) or 'python' (in process)
         max_fit_memory_gb: GB budget for the dense standardised matrix when
