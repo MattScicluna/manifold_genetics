@@ -32,18 +32,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`project_painting_<method>_pca_<n>.csv`), and `painting: pbwt_dir` lets
   runs share pbwt's output. See `docs/painting.md`.
 
-- **EXPERIMENTAL: combining painting with genotype PCA.** Two ways to bring
-  back the continental structure painting PHATE loses, both of which also run
-  the genotype PCA that painting replaces. `embedding: init: genotype` starts
-  painting PHATE's final MDS from the genotype PHATE layout (optionally on a
-  blend of the two distance matrices, `init_blend`), and writes that layout and
-  a Procrustes report next to the embedding. `painting: combine_genotype`
-  combines the top `combine_pcs` PCs of each: `concat` embeds them side by side
-  with each block scaled to equal weight (any method), `kernel_sum` adds
-  PHATE's two affinity matrices (`combine_weight`, `combine_norm`) and
-  `kernel_product` uses alternating diffusion (both PHATE only, exact, one
-  cohort). Results on HGDP+1KGP are in `docs/painting.md`. These may change or
-  go away.
+- **`painting: genotype_weight` mixes the genotype PCA back in.** A number from
+  0 (painting only, the default) to 1 (genotype PCA only). In between, the top
+  10 components of each are embedded side by side, each block scaled to unit
+  total norm on the fit cohort and then by √w and √(1 − w), so the weight is
+  the genotype's share of squared distance. It works with every embedding
+  method. At 0 no genotype PCA runs, and at 1 no painting runs. When painting
+  provides the embedding input, PHATE's `t` defaults to 10 unless the config or
+  its preset sets it. Scores on HGDP+1KGP and a recipe for sweeping the method
+  and weight with one shared `pbwt_dir` are in `docs/painting.md`.
 
 - **Comparison grids in a pipeline run.** Two optional keys in the config's
   `visualization` section. `method_grid` maps methods to their parameters

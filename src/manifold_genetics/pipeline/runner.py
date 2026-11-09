@@ -37,10 +37,7 @@ def run_pipeline(
     force_painting: bool = False,
     painting_missing: str = "error",
     painting_pbwt_dir: Optional[Union[str, Path]] = None,
-    painting_combine_genotype: Optional[str] = None,
-    painting_combine_pcs: int = 10,
-    painting_combine_weight: float = 0.5,
-    painting_combine_norm: str = "degree",
+    painting_genotype_weight: float = 0.0,
     # PCA parameters
     n_pcs: int = 50,
     pca_backend: str = "python",
@@ -112,13 +109,8 @@ def run_pipeline(
             its cohort with a warning.
         painting_pbwt_dir: Where pbwt's per-chromosome output goes (default
             ``<output_dir>/painting/pbwt``). Share it between runs to paint once.
-        painting_combine_genotype: EXPERIMENTAL. Also run the genotype PCA and
-            combine it with the painting: 'concat', 'kernel_sum' or
-            'kernel_product' (see docs/painting.md). None is off.
-        painting_combine_pcs: PCs taken from each view (default 10)
-        painting_combine_weight: The genotype's share in 'kernel_sum' (default 0.5)
-        painting_combine_norm: 'degree' (default) or 'markov', how 'kernel_sum'
-            scales each kernel before adding them
+        painting_genotype_weight: The genotype PCA's share, from 0 (painting
+            only, the default) to 1 (genotype PCA only). See docs/painting.md.
         n_pcs: Number of principal components (default: 50)
         pca_backend: 'flashpca' (external binary) or 'python' (in process)
         max_fit_memory_gb: GB budget for the dense standardised matrix when
@@ -258,10 +250,7 @@ def run_pipeline(
         force_painting=force_painting,
         painting_missing=painting_missing,
         painting_pbwt_dir=painting_pbwt_dir,
-        painting_combine_genotype=painting_combine_genotype,
-        painting_combine_pcs=painting_combine_pcs,
-        painting_combine_weight=painting_combine_weight,
-        painting_combine_norm=painting_combine_norm,
+        painting_genotype_weight=painting_genotype_weight,
         method_grid=method_grid,
         phate_grid=phate_grid,
     )

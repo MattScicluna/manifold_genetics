@@ -10,21 +10,20 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 from .config import (
+    PAINTING_DEFAULT_T,
     AdmixtureConfig,
     EmbeddingConfig,
     PCAConfig,
     build_configs,
     build_painting_config,
-    check_embedding_init,
-    check_painting_combine,
     validate_method_grid,
     validate_phate_grid,
 )
 from .result import PipelineResult
 from .steps.admixture import run_admixture_step
-from .steps.embedding import KernelCombine, run_embedding_step
+from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
-from .steps.painting import combine_with_genotype, run_painting_step
+from .steps.painting import run_painting_step, weight_with_genotype
 from .steps.paths import metrics_output_paths, painting_output_paths, pca_output_paths
 from .steps.pca import PCAStepResult, run_pca_step
 from .steps.viz import (
@@ -185,6 +184,38 @@ class Pipeline:
         self.projection_plot_fit_column = projection_plot_fit_column
         self.projection_plot_project_column = projection_plot_project_column
 
+    def _weight_with_genotype(self, r_pca, pca_cfg, painting_cfg, skip_pca) -> PCAStepResult:
+        """Mix the genotype PCA into ``r_pca`` (the painting's, or with weight 1
+        the genotype PCA itself) by ``painting_cfg.genotype_weight``."""
+        io = self._io
+        geno_paths = pca_output_paths(io, pca_cfg)
+        if not painting_cfg.paints:
+            r_geno, r_paint = r_pca, None
+        elif skip_pca:
+            r_geno, r_paint = _resolve_skipped_pca(geno_paths), r_pca
+        else:
+            logger.info("=" * 70)
+            logger.info("STEP 1 (genotype_weight): GENOTYPE PCA ALONGSIDE PAINTING")
+            logger.info("=" * 70)
+            r_geno, r_paint = run_pca_step(io, pca_cfg), r_pca
+        paths = painting_output_paths(io, pca_cfg, painting_cfg)
+        if r_geno.fit_pca is None or (r_paint is not None and r_paint.fit_pca is None):
+            raise RuntimeError(
+                "painting genotype_weight scales each view on the fit cohort, so it needs "
+                f"the fit cohort's genotype PCA ({geno_paths['fit_pca']}) and painting "
+                f"({paths['fit_pca']}) coordinates, which were not found."
+            )
+        fit, project = weight_with_genotype(
+            genotype_fit=r_geno.fit_pca,
+            genotype_project=r_geno.project_pca,
+            painting_fit=None if r_paint is None else r_paint.fit_pca,
+            painting_project=None if r_paint is None else r_paint.project_pca,
+            weight=painting_cfg.genotype_weight,
+            fit_output=paths["fit_weighted"],
+            project_output=paths["project_weighted"],
+        )
+        return PCAStepResult(fit_pca=fit, project_pca=project, skipped=r_pca.skipped)
+
     def run(
         self,
         n_pcs: int = 50,
@@ -214,10 +245,7 @@ class Pipeline:
         force_painting: bool = False,
         painting_missing: str = "error",
         painting_pbwt_dir: Optional[Union[str, Path]] = None,
-        painting_combine_genotype: Optional[str] = None,
-        painting_combine_pcs: int = 10,
-        painting_combine_weight: float = 0.5,
-        painting_combine_norm: str = "degree",
+        painting_genotype_weight: float = 0.0,
         method_grid: Optional[Dict] = None,
         phate_grid: Optional[Dict] = None,
     ) -> PipelineResult:
@@ -262,12 +290,10 @@ class Pipeline:
                 it out of its cohort with a warning.
             painting_pbwt_dir: Where pbwt's per-chromosome output goes (default
                 ``<output_dir>/painting/pbwt``)
-            painting_combine_genotype: EXPERIMENTAL. Also run the genotype PCA
-                and combine it with the painting: 'concat', 'kernel_sum' or
-                'kernel_product' (see docs/painting.md). None is off.
-            painting_combine_pcs: PCs taken from each view (default 10)
-            painting_combine_weight: The genotype's share in 'kernel_sum'
-            painting_combine_norm: 'degree' or 'markov' scaling for 'kernel_sum'
+            painting_genotype_weight: The genotype PCA's share of the embedding
+                input, from 0 (painting only, the default) to 1 (genotype PCA
+                only). Between the two, the top 10 components of each are
+                embedded side by side (see docs/painting.md).
             method_grid: Optional {method: params} for a figure comparing methods
                 side by side, one column each
             phate_grid: Optional {param: [values]} for a figure of PHATE over one
@@ -305,20 +331,22 @@ class Pipeline:
             force=force_painting,
             missing=painting_missing,
             pbwt_dir=painting_pbwt_dir,
-            combine_genotype=painting_combine_genotype,
-            combine_pcs=painting_combine_pcs,
-            combine_weight=painting_combine_weight,
-            combine_norm=painting_combine_norm,
-            n_pcs=n_pcs,
+            genotype_weight=painting_genotype_weight,
         )
-        check_embedding_init(embedding, embedding_params, painting_cfg.enabled)
-        check_painting_combine(painting_cfg, embedding, embedding_input, embedding_params)
+        weight = painting_cfg.genotype_weight if painting_cfg.enabled else 0.0
         # Painting stands in for PCA: its coordinates go wherever the PCA's
         # would, so the PCA figures and the embedding read them unchanged.
-        if painting_cfg.enabled:
+        # A genotype weight of 1 replaces the painting outright, so it is skipped.
+        if painting_cfg.paints:
             pca_paths = painting_output_paths(io, pca_cfg, painting_cfg)
         else:
             pca_paths = pca_output_paths(io, pca_cfg)
+        # Painting input embeds better with PHATE t 10 than with automatic t, so
+        # it gets t 10 unless the config (or its preset) sets t.
+        params = dict(embedding_params or {})
+        if painting_cfg.paints and embedding == "phate" and "t" not in params:
+            logger.info(f"Painting input: PHATE t defaults to {PAINTING_DEFAULT_T}")
+            embedding_params = {**params, "t": PAINTING_DEFAULT_T}
         # admix_group_column / admix_within_group_order are run()-time parameters,
         # not init-time ones — self._viz_config only carries the init-time
         # projection-plot columns, so those two fields are overridden per call.
@@ -337,7 +365,7 @@ class Pipeline:
         if skip_pca:
             # Skipped — resolve expected paths so embedding can still run
             r_pca = _resolve_skipped_pca(pca_paths)
-        elif painting_cfg.enabled:
+        elif painting_cfg.paints:
             logger.info("=" * 70)
             logger.info("STEP 1: HAPLOTYPE PAINTING (in place of PCA)")
             logger.info("=" * 70)
@@ -355,46 +383,13 @@ class Pipeline:
 
             r_pca = run_pca_step(io, pca_cfg)
 
-        # EXPERIMENTAL: two options also need the genotype PCA that painting
-        # replaced, computed on the same cohorts at its usual paths.
-        #  * embedding init: genotype starts the painting PHATE from the
-        #    genotype PHATE layout.
-        #  * painting combine_genotype: concat embeds genotype and painting PCs
-        #    side by side, and the kernel modes combine PHATE's two kernels.
-        init_genotype = ((embedding_params or {}).get("init") or "none") == "genotype"
-        r_init_pca = None
-        r_geno = None
-        if (
-            painting_cfg.enabled
-            and not skip_embedding
-            and (init_genotype or painting_cfg.combine_genotype)
-        ):
-            if skip_pca:
-                r_geno = _resolve_skipped_pca(pca_output_paths(io, pca_cfg))
-            else:
-                logger.info("=" * 70)
-                logger.info("STEP 1 (EXPERIMENTAL): GENOTYPE PCA ALONGSIDE PAINTING")
-                logger.info("=" * 70)
-                r_geno = run_pca_step(io, pca_cfg)
-            if init_genotype:
-                r_init_pca = r_geno
-            if painting_cfg.combine_genotype == "concat":
-                if r_geno.fit_pca is None or r_pca.fit_pca is None:
-                    raise RuntimeError(
-                        "painting combine_genotype needs the fit cohort's genotype PCA "
-                        f"({pca_output_paths(io, pca_cfg)['fit_pca']}) and painting "
-                        f"({pca_paths['fit_pca']}) coordinates, which were not found."
-                    )
-                fit_c, project_c = combine_with_genotype(
-                    genotype_fit=r_geno.fit_pca,
-                    genotype_project=r_geno.project_pca,
-                    painting_fit=r_pca.fit_pca,
-                    painting_project=r_pca.project_pca,
-                    n=painting_cfg.combine_pcs,
-                    fit_output=pca_paths["fit_combined"],
-                    project_output=pca_paths["project_combined"],
-                )
-                r_pca = PCAStepResult(fit_pca=fit_c, project_pca=project_c, skipped=r_pca.skipped)
+        # painting.genotype_weight above 0: the genotype PCA and the painting
+        # side by side. Only the embedding and the grids read them.
+        wants_input = not skip_embedding or (
+            not skip_visualization and bool(method_grid or phate_grid)
+        )
+        if weight > 0 and wants_input:
+            r_pca = self._weight_with_genotype(r_pca, pca_cfg, painting_cfg, skip_pca)
 
         # ---- Step 1.5: PCA Visualization (independent of PCA computation) ----
         pca_figures = ()
@@ -470,18 +465,7 @@ class Pipeline:
 
             # PCA outputs may have come from the step or been resolved from disk
             # under --skip-pca; either way the embedding step takes them as a result.
-            extra = {}
-            if r_init_pca is not None:
-                extra["init_pca"] = r_init_pca
-            if (painting_cfg.combine_genotype or "").startswith("kernel"):
-                extra["kernel"] = KernelCombine(
-                    genotype=r_geno,
-                    mode=painting_cfg.combine_genotype,
-                    weight=painting_cfg.combine_weight,
-                    norm=painting_cfg.combine_norm,
-                    n_pcs=painting_cfg.combine_pcs,
-                )
-            r_emb = run_embedding_step(io, emb_cfg, pca=r_pca, **extra)
+            r_emb = run_embedding_step(io, emb_cfg, pca=r_pca)
 
         # ---- Step 4: Embedding Visualization ----
         fit_embedding_figures = ()

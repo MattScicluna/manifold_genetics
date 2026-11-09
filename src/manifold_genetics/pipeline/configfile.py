@@ -31,6 +31,7 @@ A config looks like::
     painting:                  # optional; replaces genotype PCA as the embedding input
       enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
       method: hc               # or finestructure
+      genotype_weight: 0       # 0 painting only, 1 genotype PCA only
       missing: error           # or drop: leave out cohort samples the VCFs lack
       pbwt_dir: shared/pbwt    # optional; share pbwt's output between runs
 
@@ -49,14 +50,7 @@ from typing import Any, Dict, Mapping, Optional, Union
 
 import yaml
 
-from .config import (
-    PaintingConfig,
-    check_embedding_init,
-    check_landmarking,
-    check_painting_combine,
-    validate_method_grid,
-    validate_phate_grid,
-)
+from .config import check_landmarking, validate_method_grid, validate_phate_grid
 
 __all__ = [
     "ConfigFileError",
@@ -158,11 +152,7 @@ _PAINTING_KEYS = {
     "force": "force_painting",
     "missing": "painting_missing",
     "pbwt_dir": "painting_pbwt_dir",
-    # EXPERIMENTAL: combine the genotype PCA with the painting.
-    "combine_genotype": "painting_combine_genotype",
-    "combine_pcs": "painting_combine_pcs",
-    "combine_weight": "painting_combine_weight",
-    "combine_norm": "painting_combine_norm",
+    "genotype_weight": "painting_genotype_weight",
 }
 # Resolved against the config file's directory, like the data section's paths.
 _PAINTING_PATH_KEYS = {"pbwt_dir"}
@@ -199,9 +189,6 @@ _EMBEDDING_PARAMS = {
     "n_neighbors",
     "min_dist",
     "perplexity",
-    # EXPERIMENTAL, PHATE with painting only (see docs/painting.md).
-    "init",
-    "init_blend",
 }
 
 _SECTIONS = {
@@ -354,21 +341,6 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
         if phate_grid is not None:
             validate_phate_grid(phate_grid, params)
             kwargs["phate_grid"] = phate_grid
-    except ValueError as exc:
-        raise ConfigFileError(str(exc)) from None
-
-    try:
-        check_embedding_init(
-            kwargs.get("embedding", "phate"), params, bool(kwargs.get("painting", False))
-        )
-        combine = kwargs.get("painting_combine_genotype")
-        if isinstance(combine, str):
-            check_painting_combine(
-                PaintingConfig(combine_genotype=combine),
-                kwargs.get("embedding", "phate"),
-                kwargs.get("embedding_input", "both"),
-                params,
-            )
     except ValueError as exc:
         raise ConfigFileError(str(exc)) from None
 
