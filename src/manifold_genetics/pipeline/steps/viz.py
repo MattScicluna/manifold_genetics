@@ -17,7 +17,8 @@ the fit/project figures already produced in the same step.
 """
 
 import logging
-from dataclasses import dataclass
+import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Mapping, Optional, Tuple
 
@@ -32,7 +33,14 @@ from ...visualization import (
     visualize,
     visualize_3d,
 )
-from ..config import GRID_INHERITED_PHATE_PARAMS, IOConfig, VizConfig, grid_phate_params
+from ..config import (
+    GENOTYPE_KERNEL_PARAM,
+    GRID_INHERITED_PHATE_PARAMS,
+    GenotypeKernel,
+    IOConfig,
+    VizConfig,
+    grid_phate_params,
+)
 from .admixture import AdmixtureStepResult
 from .embedding import EmbeddingStepResult, run_embedding, select_embedding_inputs
 from .paths import embedding_grid_output_paths, figure_output_paths
@@ -42,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "EmbeddingVizResult",
+    "GridPainting",
     "VizStepResult",
     "plot_pca_pair_grids",
     "run_admixture_embedding_viz_step",
@@ -273,6 +282,64 @@ def run_embedding_viz_step(
 _AXIS_NAMES = {"phate": "PHATE", "umap": "UMAP", "tsne": "t-SNE", "diffusion_map": "DM"}
 
 
+@dataclass(frozen=True)
+class GridPainting:
+    """What ``phate_grid``'s ``genotype_weight`` and ``painting_knn`` axes need.
+
+    ``weight`` and ``painting_knn`` are the run's own, which a panel takes when
+    the grid does not set them. ``genotype`` is the embedded cohort's genotype
+    PCA CSV, for panels between 0 and 1, and ``genotype_top`` the top genotype
+    PCs a panel at weight 1 embeds. ``painting_t_default`` says the run's ``t``
+    is the painting default (``PAINTING_DEFAULT_T``) rather than the config's,
+    so a weight-1 panel, which does not embed the painting, drops it as a run
+    at weight 1 would. ``cache`` holds each view's kernel by knn, shared with
+    the run's own PHATE.
+    """
+
+    weight: float
+    painting_knn: int
+    genotype: Optional[Path] = None
+    genotype_top: Optional[PCAStepResult] = None
+    painting_t_default: bool = False
+    cache: dict = field(default_factory=dict, compare=False, hash=False, repr=False)
+
+
+def _painting_panel(params, overrides, grid, input_mode, inputs, painting: GridPainting):
+    """One painting-axis panel's ``(inputs, params, key, note)``, as a run would set them.
+
+    Weight 0 embeds the painting alone with the panel's ``knn``, and weight 1
+    the top genotype PCs. Neither uses ``painting_knn``. In between, PHATE mixes
+    the genotype kernel into the painting kernel built with ``painting_knn``.
+    ``key`` is the same for panels that would compute the same embedding, the
+    weight-0 and weight-1 panels across a ``painting_knn`` axis. ``note`` says
+    what a weight-0 or weight-1 panel embeds, and that ``painting_knn`` is unused
+    there when the grid sets it.
+    """
+    weight = float(overrides.get("genotype_weight", painting.weight))
+    painting_knn = overrides.get("painting_knn", painting.painting_knn)
+    params = {k: v for k, v in params.items() if k not in ("genotype_weight", "painting_knn")}
+    params.pop(GENOTYPE_KERNEL_PARAM, None)
+    if weight >= 1:
+        if painting.painting_t_default and "t" not in grid:
+            params.pop("t", None)
+        inputs = select_embedding_inputs(input_mode, painting.genotype_top)
+    elif weight > 0:
+        params[GENOTYPE_KERNEL_PARAM] = GenotypeKernel(
+            genotype=painting.genotype,
+            weight=weight,
+            painting_knn=painting_knn,
+            cache=painting.cache,
+        )
+    plain = {k: v for k, v in params.items() if k != GENOTYPE_KERNEL_PARAM}
+    key = (weight, painting_knn if 0 < weight < 1 else None, tuple(sorted(plain.items())))
+    note = None
+    if not 0 < weight < 1:
+        note = "genotype PCA only" if weight >= 1 else "painting only"
+        if "painting_knn" in grid:
+            note += ", painting_knn unused"
+    return inputs, params, key, note
+
+
 def _embed_grid_cell(name, inputs, output_dir, method, params, failed) -> Optional[Path]:
     """Embed one grid panel, or record it as failed and return None.
 
@@ -303,6 +370,22 @@ def _embed_grid_cell(name, inputs, output_dir, method, params, failed) -> Option
     return output
 
 
+def _copy_grid_cell(source, name, output_dir, failed) -> Optional[Path]:
+    """A panel identical to an embedded one: its CSV copied under this panel's name.
+
+    A weight-0 or weight-1 panel does not use ``painting_knn``, so the panels of
+    its row are one embedding. A failed source fails the copy too.
+    """
+    output = output_dir / f"{name}.csv"
+    output.unlink(missing_ok=True)
+    if source is None:
+        failed.append(name)
+        return None
+    shutil.copyfile(source, output)
+    logger.info(f"Embedding grid panel {name!r} is the same embedding as {source.stem!r}")
+    return output
+
+
 def _plot_grid_per_column(grid, labels, colormap_path, output_dir, stem, **kwargs) -> List[Path]:
     """One grid figure per colormap column, as ``visualize`` does for single plots."""
     figures = []
@@ -328,6 +411,7 @@ def run_embedding_grid_viz_step(
     input_mode: str,
     run_method: str = "phate",
     run_params: Optional[Mapping] = None,
+    painting: Optional[GridPainting] = None,
 ) -> VizStepResult:
     """Embed and plot the method-comparison and PHATE-parameter grids.
 
@@ -338,6 +422,12 @@ def run_embedding_grid_viz_step(
     size (``GRID_INHERITED_PHATE_PARAMS``) unless the grid sets them, so a large
     cohort's grid is not computed exactly. When ``run_method`` is PHATE, the
     PHATE grid also starts from the run's other PHATE parameters.
+
+    ``painting`` carries what the PHATE grid's ``genotype_weight`` and
+    ``painting_knn`` axes need. Each such panel is the embedding a run with the
+    panel's weight and painting knn would make (``_painting_panel``). Panels
+    that would compute the same embedding are computed once, and the mixed
+    panels build each view's kernel once (``GridPainting.cache``).
     """
     if not viz.method_grid and not viz.phate_grid:
         return VizStepResult()
@@ -389,9 +479,9 @@ def run_embedding_grid_viz_step(
         (row_key, row_values), (col_key, col_values) = (
             swept if len(swept) == 2 else [(None, [None]), swept[0]]
         )
-        grid = []
+        grid, notes, done = [], [], {}
         for rv in row_values:
-            cells = []
+            cells, cell_notes = [], []
             for cv in col_values:
                 overrides = {**fixed, col_key: cv}
                 name = f"phate_grid_{col_key}-{cv}"
@@ -399,20 +489,36 @@ def run_embedding_grid_viz_step(
                     overrides[row_key] = rv
                     name = f"phate_grid_{row_key}-{rv}_{col_key}-{cv}"
                 params = grid_phate_params(base, overrides)
-                cells.append(
-                    _embed_grid_cell(name, inputs, paths["embeddings"], "phate", params, failed)
+                if painting is None:
+                    cells.append(
+                        _embed_grid_cell(name, inputs, paths["embeddings"], "phate", params, failed)
+                    )
+                    continue
+                cell_inputs, params, key, note = _painting_panel(
+                    params, overrides, viz.phate_grid, input_mode, inputs, painting
                 )
+                cell_notes.append(note)
+                if key in done:
+                    cells.append(_copy_grid_cell(done[key], name, paths["embeddings"], failed))
+                    continue
+                done[key] = _embed_grid_cell(
+                    name, cell_inputs, paths["embeddings"], "phate", params, failed
+                )
+                cells.append(done[key])
             grid.append(cells)
+            notes.append(cell_notes)
+        extra = {"panel_notes": notes} if painting is not None else {}
         figures += _plot_grid_per_column(
             grid,
             labels,
             colormap,
             paths["figures"],
             "phate_grid",
-            row_titles=None if row_key is None else [f"{row_key} = {v}" for v in row_values],
+            row_titles=(None if row_key is None else [f"{row_key} = {v}" for v in row_values]),
             col_titles=[f"{col_key} = {v}" for v in col_values],
             axis_names=[["PHATE"] * len(col_values)] * len(row_values),
             title="PHATE parameter grid",
+            **extra,
         )
 
     return VizStepResult(figures=tuple(figures), failed_substeps=tuple(failed))

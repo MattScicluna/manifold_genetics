@@ -288,6 +288,11 @@ class GenotypePaintingPHATE(PHATE):
 
     There is no out-of-sample extension: ``transform`` accepts only the fit
     data. Landmarks are refused, so it is always exact.
+
+    ``kernel_cache``, a dict shared by several models fitted on the same
+    samples (a grid's panels), keeps each view's kernel by its knn, so that
+    models differing only in ``genotype_weight``, ``t`` or ``gamma`` build each
+    kernel once.
     """
 
     def __init__(
@@ -296,6 +301,7 @@ class GenotypePaintingPHATE(PHATE):
         genotype_weight: float,
         painting_knn: int,
         genotype_components: int = 10,
+        kernel_cache: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -309,6 +315,19 @@ class GenotypePaintingPHATE(PHATE):
         self.genotype_weight = float(genotype_weight)
         self.painting_knn = int(painting_knn)
         self.genotype_components = int(genotype_components)
+        self.kernel_cache = kernel_cache
+
+    def _cached_kernel(self, view: str, X: np.ndarray, knn: int):
+        """``view_kernel(X, knn)``, from ``kernel_cache`` when it holds it."""
+        if self.kernel_cache is None:
+            return self.view_kernel(X, knn)
+        ids = tuple(str(s) for s in self._sample_ids)
+        key = (view, knn, X.shape[1], self.decay, self.n_pca, hash(ids))
+        if key not in self.kernel_cache:
+            self.kernel_cache[key] = self.view_kernel(X, knn)
+        else:
+            logger.info(f"Reusing the {view} kernel with knn {knn}")
+        return self.kernel_cache[key]
 
     def view_kernel(self, X: np.ndarray, knn: int):
         """The affinity matrix PHATE itself builds on ``X`` with ``knn``.
@@ -363,8 +382,8 @@ class GenotypePaintingPHATE(PHATE):
             f"t={self.t}"
         )
         K = mix_kernels(
-            self.view_kernel(geno, self.knn),
-            self.view_kernel(X_array, self.painting_knn),
+            self._cached_kernel("genotype", geno, self.knn),
+            self._cached_kernel("painting", X_array, self.painting_knn),
             self.genotype_weight,
         )
         self.model.set_params(knn_dist="precomputed_affinity", n_landmark=None)

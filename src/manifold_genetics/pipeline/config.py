@@ -7,9 +7,12 @@ into these typed objects and performs argument-shape validation (no filesystem
 access).
 """
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 _EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
@@ -38,6 +41,10 @@ GRID_METHOD_PARAMS = {
     "tsne": ("perplexity",),
     "diffusion_map": ("knn",),
 }
+# Painting axes that phate_grid accepts besides PHATE's own parameters. Each
+# panel runs as a run with painting.genotype_weight and painting.knn set to the
+# panel's values would (see run_embedding_grid_viz_step).
+GRID_PAINTING_AXES = ("genotype_weight", "painting_knn")
 
 
 @dataclass(frozen=True)
@@ -130,6 +137,9 @@ class GenotypeKernel:
     weight: float
     painting_knn: int
     components: int = GENOTYPE_WEIGHT_COMPONENTS
+    # Shared between the PHATE models of one run and its grid, so each view's
+    # kernel is built once per knn (GenotypePaintingPHATE's kernel_cache).
+    cache: Optional[dict] = field(default=None, compare=False, hash=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -177,7 +187,8 @@ class VizConfig:
     # parameters. Treated read-only.
     method_grid: Optional[dict] = None
     # {param: [values]} for up to two PHATE parameters, rows then columns;
-    # scalar entries are fixed overrides. Treated read-only.
+    # scalar entries are fixed overrides. With painting, also the
+    # GRID_PAINTING_AXES. Treated read-only.
     phate_grid: Optional[dict] = None
 
 
@@ -243,15 +254,18 @@ _GRID_PARAM_TYPES = {
     "gamma": (_is_number, "a number"),
     "min_dist": (_is_number, "a number"),
     "perplexity": (lambda v: _is_number(v) and v > 0, "a positive number"),
+    "genotype_weight": (lambda v: _is_number(v) and 0 <= v <= 1, "a number from 0 to 1"),
+    "painting_knn": (_is_positive_int, "a positive integer"),
 }
 
 
-def _check_grid_params(method: str, params, where: str) -> None:
-    unknown = sorted(set(params) - set(GRID_METHOD_PARAMS[method]))
+def _check_grid_params(method: str, params, where: str, extra: Tuple[str, ...] = ()) -> None:
+    allowed = tuple(GRID_METHOD_PARAMS[method]) + tuple(extra)
+    unknown = sorted(set(params) - set(allowed))
     if unknown:
         raise ValueError(
             f"Unknown {method} parameter(s) in {where}: {', '.join(unknown)}. "
-            f"Choose from: {', '.join(GRID_METHOD_PARAMS[method])}"
+            f"Choose from: {', '.join(allowed)}"
         )
     for key, value in params.items():
         accepts, expected = _GRID_PARAM_TYPES[key]
@@ -329,12 +343,14 @@ def validate_method_grid(method_grid, run_params=None) -> None:
 def validate_phate_grid(phate_grid, run_params=None) -> None:
     """``{param: [values] | value}`` with one or two swept (list-valued) parameters.
 
+    The parameters are PHATE's and the painting axes ``GRID_PAINTING_AXES``,
+    which ``check_grid_painting_axes`` checks against the run's painting.
     ``run_params`` are the run's embedding parameters, which every panel
     inherits its landmarking from.
     """
     if not isinstance(phate_grid, dict) or not phate_grid:
         raise ValueError("phate_grid must map PHATE parameters to lists of values")
-    _check_grid_params("phate", phate_grid, "phate_grid")
+    _check_grid_params("phate", phate_grid, "phate_grid", GRID_PAINTING_AXES)
     swept = [k for k, v in phate_grid.items() if isinstance(v, list)]
     if not 1 <= len(swept) <= 2:
         raise ValueError(
@@ -466,6 +482,13 @@ def build_configs(
             method_grid,
             phate_grid,
         )
+    check_grid_painting_axes(
+        phate_grid,
+        painting_cfg.enabled,
+        painting_cfg.genotype_weight,
+        embedding_input,
+        embedding_params,
+    )
 
     io = IOConfig(
         fit_plink=Path(fit_plink),
@@ -630,3 +653,63 @@ def check_genotype_weight(
     landmarks = (phate_grid or {}).get("n_landmark")
     if any(v is not None for v in (landmarks if isinstance(landmarks, list) else [landmarks])):
         raise ValueError(f"{why}, so phate_grid cannot set n_landmark.")
+
+
+def _as_values(value) -> list:
+    return value if isinstance(value, list) else [value]
+
+
+def has_grid_painting_axes(phate_grid) -> bool:
+    """Whether ``phate_grid`` sets ``genotype_weight`` or ``painting_knn``."""
+    return isinstance(phate_grid, dict) and any(k in phate_grid for k in GRID_PAINTING_AXES)
+
+
+def grid_genotype_weights(phate_grid, run_weight: float) -> list:
+    """The genotype weights the ``phate_grid`` panels run with: the grid's, else the run's."""
+    if isinstance(phate_grid, dict) and "genotype_weight" in phate_grid:
+        return [float(w) for w in _as_values(phate_grid["genotype_weight"])]
+    return [float(run_weight)]
+
+
+def check_grid_painting_axes(
+    phate_grid, painting_enabled, run_weight, input_mode, params=None
+) -> None:
+    """Refuse ``phate_grid`` painting axes the run cannot draw, and note unused ones.
+
+    ``genotype_weight`` and ``painting_knn`` need painting enabled. A panel whose
+    weight is strictly between 0 and 1 mixes the two kernels, so it takes the
+    refusals of ``check_genotype_weight`` (one cohort, no landmarks). A run
+    whose own weight is 1 does not paint, so its grid cannot sweep weights
+    below 1. ``painting_knn`` with no panel between 0 and 1 is logged as
+    having no effect. Nothing happens when the grid has no painting axis.
+
+    Raises:
+        ValueError: naming the setting to change.
+    """
+    if not has_grid_painting_axes(phate_grid):
+        return
+    axes = [k for k in GRID_PAINTING_AXES if k in phate_grid]
+    if not painting_enabled:
+        raise ValueError(
+            f"phate_grid {' and '.join(axes)} need painting: set painting enabled: true, "
+            "or remove them from the grid."
+        )
+    weights = grid_genotype_weights(phate_grid, run_weight)
+    if run_weight >= 1 and any(w < 1 for w in weights):
+        raise ValueError(
+            "phate_grid genotype_weight values below 1 need the painting, which painting "
+            "genotype_weight 1 skips. Set painting genotype_weight below 1 for the run."
+        )
+    # A grid that sets n_landmark replaces the run's in every panel.
+    landmark_params = dict(params or {})
+    if "n_landmark" in phate_grid:
+        landmark_params.pop("n_landmark", None)
+    for w in weights:
+        if 0 < w < 1:
+            check_genotype_weight(w, "phate", input_mode, landmark_params, None, phate_grid)
+    if "painting_knn" in phate_grid and not any(0 < w < 1 for w in weights):
+        logger.warning(
+            "phate_grid painting_knn has no effect: it sets the painting kernel's knn only "
+            "for panels whose genotype_weight is between 0 and 1, and this grid has none "
+            f"(genotype_weight {', '.join(f'{w:g}' for w in weights)})."
+        )

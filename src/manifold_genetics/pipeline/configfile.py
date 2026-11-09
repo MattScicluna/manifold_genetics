@@ -53,6 +53,7 @@ import yaml
 
 from .config import (
     check_genotype_weight,
+    check_grid_painting_axes,
     check_landmarking,
     validate_method_grid,
     validate_phate_grid,
@@ -362,6 +363,19 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
                 params,
                 kwargs.get("method_grid"),
                 kwargs.get("phate_grid"),
+            )
+        except ValueError as exc:
+            raise ConfigFileError(str(exc)) from None
+    # phate_grid's genotype_weight and painting_knn axes, checked against the
+    # painting settings they stand in for.
+    if isinstance(weight, (int, float)) and not isinstance(weight, bool):
+        try:
+            check_grid_painting_axes(
+                kwargs.get("phate_grid"),
+                bool(kwargs.get("painting")),
+                weight,
+                kwargs.get("embedding_input", "both"),
+                params,
             )
         except ValueError as exc:
             raise ConfigFileError(str(exc)) from None

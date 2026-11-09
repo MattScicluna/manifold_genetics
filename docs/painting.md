@@ -299,9 +299,10 @@ step runs, when it asks for something the mixed kernel cannot do:
   affinity, so the run is exact.
 - **Grids**: every `method_grid` panel must be `phate`, and no panel of either
   grid may set `n_landmark`. The PHATE panels of both grids mix the same two
-  kernels with the run's `genotype_weight` and `painting: knn`. A `phate_grid`
-  axis over `knn` varies `embedding: knn`, which is the genotype kernel's
-  between 0 and 1 and PHATE's only knn at 0 and 1.
+  kernels with the run's `genotype_weight` and `painting: knn`, unless
+  `phate_grid` sweeps them (see [Sweeping settings](#sweeping-settings)). A
+  `phate_grid` axis over `knn` varies `embedding: knn`, which is the genotype
+  kernel's between 0 and 1 and PHATE's only knn at 0 and 1.
 
 Exact PHATE holds dense n × n matrices, so like painting itself it is
 practical up to about 10,000 to 20,000 samples.
@@ -412,15 +413,17 @@ or settings in separate output directories paint only once. A relative
 (`visualization: phate_grid` and `method_grid`) embed the same coordinates as
 the run: the painting components, or the top 10 genotype PCs when
 `genotype_weight` is 1. Between 0 and 1 their PHATE panels mix the same two
-kernels as the run.
+kernels as the run. A `phate_grid` over `genotype_weight` or `painting_knn`
+gives each panel its own weight or painting knn instead (see
+[Sweeping settings](#sweeping-settings)).
 
 
 ## Sweeping settings
 
-pbwt is by far the slow part, and its output is the same for both methods and
-every `genotype_weight` and `knn`. Give every run the same `pbwt_dir` and its
-own output directory, and pbwt runs once: the first run paints and the others
-reuse its output. Start from one config, here `config.yaml`:
+One run sweeps the weight and the painting's knn: `visualization: phate_grid`
+takes `genotype_weight` and `painting_knn` as axes, next to PHATE's own
+parameters, and draws one panel per pair of values. Start from one config,
+here `config.yaml`:
 
 ```yaml
 data:
@@ -434,8 +437,6 @@ data:
 painting:
   enabled: true
   method: hc
-  genotype_weight: 0.25
-  knn: 5
   pbwt_dir: pbwt
 
 pca:
@@ -449,55 +450,65 @@ embedding:
 
 visualization:
   phate_grid:
-    t: [3, 10, auto]
+    genotype_weight: [0, 0.25, 0.5, 0.75]
+    painting_knn: [3, 5, 10]
 
 skip:
   admixture: true
 ```
 
-`input_mode: project` embeds the project cohort exactly, which every weight
-can do. Then write one config per setting next to it, so that its relative
-paths, `pbwt_dir` included, resolve to the same places, and run each into its
-own output directory. The third `sed` expression changes `knn` only in the
-`painting` section, from `painting:` to the next blank line:
+`manifold-genetics run config.yaml` paints once, computes the genotype PCA
+once and writes a 4 × 3 grid, `genotype_weight` down the rows and
+`painting_knn` across the columns, to
+`figures/embeddings/grids/phate_grid_by_<column>.png`, one figure per colormap
+column. Each panel is the embedding a run with `painting: genotype_weight` and
+`painting: knn` set to the panel's values would make:
+
+- **Weight 0**: PHATE on the painting alone, with `embedding: knn` (or the
+  grid's `knn`). `painting_knn` is unused, so the row's panels are one
+  embedding, computed once and marked "painting only, painting_knn unused".
+- **Between 0 and 1**: PHATE on the mixed kernel, the painting's built with
+  the panel's `painting_knn`.
+- **Weight 1**: PHATE on the top 10 genotype PCs, marked "genotype PCA only".
+  Like a run at weight 1, it uses automatic `t` unless the config sets `t`.
+
+The two kernels are built once and shared: the genotype kernel once for each
+`embedding: knn`, and the painting kernel once for each `painting_knn`, so
+each mixed panel adds only PHATE's diffusion, potential and MDS. The run's own
+embedding takes `painting: genotype_weight` and `painting: knn` as usual (0
+here, so the painting alone). With a weight between 0 and 1 it shares its
+kernels with the grid.
+
+The grid sweeps one or two axes, so with these two, `knn` and `t` are fixed
+scalars (`t: 3`) or come from the `embedding` section. To sweep `embedding: knn`
+against the weight, use `genotype_weight` and `knn` as the axes, with
+`painting_knn` as a scalar. Without a `genotype_weight` axis, the panels take
+`painting: genotype_weight`, so a `painting_knn` axis alone needs that weight
+between 0 and 1.
+
+The axes are checked when the config is read and again when the run starts.
+They need `painting: enabled: true`. A weight between 0 and 1 brings the
+mixing rules (see [Mixing in the genotype PCA](#mixing-in-the-genotype-pca)):
+one cohort (`input_mode: fit` or `project`) and no landmarks. A run at
+`painting: genotype_weight: 1` does not paint, so its grid cannot sweep weights
+below 1. A `painting_knn` axis with no weight between 0 and 1 is logged as
+having no effect.
+
+`method` is not a grid axis: `hc` and `finestructure` are separate paintings.
+pbwt's output is the same for both, so give both runs the same `pbwt_dir` and
+their own output directories, and pbwt runs once:
 
 ```bash
-for method in hc finestructure; do
-  for w in 0.25 0.5 0.75; do
-    for k in 3 5 10; do
-      name="${method}_w${w}_k${k}"
-      sed -e "s/method: hc/method: $method/" \
-          -e "s/genotype_weight: .*/genotype_weight: $w/" \
-          -e "/^painting:/,/^$/s/knn: .*/knn: $k/" \
-          config.yaml > "config_${name}.yaml"
-      manifold-genetics run "config_${name}.yaml" --output "sweep/${name}"
-    done
-  done
-done
-```
-
-Weights 0 and 1 do not use `painting: knn`, so run them outside the loop:
-weight 0 once per method, and weight 1, which depends on neither, once. Their
-logs note that `painting: knn` is unused.
-
-```bash
-for method in hc finestructure; do
-  sed -e "s/method: hc/method: $method/" \
-      -e "s/genotype_weight: .*/genotype_weight: 0/" \
-      config.yaml > "config_${method}_w0.yaml"
-  manifold-genetics run "config_${method}_w0.yaml" --output "sweep/${method}_w0"
-done
-sed -e "s/genotype_weight: .*/genotype_weight: 1/" config.yaml > config_genotype.yaml
-manifold-genetics run config_genotype.yaml --output sweep/genotype
+for m in hc finestructure; do sed "s/method: hc/method: $m/" config.yaml > "config_$m.yaml"
+  manifold-genetics run "config_$m.yaml" --output "sweep/$m"; done
 ```
 
 Run them one after another, as the loop does. Runs started together would all
-find `pbwt_dir` empty and paint at the same time. Each run's
-`figures/embeddings/` holds its embedding, and `phate_grid` adds a figure of
-PHATE over `t` on the same input to `figures/embeddings/grids/`, so one sweep
-covers the method, the weight, both `knn` settings and `t`. With
-`geographic_coords` set in `data`, each run's `metrics/geographic.json` gives
-its geographic preservation score.
+find `pbwt_dir` empty and paint at the same time. Every panel's coordinates are
+in `embeddings/grids/`, named after its values
+(`phate_grid_genotype_weight-0.25_painting_knn-5.csv`), for scoring. With
+`geographic_coords` set in `data`, `metrics/geographic.json` scores the run's
+own embedding, not the panels.
 
 ## Limits
 

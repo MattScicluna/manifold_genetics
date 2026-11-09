@@ -54,6 +54,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   sweeping the method, weight and `painting: knn` with one shared `pbwt_dir`
   are in `docs/painting.md`.
 
+- **`phate_grid` sweeps `genotype_weight` and `painting_knn`.** With painting
+  enabled, `visualization: phate_grid` takes the two painting settings as
+  axes (`genotype_weight: [0, 0.25, 0.5, 0.75]`, `painting_knn: [3, 5, 10]`),
+  so one run draws the whole weight and painting knn sweep. Each panel is what
+  a run with those values embeds: the painting alone at weight 0, the mixed
+  kernel with the panel's painting knn in between, the top 10 genotype PCs at
+  1. The painting and the genotype PCA are computed once, each view's kernel is
+  built once per knn and shared by the panels and the run's own PHATE, and
+  panels at weight 0 or 1 that differ only in `painting_knn` are embedded once.
+  The axes are checked when the config is read and when the run starts: they
+  need painting, a weight between 0 and 1 brings the mixing rules (one cohort,
+  no landmarks), and a `painting_knn` axis with no such weight is logged as
+  having no effect. `plot_embedding_grid` takes `panel_notes`. The shell loop
+  in `docs/painting.md` is replaced by this grid, with two runs sharing
+  `pbwt_dir` for `hc` and `finestructure`.
+
 - **Comparison grids in a pipeline run.** Two optional keys in the config's
   `visualization` section. `method_grid` maps methods to their parameters
   (`phate: {knn: 25}`, `umap: {n_neighbors: 15}`, `tsne: {perplexity: 30}`)

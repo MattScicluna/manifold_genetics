@@ -127,6 +127,25 @@ rejected. Each panel is a full embedding, so a 3×3 grid costs nine. A panel
 that fails is left empty and named in the run's failed steps rather than losing
 the figure.
 
+With `painting` enabled, `phate_grid` also takes two painting axes:
+`genotype_weight` (numbers from 0 to 1) and `painting_knn` (positive integers),
+for example `genotype_weight: [0, 0.25, 0.5, 0.75]` and `painting_knn: [3, 5, 10]`.
+Each panel is then what a run with `painting: genotype_weight` and
+`painting: knn` set to its values would embed, as described in
+[Sweeping settings](painting.md#sweeping-settings). Panels at weight 0 or 1
+ignore `painting_knn`, so panels there that differ only in `painting_knn` are
+computed once, and the panel says so.
+
+Each panel's coordinates are written to `embeddings/grids/` as
+`<grid>_<param>-<value>.csv` for one swept parameter, or
+`<grid>_<row param>-<value>_<column param>-<value>.csv` for two, for example
+`phate_grid_genotype_weight-0.25_painting_knn-5.csv`, in the embedding format
+(`sample_id, dim_1, dim_2`). `method_grid` panels are
+`method_grid_<method>.csv`. The figures are
+`figures/embeddings/grids/<grid>_by_<column>.png`, one per colormap column,
+with the row parameter's values down the left and the column parameter's
+across the top.
+
 The preset supplies the embedding settings that follow from it, so most files
 are shorter than this. An unknown key is rejected with a suggestion rather than
 ignored, and `--dry-run` prints every setting the run will use — including the

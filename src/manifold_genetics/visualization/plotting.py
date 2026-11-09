@@ -514,6 +514,7 @@ def plot_embedding_grid(
     panel_size: tuple = (6, 5),
     point_size: float = 10.0,
     alpha: float = 0.9,
+    panel_notes: Optional[Sequence[Sequence[Optional[str]]]] = None,
 ) -> Path:
     """
     Plot a rows x columns grid of 2-D embeddings sharing one legend.
@@ -539,6 +540,9 @@ def plot_embedding_grid(
         panel_size: Size of one panel (width, height)
         point_size: Size of scatter plot points
         alpha: Transparency of points
+        panel_notes: Optional per-cell text, same shape as ``embeddings``, drawn
+            small in the panel's top left corner (None for no note), e.g.
+            "painting only" for a panel that ignores its column's parameter
 
     Returns:
         Path to saved figure
@@ -605,6 +609,17 @@ def plot_embedding_grid(
                 present.update(groups)
                 any_missing |= cell_missing
 
+            if panel_notes is not None and panel_notes[i][j]:
+                ax.text(
+                    0.02,
+                    0.98,
+                    panel_notes[i][j],
+                    ha="left",
+                    va="top",
+                    fontsize=9,
+                    color="dimgray",
+                    transform=ax.transAxes,
+                )
             if axis_names is not None and axis_names[i][j]:
                 ax.set_xlabel(f"{axis_names[i][j]} 1", fontsize=8)
                 ax.set_ylabel(f"{axis_names[i][j]} 2", fontsize=8)

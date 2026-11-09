@@ -146,6 +146,9 @@ def run_pipeline(
         phate_grid: Optional {param: [values]} for one or two PHATE parameters,
             e.g. ``{"knn": [5, 25, 100], "t": [3, 10, "auto"]}``: rows are the
             first, columns the second. Scalar entries are fixed overrides.
+            With painting enabled it also takes ``genotype_weight`` and
+            ``painting_knn``, each panel embedding as a run with
+            ``painting_genotype_weight`` and ``painting_knn`` set to its values.
         skip_pca: Skip PCA step
         skip_admixture: Skip admixture step
         skip_embedding: Skip embedding step

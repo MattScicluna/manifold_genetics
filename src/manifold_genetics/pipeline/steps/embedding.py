@@ -84,6 +84,7 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
             genotype_weight=kernel.weight,
             painting_knn=kernel.painting_knn,
             genotype_components=kernel.components,
+            kernel_cache=kernel.cache,
             n_components=n_components,
             knn=p.get("knn", 25),
             t=p.get("t", "auto"),
