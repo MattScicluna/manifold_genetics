@@ -66,6 +66,11 @@ These three are all most runs need. `genotype_weight` mixes the genotype PCA
 back in, as described in [Mixing in the genotype PCA](#mixing-in-the-genotype-pca).
 The other settings are under [Advanced settings](#advanced-settings).
 
+When PHATE embeds the painting, its nearest-neighbor graph is built with
+`painting: knn` (30 by default), not `embedding: knn`. With `genotype_weight: 0`
+the painting is PHATE's only input, so `embedding: knn` has no effect there.
+Other methods keep their own settings.
+
 `fit_plink` and `project_plink` are still required. Their `.fam` files say which
 painted samples belong to which cohort, and admixture still reads their
 genotypes. The number of components comes from `pca: n_pcs`, as it does for the
@@ -102,12 +107,15 @@ painting:
   enabled: true
   method: hc
   genotype_weight: 0
+  knn: 30                  # the painting kernel's PHATE knn (the default)
   chromosomes: 1-22        # substituted for {chr} (the default)
   missing: error           # or drop, see "Fit and project cohorts"
   pbwt_dir: shared/pbwt    # where pbwt's output goes, see "Outputs"
   force: false             # true repaints chromosomes whose pbwt output is cached
 ```
 
+- `knn` is the number of nearest neighbors in the painting's PHATE kernel. See
+  [Mixing in the genotype PCA](#mixing-in-the-genotype-pca).
 - `chromosomes` lists the chromosomes substituted for `{chr}`, as a range
   (`1-22`), a list or a single chromosome. `hc` works only on autosomes 1 to 22.
 - `missing` says what happens to a cohort sample the phased VCFs lack: `error`
@@ -236,50 +244,89 @@ it is randomized with 20 power iterations.
 ## Mixing in the genotype PCA
 
 Painting separates populations well, but it keeps less of the continental
-structure that genotype PCA shows. `painting: genotype_weight`, a number from 0
-to 1, embeds the two side by side:
+structure that genotype PCA shows. `painting: genotype_weight`, a number w from
+0 to 1, gives PHATE a weighted sum of the two views' affinities:
 
-1. Take the top 10 components of the genotype PCA and the top 10 of the painting.
-2. Center each block and divide it by its total norm, both computed on the fit
-   cohort and applied unchanged to the project cohort. Each block then has unit
-   total norm on the fit cohort, whatever the scale of its components, and the
-   components within a block keep their relative sizes.
-3. Multiply the genotype block by √w and the painting block by √(1 − w), where
-   w is the weight, and embed the 20 columns.
+K = w · K_genotype / d_genotype + (1 − w) · K_painting / d_painting
 
-Squared distances add over the two blocks, so w is the genotype's share of the
-total squared distance between fit samples. At 0, the default, the run embeds
-the painting's own `n_pcs` components exactly as it would without the setting,
-and no genotype PCA runs. At 1 it embeds the top 10 genotype PCs alone and does
-not paint. In between, the run also computes the genotype PCA at its usual
-paths (`pca/fit_pca_<n>.csv`), so `fit_plink` and `project_plink` must hold the
-genotypes, and it writes the mixed coordinates to
-`painting/<cohort>_painting_<method>_genotype_<w>.csv`. It works with every
-embedding method and every preset.
+1. **K_genotype** is PHATE's own alpha-decay kernel (built by graphtools, as
+   PHATE builds it) on the top 10 components of the genotype PCA, with
+   `embedding: knn` neighbors and PHATE's decay of 40.
+2. **K_painting** is the same kernel on the painting coordinates, all `n_pcs` of
+   them, with `painting: knn` neighbors.
+3. Each kernel is divided by its **mean degree** d, the mean of its row sums.
+   The two views then enter on the same scale, whatever the density of their
+   neighborhoods, so w alone sets the genotype's share. This normalization is
+   fixed.
+4. The sum is **symmetrized**, (K + Kᵀ) / 2, and PHATE takes it as a
+   precomputed affinity. Its diffusion, potential distances and MDS then run
+   as usual, with the run's `t` and `gamma`.
+
+At 0, the default, the run is painting PHATE as before, with `painting: knn`,
+and no genotype PCA runs. At 1 the run embeds the top 10 genotype PCs (any
+method, PHATE with `embedding: knn`) and does not paint. In between, the run
+also computes the genotype PCA at its usual paths (`pca/fit_pca_<n>.csv`), so
+`fit_plink` and `project_plink` must hold the genotypes.
+
+The two `knn` settings look at the data at different scales. `painting: knn`
+is the painting's local view: painting resolves fine structure, and a small
+neighborhood keeps close relatives of a population together without blurring
+neighboring populations into it. `embedding: knn` is the genotype's global
+view: a larger neighborhood ties each sample to its continent and keeps the
+regions in place. So `painting: knn` is usually the smaller of the two.
+
+Between 0 and 1 the run is refused, with a configuration error before any
+step runs, when it asks for something the mixed kernel cannot do:
+
+- **Methods other than PHATE** (`umap`, `tsne`, `diffusion_map`): the sum is
+  of PHATE kernels, and the other methods build their own graphs. Use a weight
+  of 0 or 1 with them.
+- **`input_mode: both`, and so the `projection` preset**: the kernel is built
+  over the samples being embedded, and nothing extends it to new samples, so
+  the run cannot fit on one cohort and place another. Use `input_mode: fit` or
+  `project`, or the `whole_cohort` preset.
+- **Landmarks** (`n_landmark` other than none, and so the `subsample` preset):
+  PHATE's landmarks are computed from its own graph, not from a precomputed
+  affinity, so the run is exact.
+- **Grids**: every `method_grid` panel must be `phate`, and no panel of either
+  grid may set `n_landmark`. The PHATE panels of both grids mix the same two
+  kernels with the run's `genotype_weight` and `painting: knn`. A `phate_grid`
+  axis over `knn` varies `embedding: knn`, which is the genotype kernel's
+  between 0 and 1, and the painting kernel's at 0.
+
+Exact PHATE holds dense n × n matrices, so like painting itself it is
+practical up to about 10,000 to 20,000 samples.
 
 On the HGDP and 1000 Genomes panel described above (4,089 samples painted
 genome-wide with `n_pcs: 20`, genotype PCA on the 172,000 SNPs `acquire hgdp`
-provides), with exact PHATE at knn 100 and t 10 on all samples, scored on the
-3,398 unrelated samples in 2-D (the silhouette of the seven regions,
-five-nearest-neighbor accuracy for populations, and the pipeline's geographic
-preservation metric):
+provides), with exact PHATE on all samples and `embedding: knn: 100`, scored
+on the 3,398 unrelated samples in 2-D. Each cell gives the silhouette of the
+seven regions, five-nearest-neighbor accuracy for populations and the
+pipeline's geographic preservation metric, in that order:
 
-| `genotype_weight` | `hc`: regions | `hc`: populations | `hc`: geographic | `finestructure`: regions | `finestructure`: populations | `finestructure`: geographic |
-|---|---|---|---|---|---|---|
-| 0 (painting only) | 0.34 | 0.79 | 0.54 | 0.39 | 0.75 | 0.56 |
-| 0.25 | 0.26 | 0.78 | 0.69 | 0.48 | 0.64 | 0.67 |
-| 0.5 | 0.42 | 0.79 | 0.70 | 0.58 | 0.76 | 0.79 |
-| 0.75 | 0.45 | 0.77 | 0.70 | 0.37 | 0.75 | 0.81 |
-| 1 (genotype PCA only) | 0.37 | 0.69 | 0.66 | 0.37 | 0.69 | 0.66 |
+| `genotype_weight` | `hc`, knn 10 | `hc`, knn 30 | `finestructure`, knn 10 | `finestructure`, knn 30 |
+|---|---|---|---|---|
+| 0 (painting only) | -0.02 / 0.71 / 0.16 | 0.17 / 0.84 / 0.45 | 0.19 / 0.72 / 0.37 | 0.08 / 0.78 / 0.46 |
+| 0.25 | 0.45 / 0.78 / 0.66 | **0.47 / 0.78 / 0.65** | 0.47 / 0.73 / 0.66 | 0.24 / 0.77 / 0.56 |
+| 0.5 | 0.44 / 0.76 / 0.67 | 0.45 / 0.74 / 0.66 | 0.46 / 0.66 / 0.66 | 0.29 / 0.75 / 0.57 |
+| 0.75 | 0.41 / 0.73 / 0.68 | 0.44 / 0.71 / 0.67 | 0.45 / 0.71 / 0.67 | 0.32 / 0.60 / 0.58 |
+| 1 (genotype PCA only) | 0.37 / 0.69 / 0.66 | 0.37 / 0.69 / 0.66 | 0.37 / 0.69 / 0.66 | 0.37 / 0.69 / 0.66 |
 
-Every weight from 0.25 to 0.75 preserved geography better than either view
-alone. With `hc`, 0.5 and 0.75 also separated the regions better than either
-view and kept the painting's population accuracy. With `finestructure`, 0.5 was
-best on regions and populations and 0.75 on geography. The scores do not move
-smoothly with the weight: at 0.25, `hc` lost region separation and
-`finestructure` lost population accuracy. The best weight depends on the data
-and on which structure matters most, so start at 0.5 and sweep it (see
-[Sweeping settings](#sweeping-settings)).
+Each column's knn is `painting: knn`, and `t` is 10. Automatic `t` gave nearly the same
+scores (`hc`, knn 30, weight 0.25: 0.47 / 0.78 / 0.67) and took seven times as
+long (50 seconds against 7 per embedding on an Apple M2 Max).
+
+With `hc`, every weight from 0.25 to 0.75 separated the regions better than
+either view alone (0.41 to 0.47, against 0.37 for the genotype PCA and at most
+0.17 for the painting), preserved geography as well as the genotype PCA (0.65
+to 0.68, against 0.66) and kept more population accuracy than it. 0.25 kept the
+most, and `painting: knn` mattered little once the genotype was mixed in. With
+`finestructure`, knn 10 did as well as `hc`, and knn 30 much worse. Painting alone at knn 30 had the best population accuracy (0.84 with
+`hc`) but the weakest regions. As starting values, use `method: hc`,
+`genotype_weight: 0.25`, `painting: knn: 30`, `embedding: knn: 100` and
+`t: 10`, with `input_mode: project` (or the `whole_cohort` preset with `t: 10`).
+The best values depend on the data and on which structure matters most, so
+sweep them (see [Sweeping settings](#sweeping-settings)).
 
 ## Fit and project cohorts
 
@@ -313,7 +360,8 @@ sharpens the painting without appearing in the figures.
 The presets work as they do with genotype PCA. `whole_cohort` embeds the project
 cohort's painting coordinates, `subsample` embeds the fit cohort's, and
 `projection` fits the embedding on the fit cohort and applies it to the project
-cohort.
+cohort. With a `genotype_weight` between 0 and 1, only `whole_cohort` works
+(see [Mixing in the genotype PCA](#mixing-in-the-genotype-pca)).
 
 ## Outputs
 
@@ -327,8 +375,8 @@ outputs/painting/
 ├── coancestry_<method>.csv                 summed matrix, recipients by donors
 ├── fit_painting_<method>_pca_<n>.csv        sample_id, dim_1 … dim_<n>
 ├── project_painting_<method>_pca_<n>.csv
-├── fit_painting_<method>_genotype_<w>.csv   with genotype_weight above 0
-└── project_painting_<method>_genotype_<w>.csv
+├── fit_genotype_pca_top10.csv               with genotype_weight 1: the top
+└── project_genotype_pca_top10.csv           10 genotype PCs the run embeds
 ```
 
 A chromosome is repainted only when its outputs are missing, older than its VCF,
@@ -345,16 +393,17 @@ or settings in separate output directories paint only once. A relative
 `pbwt_dir` is resolved against the config file's directory. The PC-pair grids in
 `figures/pca/` show the painting components. The comparison grids
 (`visualization: phate_grid` and `method_grid`) embed the same coordinates as
-the run: the painting components, or the mixed ones when `genotype_weight` is
-above 0.
+the run: the painting components, or the top 10 genotype PCs when
+`genotype_weight` is 1. Between 0 and 1 their PHATE panels mix the same two
+kernels as the run.
 
 
 ## Sweeping settings
 
 pbwt is by far the slow part, and its output is the same for both methods and
-every `genotype_weight`. Give every run the same `pbwt_dir` and its own output
-directory, and pbwt runs once: the first run paints and the others reuse its
-output. Start from one config, here `config.yaml`:
+every `genotype_weight` and `knn`. Give every run the same `pbwt_dir` and its
+own output directory, and pbwt runs once: the first run paints and the others
+reuse its output. Start from one config, here `config.yaml`:
 
 ```yaml
 data:
@@ -369,6 +418,7 @@ painting:
   enabled: true
   method: hc
   genotype_weight: 0
+  knn: 30
   pbwt_dir: pbwt
 
 pca:
@@ -376,34 +426,41 @@ pca:
 
 embedding:
   method: phate
+  input_mode: project
   knn: 100
   t: 10
 
 visualization:
   phate_grid:
-    knn: [30, 100]
     t: [3, 10, auto]
 
 skip:
   admixture: true
 ```
 
-Then write one config per setting next to it, so that its relative paths,
-`pbwt_dir` included, resolve to the same places, and run each into its own
-output directory:
+`input_mode: project` embeds the project cohort exactly, which every weight
+can do. Then write one config per setting next to it, so that its relative
+paths, `pbwt_dir` included, resolve to the same places, and run each into its
+own output directory. The third `sed` expression changes `knn` only in the
+`painting` section, from `painting:` to the next blank line:
 
 ```bash
 for method in hc finestructure; do
   for w in 0 0.25 0.5 0.75; do
-    sed -e "s/method: hc/method: $method/" \
-        -e "s/genotype_weight: .*/genotype_weight: $w/" \
-        config.yaml > "config_${method}_w${w}.yaml"
-    manifold-genetics run "config_${method}_w${w}.yaml" --output "sweep/${method}_w${w}"
+    for k in 10 30; do
+      name="${method}_w${w}_k${k}"
+      sed -e "s/method: hc/method: $method/" \
+          -e "s/genotype_weight: .*/genotype_weight: $w/" \
+          -e "/^painting:/,/^$/s/knn: .*/knn: $k/" \
+          config.yaml > "config_${name}.yaml"
+      manifold-genetics run "config_${name}.yaml" --output "sweep/${name}"
+    done
   done
 done
 ```
 
-A weight of 1 does not depend on the method, so run it once:
+A weight of 1 depends on neither the method nor `painting: knn`, so run it
+once:
 
 ```bash
 sed -e "s/genotype_weight: .*/genotype_weight: 1/" config.yaml > config_genotype.yaml
@@ -413,10 +470,10 @@ manifold-genetics run config_genotype.yaml --output sweep/genotype
 Run them one after another, as the loop does. Runs started together would all
 find `pbwt_dir` empty and paint at the same time. Each run's
 `figures/embeddings/` holds its embedding, and `phate_grid` adds a figure of
-PHATE over `knn` and `t` on the same coordinates to
-`figures/embeddings/grids/`, so one sweep covers the method, the weight and
-PHATE's settings. With `geographic_coords` set in `data`, each run's
-`metrics/geographic.json` gives its geographic preservation score.
+PHATE over `t` on the same input to `figures/embeddings/grids/`, so one sweep
+covers the method, the weight, both `knn` settings and `t`. With
+`geographic_coords` set in `data`, each run's `metrics/geographic.json` gives
+its geographic preservation score.
 
 ## Limits
 

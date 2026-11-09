@@ -147,11 +147,14 @@ The example leaves out the other keys a config accepts:
 - `painting`: `enabled`, `method` (`hc`, the default, or `finestructure`),
   `chromosomes` (default `1-22`), `force`, `missing` (`error`, the default, or
   `drop`, for cohort samples the phased VCFs lack), `pbwt_dir` (where pbwt's
-  output goes, to share it between runs) and `genotype_weight` (0, the
-  default, to 1: how much of the genotype PCA to mix back in). When `enabled`
-  is true, the painting coordinates replace the genotype PCA as the embedding
-  input, and PHATE's `t` defaults to 10 unless the `embedding` section or the
-  preset sets it. See [Haplotype painting](painting.md).
+  output goes, to share it between runs), `genotype_weight` (0, the default,
+  to 1: the genotype PCA kernel's share of PHATE's affinity, PHATE only
+  between 0 and 1) and `knn` (30, the default: the painting kernel's PHATE
+  knn). When `enabled` is true, the painting coordinates replace the genotype
+  PCA as the embedding input, PHATE's `t` defaults to 10 unless the
+  `embedding` section or the preset sets it, and PHATE builds the painting's
+  graph with `painting: knn` rather than `embedding: knn`. See
+  [Haplotype painting](painting.md).
 - `pca`: `backend` (`python`, the default, or `flashpca`) and `force`.
 - `admixture`: `k_min`, `k_max`, `threads`, `num_gpus` and `batch_size`.
 - `visualization`: `admix_group_column`, `admix_within_group_order`,
@@ -195,8 +198,8 @@ coordinate format, the summed coancestry matrix as
 `coancestry_<method>.csv` (one row per recipient, one column per donor, both
 named by sample ID: chunk counts for `finestructure`, chunk lengths in
 centimorgans for `hc`), and pbwt's own per-chromosome output under `pbwt/`.
-With `genotype_weight` above 0 it also holds the mixed coordinates the run
-embeds, and the genotype PCA is written to `pca/` as usual. The
+With `genotype_weight` above 0 the genotype PCA is also written to `pca/` as
+usual, and at 1 `painting/` holds the top 10 genotype PCs the run embeds. The
 [painting page](painting.md#outputs) lists them.
 
 The file names follow the settings: `fit_pca_20.csv` when `n_pcs: 20`,

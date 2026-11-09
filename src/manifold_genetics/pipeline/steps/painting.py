@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
-import numpy as np
 import pandas as pd
 
 from ...painting.matrix import (
@@ -42,8 +41,8 @@ __all__ = [
     "check_samples",
     "painting_output_paths",
     "run_painting",
+    "genotype_top_components",
     "run_painting_step",
-    "weight_with_genotype",
 ]
 
 PathLike = Union[str, Path]
@@ -297,91 +296,21 @@ def run_painting_step(
     )
 
 
-def _top_components(path: PathLike, n: int, what: str) -> pd.DataFrame:
-    df = pd.read_csv(path, dtype={"sample_id": str}).set_index("sample_id")
-    if df.shape[1] < n:
-        logger.warning(
-            f"The {what} coordinates in {path} have {df.shape[1]} components, fewer than "
-            f"the {n} painting.genotype_weight takes. Using all {df.shape[1]}."
-        )
-    return df.iloc[:, :n]
+def genotype_top_components(
+    source: PathLike, output: PathLike, n: int = GENOTYPE_WEIGHT_COMPONENTS
+) -> Path:
+    """Write the top ``n`` components of the genotype PCA CSV ``source`` to ``output``.
 
-
-def weight_with_genotype(
-    *,
-    genotype_fit: PathLike,
-    genotype_project: Optional[PathLike],
-    painting_fit: Optional[PathLike],
-    painting_project: Optional[PathLike],
-    weight: float,
-    fit_output: PathLike,
-    project_output: Optional[PathLike],
-    n: int = GENOTYPE_WEIGHT_COMPONENTS,
-):
-    """The top ``n`` genotype PCs and top ``n`` painting PCs side by side, weighted.
-
-    Each block is centered on the fit cohort's mean and divided by the fit
-    cohort's total (Frobenius) norm, so both blocks have unit total norm on the
-    fit cohort. The genotype block is then multiplied by ``sqrt(weight)`` and
-    the painting block by ``sqrt(1 - weight)``. Squared distances add over
-    blocks, so ``weight`` is the genotype's share of the total squared
-    distance between fit samples. A block whose factor is zero is left out:
-    ``weight`` 1 gives the genotype PCs alone (``painting_*`` may then be
-    None), centered and rescaled, which changes no distance ratio.
-
-    The rows are the painting's samples (the genotype's when there is no
-    painting block), and each must have a genotype row. Writes
-    ``sample_id, dim_1 ...`` CSVs, genotype block first, and returns the
-    (fit, project) paths written, project None when no project input was
-    given.
-
-    Raises:
-        ValueError: ``weight`` is outside (0, 1], the painting is missing for a
-            weight below 1, or a painted sample has no genotype PCA row.
+    What a painting ``genotype_weight`` of 1 embeds: the same components the
+    genotype kernel is built on between 0 and 1. Returns ``output``.
     """
-    if isinstance(weight, bool) or not 0 < weight <= 1:
-        raise ValueError(f"weight must be in (0, 1], got {weight!r}")
-    factors = {"genotype": float(np.sqrt(weight)), "painting": float(np.sqrt(1 - weight))}
-    blocks = [b for b in ("genotype", "painting") if factors[b] > 0]
-    if "painting" in blocks and painting_fit is None:
-        raise ValueError("A genotype weight below 1 needs the painting coordinates")
-
-    stats = {}
-    for what, fit in (("genotype", genotype_fit), ("painting", painting_fit)):
-        if what in blocks:
-            block = _top_components(fit, n, what).to_numpy(float)
-            mean = block.mean(axis=0)
-            norm = float(np.linalg.norm(block - mean)) or 1.0
-            stats[what] = (mean, factors[what] / norm)
-
-    def combine(paths, out):
-        frames = {what: _top_components(paths[what], n, what) for what in blocks}
-        rows = frames[blocks[-1]].index
-        missing = rows.difference(frames["genotype"].index)
-        if len(missing):
-            raise ValueError(
-                f"{len(missing)} painted samples have no genotype PCA row in "
-                f"{paths['genotype']} (for example {', '.join(missing[:3])})"
-            )
-        parts = []
-        for what in blocks:
-            mean, scale = stats[what]
-            parts.append((frames[what].loc[rows].to_numpy(float) - mean) * scale)
-        x = np.hstack(parts)
-        df = pd.DataFrame(x, columns=[f"dim_{i + 1}" for i in range(x.shape[1])])
-        df.insert(0, "sample_id", list(rows))
-        Path(out).parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(out, index=False)
-        return Path(out)
-
-    fit_out = combine({"genotype": genotype_fit, "painting": painting_fit}, fit_output)
-    project_out = None
-    if genotype_project is not None and ("painting" not in blocks or painting_project is not None):
-        project_out = combine(
-            {"genotype": genotype_project, "painting": painting_project}, project_output
+    df = pd.read_csv(source, dtype={"sample_id": str})
+    if df.shape[1] - 1 < n:
+        logger.warning(
+            f"The genotype PCA in {source} has {df.shape[1] - 1} components, fewer than "
+            f"the {n} painting.genotype_weight takes. Using all of them."
         )
-    logger.info(
-        f"painting.genotype_weight {weight:g}: {' and '.join(blocks)} PCs, {n} each, "
-        f"in {fit_out}"
-    )
-    return fit_out, project_out
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    df.iloc[:, : n + 1].to_csv(output, index=False)
+    return output

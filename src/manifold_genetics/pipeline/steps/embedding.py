@@ -18,8 +18,9 @@ from typing import Mapping, Optional, Union
 import pandas as pd
 
 from ...embeddings import PHATE, TSNE, UMAP, DiffusionMap
+from ...embeddings.phate import GenotypePaintingPHATE
 from ...utils.validation import validate_embedding_csv
-from ..config import EmbeddingConfig, IOConfig
+from ..config import GENOTYPE_KERNEL_PARAM, EmbeddingConfig, IOConfig
 from .paths import embedding_output_paths
 from .pca import PCAStepResult
 
@@ -62,8 +63,14 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
     ``params["n_components"]`` selects the embedding dimensionality and defaults
     to 2. Setting it to 3 produces ``dim_1, dim_2, dim_3`` output, which
     ``plot_embedding_3d`` renders.
+
+    ``params[GENOTYPE_KERNEL_PARAM]``, a ``GenotypeKernel`` the pipeline sets
+    for a painting ``genotype_weight`` between 0 and 1, makes PHATE mix the
+    genotype kernel into the painting's (``GenotypePaintingPHATE``), with
+    ``knn`` as the genotype kernel's.
     """
     p = dict(params or {})
+    kernel = p.pop(GENOTYPE_KERNEL_PARAM, None)
 
     # Every method accepts n_components; 2 keeps the historical default, so an
     # existing config that never mentions it produces exactly what it did before.
@@ -71,6 +78,20 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
     if n_components < 1:
         raise ValueError(f"n_components must be >= 1, got {n_components}")
 
+    if method == "phate" and kernel is not None:
+        return GenotypePaintingPHATE(
+            genotype=kernel.genotype,
+            genotype_weight=kernel.weight,
+            painting_knn=kernel.painting_knn,
+            genotype_components=kernel.components,
+            n_components=n_components,
+            knn=p.get("knn", 25),
+            t=p.get("t", "auto"),
+            n_landmark=p.get("n_landmark"),
+            gamma=p.get("gamma", 1.0),
+        )
+    if kernel is not None:
+        raise ValueError(f"A painting genotype_weight between 0 and 1 needs phate, not {method!r}")
     if method == "phate":
         return PHATE(
             n_components=n_components,

@@ -8,7 +8,14 @@ checkpoint logic depend on them (spec constraint B).
 from pathlib import Path
 from typing import Dict
 
-from ..config import AdmixtureConfig, EmbeddingConfig, IOConfig, PaintingConfig, PCAConfig
+from ..config import (
+    GENOTYPE_WEIGHT_COMPONENTS,
+    AdmixtureConfig,
+    EmbeddingConfig,
+    IOConfig,
+    PaintingConfig,
+    PCAConfig,
+)
 
 
 def pca_output_paths(io: IOConfig, pca: PCAConfig) -> Dict[str, Path]:
@@ -35,7 +42,6 @@ def painting_output_paths(io: IOConfig, pca: PCAConfig, painting: PaintingConfig
     d = io.output_dir / "painting"
     pbwt_dir = painting.pbwt_dir if painting.pbwt_dir is not None else d / "pbwt"
     method, n = painting.method, pca.n_pcs
-    weight = f"{painting.genotype_weight:g}"
     return {
         "dir": d,
         "pbwt_dir": pbwt_dir,
@@ -43,10 +49,9 @@ def painting_output_paths(io: IOConfig, pca: PCAConfig, painting: PaintingConfig
         "coancestry": d / f"coancestry_{method}.csv",
         "fit_pca": d / f"fit_painting_{method}_pca_{n}.csv",
         "project_pca": d / f"project_painting_{method}_pca_{n}.csv",
-        # painting.genotype_weight above 0: the genotype PCA and the painting
-        # side by side, as the embedding reads them.
-        "fit_weighted": d / f"fit_painting_{method}_genotype_{weight}.csv",
-        "project_weighted": d / f"project_painting_{method}_genotype_{weight}.csv",
+        # painting.genotype_weight 1: the top genotype PCs the run embeds.
+        "fit_genotype_top": d / f"fit_genotype_pca_top{GENOTYPE_WEIGHT_COMPONENTS}.csv",
+        "project_genotype_top": d / f"project_genotype_pca_top{GENOTYPE_WEIGHT_COMPONENTS}.csv",
     }
 
 

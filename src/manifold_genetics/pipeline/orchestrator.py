@@ -10,12 +10,16 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 from .config import (
+    GENOTYPE_KERNEL_PARAM,
+    PAINTING_DEFAULT_KNN,
     PAINTING_DEFAULT_T,
     AdmixtureConfig,
     EmbeddingConfig,
+    GenotypeKernel,
     PCAConfig,
     build_configs,
     build_painting_config,
+    check_genotype_weight,
     validate_method_grid,
     validate_phate_grid,
 )
@@ -23,7 +27,7 @@ from .result import PipelineResult
 from .steps.admixture import run_admixture_step
 from .steps.embedding import run_embedding_step
 from .steps.metrics import run_admixture_metrics_step, run_geographic_metrics_step
-from .steps.painting import run_painting_step, weight_with_genotype
+from .steps.painting import genotype_top_components, run_painting_step
 from .steps.paths import metrics_output_paths, painting_output_paths, pca_output_paths
 from .steps.pca import PCAStepResult, run_pca_step
 from .steps.viz import (
@@ -184,37 +188,18 @@ class Pipeline:
         self.projection_plot_fit_column = projection_plot_fit_column
         self.projection_plot_project_column = projection_plot_project_column
 
-    def _weight_with_genotype(self, r_pca, pca_cfg, painting_cfg, skip_pca) -> PCAStepResult:
-        """Mix the genotype PCA into ``r_pca`` (the painting's, or with weight 1
-        the genotype PCA itself) by ``painting_cfg.genotype_weight``."""
-        io = self._io
-        geno_paths = pca_output_paths(io, pca_cfg)
+    def _genotype_pca(self, r_pca, pca_cfg, painting_cfg, skip_pca) -> PCAStepResult:
+        """The genotype PCA a painting ``genotype_weight`` above 0 needs: ``r_pca``
+        itself at weight 1, where it replaces the painting, otherwise computed
+        (or with ``skip_pca`` read from disk) alongside the painting."""
         if not painting_cfg.paints:
-            r_geno, r_paint = r_pca, None
-        elif skip_pca:
-            r_geno, r_paint = _resolve_skipped_pca(geno_paths), r_pca
-        else:
-            logger.info("=" * 70)
-            logger.info("STEP 1 (genotype_weight): GENOTYPE PCA ALONGSIDE PAINTING")
-            logger.info("=" * 70)
-            r_geno, r_paint = run_pca_step(io, pca_cfg), r_pca
-        paths = painting_output_paths(io, pca_cfg, painting_cfg)
-        if r_geno.fit_pca is None or (r_paint is not None and r_paint.fit_pca is None):
-            raise RuntimeError(
-                "painting genotype_weight scales each view on the fit cohort, so it needs "
-                f"the fit cohort's genotype PCA ({geno_paths['fit_pca']}) and painting "
-                f"({paths['fit_pca']}) coordinates, which were not found."
-            )
-        fit, project = weight_with_genotype(
-            genotype_fit=r_geno.fit_pca,
-            genotype_project=r_geno.project_pca,
-            painting_fit=None if r_paint is None else r_paint.fit_pca,
-            painting_project=None if r_paint is None else r_paint.project_pca,
-            weight=painting_cfg.genotype_weight,
-            fit_output=paths["fit_weighted"],
-            project_output=paths["project_weighted"],
-        )
-        return PCAStepResult(fit_pca=fit, project_pca=project, skipped=r_pca.skipped)
+            return r_pca
+        if skip_pca:
+            return _resolve_skipped_pca(pca_output_paths(self._io, pca_cfg))
+        logger.info("=" * 70)
+        logger.info("STEP 1 (genotype_weight): GENOTYPE PCA ALONGSIDE PAINTING")
+        logger.info("=" * 70)
+        return run_pca_step(self._io, pca_cfg)
 
     def run(
         self,
@@ -246,6 +231,7 @@ class Pipeline:
         painting_missing: str = "error",
         painting_pbwt_dir: Optional[Union[str, Path]] = None,
         painting_genotype_weight: float = 0.0,
+        painting_knn: int = PAINTING_DEFAULT_KNN,
         method_grid: Optional[Dict] = None,
         phate_grid: Optional[Dict] = None,
     ) -> PipelineResult:
@@ -290,10 +276,13 @@ class Pipeline:
                 it out of its cohort with a warning.
             painting_pbwt_dir: Where pbwt's per-chromosome output goes (default
                 ``<output_dir>/painting/pbwt``)
-            painting_genotype_weight: The genotype PCA's share of the embedding
-                input, from 0 (painting only, the default) to 1 (genotype PCA
-                only). Between the two, the top 10 components of each are
-                embedded side by side (see docs/painting.md).
+            painting_genotype_weight: The genotype kernel's share of PHATE's
+                affinity, from 0 (painting only, the default) to 1 (genotype
+                PCA only). Between the two, PHATE runs on the weighted sum of
+                the two kernels, so only exact PHATE on one cohort (see
+                docs/painting.md).
+            painting_knn: The painting kernel's PHATE knn (default 30), alone
+                or mixed. ``embedding_params["knn"]`` is the genotype kernel's.
             method_grid: Optional {method: params} for a figure comparing methods
                 side by side, one column each
             phate_grid: Optional {param: [values]} for a figure of PHATE over one
@@ -332,8 +321,12 @@ class Pipeline:
             missing=painting_missing,
             pbwt_dir=painting_pbwt_dir,
             genotype_weight=painting_genotype_weight,
+            knn=painting_knn,
         )
         weight = painting_cfg.genotype_weight if painting_cfg.enabled else 0.0
+        check_genotype_weight(
+            weight, embedding, embedding_input, embedding_params, method_grid, phate_grid
+        )
         # Painting stands in for PCA: its coordinates go wherever the PCA's
         # would, so the PCA figures and the embedding read them unchanged.
         # A genotype weight of 1 replaces the painting outright, so it is skipped.
@@ -347,6 +340,10 @@ class Pipeline:
         if painting_cfg.paints and embedding == "phate" and "t" not in params:
             logger.info(f"Painting input: PHATE t defaults to {PAINTING_DEFAULT_T}")
             embedding_params = {**params, "t": PAINTING_DEFAULT_T}
+        # Painting alone: the painting kernel, PHATE's only one, takes painting.knn.
+        if painting_cfg.paints and weight == 0 and embedding == "phate":
+            logger.info(f"Painting input: PHATE knn is painting.knn, {painting_cfg.knn}")
+            embedding_params = {**(embedding_params or {}), "knn": painting_cfg.knn}
         # admix_group_column / admix_within_group_order are run()-time parameters,
         # not init-time ones — self._viz_config only carries the init-time
         # projection-plot columns, so those two fields are overridden per call.
@@ -383,13 +380,39 @@ class Pipeline:
 
             r_pca = run_pca_step(io, pca_cfg)
 
-        # painting.genotype_weight above 0: the genotype PCA and the painting
-        # side by side. Only the embedding and the grids read them.
+        # painting.genotype_weight above 0 needs the genotype PCA. Only the
+        # embedding and the grids read it. At 1 they embed its top components,
+        # and between 0 and 1 PHATE mixes its kernel into the painting's.
         wants_input = not skip_embedding or (
             not skip_visualization and bool(method_grid or phate_grid)
         )
         if weight > 0 and wants_input:
-            r_pca = self._weight_with_genotype(r_pca, pca_cfg, painting_cfg, skip_pca)
+            r_geno = self._genotype_pca(r_pca, pca_cfg, painting_cfg, skip_pca)
+            cohort = "fit" if embedding_input == "fit" else "project"
+            geno_input = r_geno.fit_pca if cohort == "fit" else r_geno.project_pca
+            if geno_input is None:
+                raise RuntimeError(
+                    f"painting genotype_weight {weight:g} needs the {cohort} cohort's "
+                    f"genotype PCA ({pca_output_paths(io, pca_cfg)[f'{cohort}_pca']}), "
+                    "which was not found."
+                )
+            if weight == 1:
+                paths = painting_output_paths(io, pca_cfg, painting_cfg)
+                fit_top = project_top = None
+                if r_geno.fit_pca is not None:
+                    fit_top = genotype_top_components(r_geno.fit_pca, paths["fit_genotype_top"])
+                if r_geno.project_pca is not None:
+                    project_top = genotype_top_components(
+                        r_geno.project_pca, paths["project_genotype_top"]
+                    )
+                r_pca = PCAStepResult(
+                    fit_pca=fit_top, project_pca=project_top, skipped=r_pca.skipped
+                )
+            else:
+                kernel = GenotypeKernel(
+                    genotype=geno_input, weight=weight, painting_knn=painting_cfg.knn
+                )
+                embedding_params = {**(embedding_params or {}), GENOTYPE_KERNEL_PARAM: kernel}
 
         # ---- Step 1.5: PCA Visualization (independent of PCA computation) ----
         pca_figures = ()

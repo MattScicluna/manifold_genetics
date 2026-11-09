@@ -16,9 +16,15 @@ _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 _PAINTING_METHODS = ("finestructure", "hc")
 _PAINTING_MISSING = ("error", "drop")
-# Components taken from each of the genotype PCA and the painting when
-# painting.genotype_weight mixes them.
+# Top genotype PCs the genotype kernel is built on when painting.genotype_weight
+# is above 0, and that a weight of 1 embeds.
 GENOTYPE_WEIGHT_COMPONENTS = 10
+# painting.knn: the painting kernel's nearest neighbors when PHATE embeds the
+# painting, alone (genotype_weight 0) or mixed with the genotype PCA.
+PAINTING_DEFAULT_KNN = 30
+# The embedding params key that carries a GenotypeKernel to build_embedding_model
+# and to the grids' PHATE panels. Set by the pipeline, never by a config file.
+GENOTYPE_KERNEL_PARAM = "genotype_kernel"
 # PHATE's t when painting provides the embedding input and neither the config
 # nor its preset sets t. On painted HGDP+1KGP it beat automatic t and t 3.
 PAINTING_DEFAULT_T = 10
@@ -72,11 +78,16 @@ class PaintingConfig:
     depend on the method, so runs with different methods or output
     directories can share one.
 
-    ``genotype_weight`` (in [0, 1]) mixes the genotype PCA back in. The top
-    ``GENOTYPE_WEIGHT_COMPONENTS`` components of each are concatenated, each
-    block scaled so the genotype's share of squared distance is the weight.
-    0, the default, embeds the painting alone and runs no genotype PCA. 1
-    embeds only the genotype PCA's top components and skips painting.
+    ``genotype_weight`` (w, in [0, 1]) mixes the genotype PCA back in: PHATE
+    runs on ``w * K_genotype + (1 - w) * K_painting``, each kernel divided by
+    its mean degree (see ``GenotypePaintingPHATE``). 0, the default, embeds
+    the painting alone and runs no genotype PCA. 1 embeds only the top
+    ``GENOTYPE_WEIGHT_COMPONENTS`` genotype PCs and skips painting. In between
+    is PHATE only (``check_genotype_weight``).
+
+    ``knn`` is the painting kernel's number of nearest neighbors whenever PHATE
+    embeds the painting, alone or mixed. ``embedding.knn`` is the genotype
+    kernel's.
     """
 
     enabled: bool = False
@@ -86,11 +97,31 @@ class PaintingConfig:
     missing: str = "error"
     pbwt_dir: Optional[Path] = None
     genotype_weight: float = 0.0
+    knn: int = PAINTING_DEFAULT_KNN
 
     @property
     def paints(self) -> bool:
         """Whether the painting runs: enabled, and not replaced outright by the genotype."""
         return self.enabled and self.genotype_weight < 1
+
+    @property
+    def mixes(self) -> bool:
+        """Whether the embedding mixes the genotype and painting kernels: 0 < w < 1."""
+        return self.enabled and 0 < self.genotype_weight < 1
+
+
+@dataclass(frozen=True)
+class GenotypeKernel:
+    """What PHATE needs to mix the genotype kernel into the painting's.
+
+    ``genotype`` is the genotype PCA CSV of the cohort being embedded. Carried
+    in the embedding params under ``GENOTYPE_KERNEL_PARAM``.
+    """
+
+    genotype: Path
+    weight: float
+    painting_knn: int
+    components: int = GENOTYPE_WEIGHT_COMPONENTS
 
 
 @dataclass(frozen=True)
@@ -171,7 +202,14 @@ def _as_path(value) -> Optional[Path]:
 # The run's settings that every PHATE grid panel inherits unless the grid sets
 # them. They decide what a panel costs, not what it shows, so a grid must not
 # silently fall back to exact, O(n^2) PHATE when the run uses landmarks.
-GRID_INHERITED_PHATE_PARAMS = ("n_landmark", "random_landmarking", "embed_batch_size")
+# GENOTYPE_KERNEL_PARAM is inherited too, so that with a painting
+# genotype_weight between 0 and 1 every PHATE panel mixes the same two kernels.
+GRID_INHERITED_PHATE_PARAMS = (
+    "n_landmark",
+    "random_landmarking",
+    "embed_batch_size",
+    GENOTYPE_KERNEL_PARAM,
+)
 
 
 def _is_int(value) -> bool:
@@ -321,6 +359,7 @@ def build_configs(
     painting_missing: str = "error",
     painting_pbwt_dir=None,
     painting_genotype_weight: float = 0.0,
+    painting_knn: int = PAINTING_DEFAULT_KNN,
     n_pcs: int = 50,
     force_pca: bool = False,
     k_min: int = 2,
@@ -404,11 +443,21 @@ def build_configs(
         missing=painting_missing,
         pbwt_dir=painting_pbwt_dir,
         genotype_weight=painting_genotype_weight,
+        knn=painting_knn,
     )
     if method_grid is not None:
         validate_method_grid(method_grid, embedding_params)
     if phate_grid is not None:
         validate_phate_grid(phate_grid, embedding_params)
+    if painting_cfg.enabled:
+        check_genotype_weight(
+            painting_cfg.genotype_weight,
+            embedding,
+            embedding_input,
+            embedding_params,
+            method_grid,
+            phate_grid,
+        )
 
     io = IOConfig(
         fit_plink=Path(fit_plink),
@@ -467,6 +516,7 @@ def build_painting_config(
     missing: str = "error",
     pbwt_dir=None,
     genotype_weight: float = 0.0,
+    knn: int = PAINTING_DEFAULT_KNN,
 ) -> PaintingConfig:
     """Validate the painting settings into a ``PaintingConfig``. No filesystem access.
 
@@ -474,7 +524,8 @@ def build_painting_config(
         ValueError: an unknown method or ``missing`` policy, an ``hc`` run on a
             chromosome with no known genetic length, an unparseable chromosome list, or painting
             enabled without a ``phased_vcf`` containing ``{chr}``, or a
-            ``genotype_weight`` that is not a number in [0, 1].
+            ``genotype_weight`` that is not a number in [0, 1], or a ``knn``
+            that is not a positive integer.
     """
     # Imported here: the painting package pulls in sklearn, which the rest of
     # this module has no need for.
@@ -499,6 +550,8 @@ def build_painting_config(
             f"painting genotype_weight must be a number from 0 (painting only) to 1 "
             f"(genotype PCA only), got {genotype_weight!r}"
         )
+    if not _is_positive_int(knn):
+        raise ValueError(f"painting knn must be a positive integer, got {knn!r}")
     names = tuple(parse_chromosomes(chromosomes))
     if method == "hc":
         unknown = [c for c in names if c.removeprefix("chr") not in CHROMOSOME_CM]
@@ -523,4 +576,49 @@ def build_painting_config(
         missing=missing,
         pbwt_dir=_as_path(pbwt_dir),
         genotype_weight=float(genotype_weight),
+        knn=knn,
     )
+
+
+def check_genotype_weight(
+    weight, embedding, input_mode, params=None, method_grid=None, phate_grid=None
+) -> None:
+    """Refuse what a ``genotype_weight`` strictly between 0 and 1 cannot run.
+
+    The mixed kernel exists only inside PHATE, has no out-of-sample extension
+    and is built over all samples at once, so the run must use PHATE, embed
+    one cohort (``input_mode`` fit or project, not both, which the
+    ``projection`` preset sets) and run without landmarks. Grids follow the
+    same rules: every ``method_grid`` panel must be PHATE, and no panel may set
+    ``n_landmark``. Weights of 0 and 1 run anything.
+
+    Raises:
+        ValueError: naming the setting to change.
+    """
+    if not 0 < weight < 1:
+        return
+    why = f"painting genotype_weight {weight:g} mixes the genotype and painting PHATE kernels"
+    if embedding != "phate":
+        raise ValueError(
+            f"{why}, so it needs embedding method phate, not {embedding!r}. Use "
+            "genotype_weight 0 or 1 with other methods."
+        )
+    if input_mode == "both":
+        raise ValueError(
+            f"{why}, which cannot place a second cohort in the embedding, so input_mode "
+            "both (and the projection preset, which sets it) cannot be used. Set "
+            "embedding input_mode to fit or project, or use the whole_cohort preset."
+        )
+    if (params or {}).get("n_landmark") is not None:
+        raise ValueError(
+            f"{why} over every pair of samples, so PHATE runs without landmarks: set "
+            f"embedding n_landmark to none (got {params['n_landmark']})."
+        )
+    for method, panel in (method_grid or {}).items():
+        if method != "phate":
+            raise ValueError(f"{why}, so method_grid can hold only phate, not {method!r}.")
+        if (panel or {}).get("n_landmark") is not None:
+            raise ValueError(f"{why}, so method_grid's phate panel cannot set n_landmark.")
+    landmarks = (phate_grid or {}).get("n_landmark")
+    if any(v is not None for v in (landmarks if isinstance(landmarks, list) else [landmarks])):
+        raise ValueError(f"{why}, so phate_grid cannot set n_landmark.")

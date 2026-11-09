@@ -32,6 +32,7 @@ A config looks like::
       enabled: true            # needs data.phased_vcf: data/chr{chr}.vcf.gz
       method: hc               # or finestructure
       genotype_weight: 0       # 0 painting only, 1 genotype PCA only
+      knn: 30                  # the painting kernel's PHATE knn
       missing: error           # or drop: leave out cohort samples the VCFs lack
       pbwt_dir: shared/pbwt    # optional; share pbwt's output between runs
 
@@ -50,7 +51,12 @@ from typing import Any, Dict, Mapping, Optional, Union
 
 import yaml
 
-from .config import check_landmarking, validate_method_grid, validate_phate_grid
+from .config import (
+    check_genotype_weight,
+    check_landmarking,
+    validate_method_grid,
+    validate_phate_grid,
+)
 
 __all__ = [
     "ConfigFileError",
@@ -153,6 +159,7 @@ _PAINTING_KEYS = {
     "missing": "painting_missing",
     "pbwt_dir": "painting_pbwt_dir",
     "genotype_weight": "painting_genotype_weight",
+    "knn": "painting_knn",
 }
 # Resolved against the config file's directory, like the data section's paths.
 _PAINTING_PATH_KEYS = {"pbwt_dir"}
@@ -343,6 +350,21 @@ def load_config(path: PathLike, base_dir: Optional[PathLike] = None) -> Dict[str
             kwargs["phate_grid"] = phate_grid
     except ValueError as exc:
         raise ConfigFileError(str(exc)) from None
+
+    # A painting genotype_weight between 0 and 1 runs only some settings.
+    weight = kwargs.get("painting_genotype_weight", 0)
+    if kwargs.get("painting") and isinstance(weight, (int, float)):
+        try:
+            check_genotype_weight(
+                weight,
+                kwargs.get("embedding", "phate"),
+                kwargs.get("embedding_input", "both"),
+                params,
+                kwargs.get("method_grid"),
+                kwargs.get("phate_grid"),
+            )
+        except ValueError as exc:
+            raise ConfigFileError(str(exc)) from None
 
     kwargs["embedding_params"] = params
     return kwargs

@@ -38,6 +38,7 @@ def run_pipeline(
     painting_missing: str = "error",
     painting_pbwt_dir: Optional[Union[str, Path]] = None,
     painting_genotype_weight: float = 0.0,
+    painting_knn: int = 30,
     # PCA parameters
     n_pcs: int = 50,
     pca_backend: str = "python",
@@ -109,8 +110,10 @@ def run_pipeline(
             its cohort with a warning.
         painting_pbwt_dir: Where pbwt's per-chromosome output goes (default
             ``<output_dir>/painting/pbwt``). Share it between runs to paint once.
-        painting_genotype_weight: The genotype PCA's share, from 0 (painting
-            only, the default) to 1 (genotype PCA only). See docs/painting.md.
+        painting_genotype_weight: The genotype kernel's share of PHATE's
+            affinity, from 0 (painting only, the default) to 1 (genotype PCA
+            only). See docs/painting.md.
+        painting_knn: The painting kernel's PHATE knn (default 30)
         n_pcs: Number of principal components (default: 50)
         pca_backend: 'flashpca' (external binary) or 'python' (in process)
         max_fit_memory_gb: GB budget for the dense standardised matrix when
@@ -251,6 +254,7 @@ def run_pipeline(
         painting_missing=painting_missing,
         painting_pbwt_dir=painting_pbwt_dir,
         painting_genotype_weight=painting_genotype_weight,
+        painting_knn=painting_knn,
         method_grid=method_grid,
         phate_grid=phate_grid,
     )

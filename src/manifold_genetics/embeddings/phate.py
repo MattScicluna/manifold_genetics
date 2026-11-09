@@ -245,3 +245,133 @@ class PHATE(EmbeddingBase):
 
         # Format output with sample_id column
         return self._format_output(embedding, sample_ids, output_path)
+
+
+def mix_kernels(K_genotype, K_painting, weight: float):
+    """``weight * K_genotype / d_genotype + (1 - weight) * K_painting / d_painting``.
+
+    ``d`` is a kernel's mean degree (its mean row sum), so both views enter on
+    the same scale whatever the density of their neighborhoods, and a kernel
+    keeps its shape. The sum is symmetrized, ``(K + K.T) / 2``, and returned as
+    a sparse matrix. Weight 1 or 0 gives back one view's kernel up to a
+    constant factor, which PHATE's row normalization removes.
+    """
+    from scipy import sparse
+
+    K_g, K_p = sparse.csr_matrix(K_genotype), sparse.csr_matrix(K_painting)
+    if K_g.shape != K_p.shape:
+        raise ValueError(f"The kernels differ in shape: {K_g.shape} and {K_p.shape}")
+    if isinstance(weight, bool) or not 0.0 <= weight <= 1.0:
+        raise ValueError(f"The genotype weight must be in [0, 1], got {weight!r}")
+    K = weight * (K_g / float(K_g.sum(axis=1).mean())) + (1.0 - weight) * (
+        K_p / float(K_p.sum(axis=1).mean())
+    )
+    return sparse.csr_matrix((K + K.T) / 2)
+
+
+class GenotypePaintingPHATE(PHATE):
+    """PHATE on a weighted sum of the genotype and painting affinities.
+
+    ``fit`` takes the painting coordinates, and ``genotype`` holds the genotype
+    PCA (a CSV or a DataFrame with ``sample_id``). Each view's alpha-decay
+    kernel is built as PHATE builds it (graphtools, this model's ``decay`` and
+    ``n_pca``): the genotype's on its top ``genotype_components`` PCs with
+    ``knn``, the painting's on all its coordinates with ``painting_knn``. The
+    two are mixed by :func:`mix_kernels`, ``genotype_weight`` being the
+    genotype's share, and PHATE runs its diffusion, potential and MDS on the
+    result as a precomputed affinity.
+
+    There is no out-of-sample extension: ``transform`` accepts only the fit
+    data. Landmarks are refused, so it is always exact.
+    """
+
+    def __init__(
+        self,
+        genotype: Union[pd.DataFrame, str, Path],
+        genotype_weight: float,
+        painting_knn: int,
+        genotype_components: int = 10,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        if self.n_landmark is not None:
+            raise ValueError(
+                "PHATE on mixed genotype and painting affinities is exact only: set "
+                f"n_landmark to none (got {self.n_landmark})"
+            )
+        if isinstance(genotype_weight, bool) or not 0.0 <= genotype_weight <= 1.0:
+            raise ValueError(f"The genotype weight must be in [0, 1], got {genotype_weight!r}")
+        self.genotype = genotype
+        self.genotype_weight = float(genotype_weight)
+        self.painting_knn = int(painting_knn)
+        self.genotype_components = int(genotype_components)
+
+    def view_kernel(self, X: np.ndarray, knn: int):
+        """The affinity matrix PHATE itself builds on ``X`` with ``knn``."""
+        view = phate.PHATE(
+            knn=knn,
+            decay=self.decay,
+            n_pca=self.n_pca,
+            n_landmark=None,
+            random_state=self.random_state,
+            n_jobs=self.n_jobs,
+            verbose=0,
+        )
+        view.fit(X)
+        return view.graph.kernel
+
+    def _genotype_rows(self) -> np.ndarray:
+        """The top genotype PCs, one row per fit sample, in the fit data's order."""
+        geno = self.genotype
+        if not isinstance(geno, pd.DataFrame):
+            geno = pd.read_csv(geno, dtype={"sample_id": str})
+        geno = geno.set_index(geno["sample_id"].astype(str)).drop(columns="sample_id")
+        if geno.shape[1] < self.genotype_components:
+            logger.warning(
+                f"The genotype PCA has {geno.shape[1]} components, fewer than the "
+                f"{self.genotype_components} its kernel is built on. Using all of them."
+            )
+        ids = [str(s) for s in self._sample_ids]
+        missing = [s for s in ids if s not in geno.index]
+        if missing:
+            raise ValueError(
+                f"{len(missing)} of the {len(ids)} painted samples have no genotype PCA row "
+                f"(for example {', '.join(missing[:3])})"
+            )
+        return geno.loc[ids].iloc[:, : self.genotype_components].to_numpy(dtype=float)
+
+    def fit(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> "GenotypePaintingPHATE":
+        X_array, self._sample_ids = self._load_input_data(X)
+        self._check_exact_fits_in_memory(len(X_array))
+        geno = self._genotype_rows()
+
+        logger.info(
+            f"PHATE on mixed affinities: genotype weight {self.genotype_weight:g}, genotype "
+            f"knn {self.knn} on {geno.shape[1]} PCs, painting knn {self.painting_knn}, "
+            f"t={self.t}"
+        )
+        K = mix_kernels(
+            self.view_kernel(geno, self.knn),
+            self.view_kernel(X_array, self.painting_knn),
+            self.genotype_weight,
+        )
+        self.model.set_params(knn_dist="precomputed_affinity", n_landmark=None)
+        self.model.fit(K)
+        self._fit_X = X_array
+        self._is_fitted = True
+        return self
+
+    def transform(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> pd.DataFrame:
+        if not self._is_fitted:
+            raise RuntimeError("PHATE not fitted. Call fit() first.")
+        X_array, sample_ids = self._load_input_data(X)
+        if not self._is_fit_data(X_array):
+            raise ValueError(
+                "PHATE on mixed genotype and painting affinities cannot place new samples: "
+                "it embeds only the data it was fitted on"
+            )
+        return self._format_output(self.model.transform(), sample_ids)
+
+    def fit_transform(self, X, output_path=None) -> pd.DataFrame:
+        self.fit(X)
+        return self._format_output(self.model.transform(), self._sample_ids, output_path)

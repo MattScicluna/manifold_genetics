@@ -32,15 +32,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`project_painting_<method>_pca_<n>.csv`), and `painting: pbwt_dir` lets
   runs share pbwt's output. See `docs/painting.md`.
 
-- **`painting: genotype_weight` mixes the genotype PCA back in.** A number from
-  0 (painting only, the default) to 1 (genotype PCA only). In between, the top
-  10 components of each are embedded side by side, each block scaled to unit
-  total norm on the fit cohort and then by √w and √(1 − w), so the weight is
-  the genotype's share of squared distance. It works with every embedding
-  method. At 0 no genotype PCA runs, and at 1 no painting runs. When painting
-  provides the embedding input, PHATE's `t` defaults to 10 unless the config or
-  its preset sets it. Scores on HGDP+1KGP and a recipe for sweeping the method
-  and weight with one shared `pbwt_dir` are in `docs/painting.md`.
+- **`painting: genotype_weight` mixes the genotype PCA back in, and
+  `painting: knn` sets the painting kernel's neighbors.** A number w from 0
+  (painting only, the default) to 1 (genotype PCA only). PHATE runs on
+  K = w · K_genotype / d_genotype + (1 − w) · K_painting / d_painting,
+  symmetrized, as a precomputed affinity: K_genotype is PHATE's alpha-decay
+  kernel on the top 10 genotype PCs with `embedding: knn`, K_painting the same
+  kernel on the painting coordinates with `painting: knn` (default 30), and
+  each is divided by its mean degree d. At 0 no genotype PCA runs and PHATE
+  embeds the painting with `painting: knn`, and at 1 the run embeds the top 10
+  genotype PCs and does not paint. Between 0 and 1 the run must be exact PHATE
+  on one cohort: other methods, `input_mode: both` (the `projection` preset),
+  landmarks and non-PHATE `method_grid` panels are refused when the config is
+  read. Grid PHATE panels mix the same kernels. When painting provides the
+  embedding input, PHATE's `t` defaults to 10 unless the config or its preset
+  sets it. Scores on HGDP+1KGP, recommended starting values and a recipe for
+  sweeping the method, weight and `painting: knn` with one shared `pbwt_dir`
+  are in `docs/painting.md`.
 
 - **Comparison grids in a pipeline run.** Two optional keys in the config's
   `visualization` section. `method_grid` maps methods to their parameters
