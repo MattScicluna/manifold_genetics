@@ -16,6 +16,7 @@ from typing import List, Optional
 from manifold_genetics import __version__
 
 from .pipeline import run_pipeline
+from .pipeline.config import _EMBEDDING_METHODS as _EMBED_METHODS
 from .pipeline.configfile import load_config
 from .pipeline.steps import (
     admixture_embedding_3d_if_possible,
@@ -149,6 +150,19 @@ def _embedding_params_from_args(args) -> dict:
         params = {"perplexity": args.perplexity}
     elif method == "diffusion_map":
         params = {"knn": args.knn}
+    elif method == "dreams":
+        params = {
+            "perplexity": getattr(args, "perplexity", 30),
+            "reg_lambda": getattr(args, "reg_lambda", 0.15),
+        }
+    elif method == "flodr":
+        params = {"w": getattr(args, "flodr_w", 2.0)}
+    elif method == "autoencoder":
+        params = {"epochs": getattr(args, "epochs", 300)}
+    elif method == "popvae":
+        params = {"genotypes": getattr(args, "genotypes", None)}
+    if method in ("dreams", "flodr", "autoencoder", "popvae") and getattr(args, "seed", None) is not None:
+        params["random_state"] = args.seed
 
     # Every method accepts n_components, so it is set outside the per-method
     # branches. Read with getattr because not every subparser defines the flag;
@@ -669,7 +683,7 @@ def cmd_embed(args):
     project_output = args.project_output or args.output
     fit_output = args.fit_output
 
-    if args.method not in ("phate", "umap", "tsne", "diffusion_map"):
+    if args.method not in _EMBED_METHODS:
         print(f"Unknown method: {args.method}")
         return 1
 
@@ -1329,7 +1343,11 @@ def main(argv: Optional[List[str]] = None):
             "                  Key params: --knn, --t, --n-landmark, --random-landmarking\n"
             "  umap         -- UMAP. Key params: --n-neighbors, --min-dist\n"
             "  tsne         -- t-SNE. Key params: --perplexity\n"
-            "  diffusion_map -- Diffusion Maps. Key params: --knn\n\n"
+            "  diffusion_map -- Diffusion Maps. Key params: --knn\n"
+            "  dreams       -- t-SNE regularised towards PCA (DREAMS). Key params: --perplexity, --reg-lambda\n"
+            "  flodr        -- normalising-flow DR (FloDR). Key params: --flodr-w\n"
+            "  autoencoder  -- plain MLP autoencoder. Key params: --epochs\n"
+            "  popvae       -- VAE on genotypes (popVAE). Key params: --genotypes; needs $POPVAE_PYTHON, $POPVAE_SCRIPT\n\n"
             "Input CSVs must have columns: sample_id, dim_1, dim_2, ... (standard pipeline output)."
         ),
         epilog=(
@@ -1364,7 +1382,7 @@ def main(argv: Optional[List[str]] = None):
     embed_parser.add_argument("--output", help="Output CSV for projected embedding")
     embed_parser.add_argument(
         "--method",
-        choices=["phate", "umap", "tsne", "diffusion_map"],
+        choices=list(_EMBED_METHODS),
         default="phate",
         help="Embedding method (default: phate). See description above for method-specific params.",
     )
@@ -1394,7 +1412,20 @@ def main(argv: Optional[List[str]] = None):
     )
     embed_parser.add_argument("--n-neighbors", type=int, default=15, help="Neighbors (UMAP)")
     embed_parser.add_argument("--min-dist", type=float, default=0.1, help="Min dist (UMAP)")
-    embed_parser.add_argument("--perplexity", type=float, default=30, help="Perplexity (t-SNE)")
+    embed_parser.add_argument(
+        "--perplexity", type=float, default=30, help="Perplexity (t-SNE, DREAMS)"
+    )
+    embed_parser.add_argument(
+        "--reg-lambda", type=float, default=0.15, help="Regularisation strength in [0, 1] (DREAMS)"
+    )
+    embed_parser.add_argument(
+        "--flodr-w", type=float, default=2.0, help="Distance-order weight (FloDR; default 2.0)"
+    )
+    embed_parser.add_argument("--epochs", type=int, default=300, help="Training epochs (autoencoder)")
+    embed_parser.add_argument(
+        "--genotypes", help="PLINK prefix of the genotypes to embed (popVAE embeds genotypes, not PCs)"
+    )
+    embed_parser.add_argument("--seed", type=int, help="Random seed (DREAMS, FloDR, autoencoder, popVAE)")
     embed_parser.add_argument(
         "--embed-batch-size",
         type=int,
@@ -2007,7 +2038,7 @@ def main(argv: Optional[List[str]] = None):
     pipeline_parser.add_argument("--k-max", type=int, default=10, help="Max K (admixture)")
     pipeline_parser.add_argument(
         "--embedding",
-        choices=["phate", "umap", "tsne", "diffusion_map"],
+        choices=list(_EMBED_METHODS),
         default="phate",
         help="Embedding method",
     )

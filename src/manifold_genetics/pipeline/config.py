@@ -11,7 +11,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-_EMBEDDING_METHODS = ("phate", "umap", "tsne", "diffusion_map")
+_EMBEDDING_METHODS = (
+    "phate",
+    "umap",
+    "tsne",
+    "diffusion_map",
+    "dreams",
+    "flodr",
+    "popvae",
+    "autoencoder",
+)
 _EMBEDDING_INPUT_MODES = ("fit", "project", "both")
 _WITHIN_GROUP_ORDERS = ("chron", "tree", "none", None)
 

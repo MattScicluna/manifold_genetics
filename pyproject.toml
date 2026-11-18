@@ -68,6 +68,21 @@ dev = [
 aou = [
     "pandas-gbq>=0.19.0",
 ]
+# Extra embedding baselines (see docs/api.md). DREAMS is not listed: it needs the
+# authors' openTSNE fork, which PyPI metadata cannot reference. Install it with
+#   pip install "openTSNE @ git+https://github.com/berenslab/DREAMS.git@tp"
+flodr = [
+    "flodr; python_version >= '3.11'",
+]
+autoencoder = [
+    "torch>=1.10.0",
+]
+# popVAE itself runs in its own Python 3.10 / TensorFlow 2.15 environment
+# (https://github.com/kr-colab/popvae); these are only for writing its input.
+popvae = [
+    "bed-reader>=1.0",
+    "h5py>=3.0",
+]
 # Kept so `pip install 'manifold-genetics[geosketch]'` still resolves; geosketch
 # is now a core dependency.
 geosketch = []
