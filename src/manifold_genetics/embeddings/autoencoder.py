@@ -4,10 +4,11 @@ Autoencoder: a plain (non-variational) MLP autoencoder with a low-dimensional bo
 A neural baseline with no neighbourhood graph and no KL term, trained with mean
 squared reconstruction error on the same input as the other methods (the PCA
 coordinates). Encoder and decoder mirror each other: ``hidden`` layer widths
-with ELU activations; the bottleneck is linear. Inputs are centred and divided
-by one global standard deviation, which keeps the relative variance of the PCs
-(standardising each PC separately would inflate the noisy trailing PCs to the
-same weight as PC1). Needs PyTorch (``pip install 'manifold-genetics[autoencoder]'``).
+with ELU activations; the bottleneck is linear. Training uses Adam (learning
+rate 1e-3) on minibatches of 128. Inputs are centred and divided by one global
+standard deviation, which keeps the relative variance of the PCs (standardising
+each PC separately would inflate the noisy trailing PCs to the same weight as
+PC1). Needs PyTorch (``pip install 'manifold-genetics[autoencoder]'``).
 """
 
 import logging
@@ -17,19 +18,16 @@ from typing import Optional, Sequence, Union
 import numpy as np
 import pandas as pd
 
-from .base import EmbeddingBase
+from .base import EmbeddingBase, optional_import
 
 logger = logging.getLogger(__name__)
 
+_BATCH_SIZE = 128
+_LEARNING_RATE = 1e-3
 
-def _import_torch():
-    try:
-        import torch
-    except ImportError as exc:
-        raise ImportError(
-            "The autoencoder needs PyTorch: `pip install 'manifold-genetics[autoencoder]'`."
-        ) from exc
-    return torch
+
+def _torch():
+    return optional_import("torch", "pip install 'manifold-genetics[autoencoder]'")
 
 
 class Autoencoder(EmbeddingBase):
@@ -37,12 +35,9 @@ class Autoencoder(EmbeddingBase):
 
     Args:
         n_components: Bottleneck size.
-        hidden: Hidden layer widths of the encoder (decoder is reversed).
+        hidden: Hidden layer widths of the encoder (the decoder mirrors them).
         epochs: Training epochs.
-        batch_size: Minibatch size.
-        lr: Adam learning rate.
-        weight_decay: Adam weight decay.
-        random_state: Seed (torch and numpy).
+        random_state: Seed.
     """
 
     def __init__(
@@ -50,35 +45,33 @@ class Autoencoder(EmbeddingBase):
         n_components: int = 2,
         hidden: Sequence[int] = (256, 128, 64),
         epochs: int = 300,
-        batch_size: int = 128,
-        lr: float = 1e-3,
-        weight_decay: float = 0.0,
         random_state: Optional[int] = 42,
     ):
         super().__init__(n_components=n_components, random_state=random_state)
         self.hidden = tuple(int(h) for h in hidden)
         self.epochs = int(epochs)
-        self.batch_size = int(batch_size)
-        self.lr = float(lr)
-        self.weight_decay = float(weight_decay)
         self.encoder = None
 
-    def _mlp(self, sizes):
-        torch = _import_torch()
+    @staticmethod
+    def _mlp(sizes):
+        nn = _torch().nn
         layers = []
         for i, (a, b) in enumerate(zip(sizes[:-1], sizes[1:])):
-            layers.append(torch.nn.Linear(a, b))
+            layers.append(nn.Linear(a, b))
             if i < len(sizes) - 2:
-                layers.append(torch.nn.ELU())
-        return torch.nn.Sequential(*layers)
+                layers.append(nn.ELU())
+        return nn.Sequential(*layers)
+
+    def _scaled(self, X_array):
+        return _torch().from_numpy((np.asarray(X_array, dtype=np.float32) - self._mu) / self._sd)
 
     def fit(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> "Autoencoder":
-        torch = _import_torch()
+        torch = _torch()
         X_array, self._sample_ids = self._load_input_data(X)
         X_array = np.asarray(X_array, dtype=np.float32)
         self._mu = X_array.mean(0)
         self._sd = float((X_array - self._mu).std()) + 1e-8
-        Xs = torch.from_numpy((X_array - self._mu) / self._sd)
+        Xs = self._scaled(X_array)
 
         seed = 0 if self.random_state is None else int(self.random_state)
         torch.manual_seed(seed)
@@ -86,44 +79,35 @@ class Autoencoder(EmbeddingBase):
         d = Xs.shape[1]
         self.encoder = self._mlp([d, *self.hidden, self.n_components])
         decoder = self._mlp([self.n_components, *reversed(self.hidden), d])
-        params = list(self.encoder.parameters()) + list(decoder.parameters())
-        opt = torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
+        opt = torch.optim.Adam(
+            [*self.encoder.parameters(), *decoder.parameters()], lr=_LEARNING_RATE
+        )
 
         logger.info(
             f"Training autoencoder {d}->{self.hidden}->{self.n_components} for {self.epochs} epochs"
         )
         n = Xs.shape[0]
-        for epoch in range(self.epochs):
+        for _ in range(self.epochs):
             perm = torch.randperm(n, generator=gen)
-            total = 0.0
-            for start in range(0, n, self.batch_size):
-                xb = Xs[perm[start : start + self.batch_size]]
+            for start in range(0, n, _BATCH_SIZE):
+                xb = Xs[perm[start : start + _BATCH_SIZE]]
                 loss = torch.nn.functional.mse_loss(decoder(self.encoder(xb)), xb)
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
-                total += loss.item() * len(xb)
-            if (epoch + 1) % 50 == 0:
-                logger.info(f"  epoch {epoch + 1}: reconstruction MSE {total / n:.4f}")
-        self._final_loss = total / n
         self._is_fitted = True
         return self
 
-    def transform(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> pd.DataFrame:
-        torch = _import_torch()
+    def _encode(self, X, output_path=None) -> pd.DataFrame:
         if not self._is_fitted:
             raise RuntimeError("Autoencoder must be fitted before transform")
         X_array, sample_ids = self._load_input_data(X)
-        Xs = torch.from_numpy(((np.asarray(X_array, dtype=np.float32) - self._mu) / self._sd))
-        with torch.no_grad():
-            Y = self.encoder(Xs).numpy()
-        return self._format_output(Y, sample_ids)
+        with _torch().no_grad():
+            Y = self.encoder(self._scaled(X_array)).numpy()
+        return self._format_output(Y, sample_ids, output_path)
+
+    def transform(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> pd.DataFrame:
+        return self._encode(X)
 
     def fit_transform(self, X, output_path=None) -> pd.DataFrame:
-        self.fit(X)
-        out = self.transform(X)
-        if output_path:
-            from ..utils.io import write_embedding_csv
-
-            write_embedding_csv(out, output_path)
-        return out
+        return self.fit(X)._encode(X, output_path)

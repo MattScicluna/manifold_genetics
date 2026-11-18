@@ -108,6 +108,15 @@ def _resolve_k_values(
     )
 
 
+# argparse attribute -> constructor parameter, for the optional embedding baselines.
+_OPTIONAL_METHOD_FLAGS = {
+    "dreams": {"perplexity": "perplexity", "reg_lambda": "reg_lambda"},
+    "flodr": {"flodr_w": "w"},
+    "autoencoder": {"epochs": "epochs"},
+    "popvae": {"genotypes": "genotypes"},
+}
+
+
 def _embedding_params_from_args(args) -> dict:
     """Turn argparse values into the embedding params dict.
 
@@ -150,22 +159,14 @@ def _embedding_params_from_args(args) -> dict:
         params = {"perplexity": args.perplexity}
     elif method == "diffusion_map":
         params = {"knn": args.knn}
-    elif method == "dreams":
+    elif method in _OPTIONAL_METHOD_FLAGS:
+        # Only flags the user set are passed, so each class keeps its own defaults.
+        flags = {**_OPTIONAL_METHOD_FLAGS[method], "seed": "random_state"}
         params = {
-            "perplexity": getattr(args, "perplexity", 30),
-            "reg_lambda": getattr(args, "reg_lambda", 0.15),
+            param: getattr(args, flag)
+            for flag, param in flags.items()
+            if getattr(args, flag, None) is not None
         }
-    elif method == "flodr":
-        params = {"w": getattr(args, "flodr_w", 2.0)}
-    elif method == "autoencoder":
-        params = {"epochs": getattr(args, "epochs", 300)}
-    elif method == "popvae":
-        params = {"genotypes": getattr(args, "genotypes", None)}
-    if (
-        method in ("dreams", "flodr", "autoencoder", "popvae")
-        and getattr(args, "seed", None) is not None
-    ):
-        params["random_state"] = args.seed
 
     # Every method accepts n_components, so it is set outside the per-method
     # branches. Read with getattr because not every subparser defines the flag;
@@ -1419,14 +1420,10 @@ def main(argv: Optional[List[str]] = None):
         "--perplexity", type=float, default=30, help="Perplexity (t-SNE, DREAMS)"
     )
     embed_parser.add_argument(
-        "--reg-lambda", type=float, default=0.15, help="Regularisation strength in [0, 1] (DREAMS)"
+        "--reg-lambda", type=float, help="Regularisation strength in [0, 1] (DREAMS)"
     )
-    embed_parser.add_argument(
-        "--flodr-w", type=float, default=2.0, help="Distance-order weight (FloDR; default 2.0)"
-    )
-    embed_parser.add_argument(
-        "--epochs", type=int, default=300, help="Training epochs (autoencoder)"
-    )
+    embed_parser.add_argument("--flodr-w", type=float, help="Distance-order weight (FloDR)")
+    embed_parser.add_argument("--epochs", type=int, help="Training epochs (autoencoder)")
     embed_parser.add_argument(
         "--genotypes",
         help="PLINK prefix of the genotypes to embed (popVAE embeds genotypes, not PCs)",

@@ -19,11 +19,19 @@ import pandas as pd
 
 from ...embeddings import DREAMS, PHATE, TSNE, UMAP, Autoencoder, DiffusionMap, FloDR, PopVAE
 from ...utils.validation import validate_embedding_csv
-from ..config import EmbeddingConfig, IOConfig
+from ..config import _EMBEDDING_METHODS, EmbeddingConfig, IOConfig
 from .paths import embedding_output_paths
 from .pca import PCAStepResult
 
 logger = logging.getLogger(__name__)
+
+# Optional baselines wrapping other groups' code (extra installs; see docs/api.md).
+_OPTIONAL_METHODS = {
+    "dreams": DREAMS,
+    "flodr": FloDR,
+    "autoencoder": Autoencoder,
+    "popvae": PopVAE,
+}
 
 __all__ = [
     "EmbeddingStepResult",
@@ -90,47 +98,13 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
         return TSNE(n_components=n_components, perplexity=p.get("perplexity", 30))
     if method == "diffusion_map":
         return DiffusionMap(n_components=n_components, knn=p.get("knn", 25))
-    if method == "dreams":
-        return DREAMS(
-            n_components=n_components,
-            perplexity=p.get("perplexity", 30),
-            reg_lambda=p.get("reg_lambda", 0.15),
-            random_state=p.get("random_state", 42),
-        )
-    if method == "flodr":
-        return FloDR(
-            n_components=n_components,
-            w=p.get("w", 2.0),
-            axes=p.get("axes", "variance"),
-            max_iter=p.get("max_iter"),
-            random_state=p.get("random_state", 42),
-            device=p.get("device"),
-        )
-    if method == "autoencoder":
-        return Autoencoder(
-            n_components=n_components,
-            hidden=p.get("hidden", (256, 128, 64)),
-            epochs=p.get("epochs", 300),
-            random_state=p.get("random_state", 42),
-        )
-    if method == "popvae":
-        return PopVAE(
-            genotypes=p.get("genotypes"),
-            n_components=n_components,
-            python=p.get("python"),
-            script=p.get("script"),
-            patience=p.get("patience", 50),
-            max_epochs=p.get("max_epochs", 500),
-            train_prop=p.get("train_prop", 0.9),
-            search_network_sizes=p.get("search_network_sizes", False),
-            max_snps=p.get("max_snps"),
-            workdir=p.get("workdir"),
-            random_state=p.get("random_state", 42),
-        )
+    if method in _OPTIONAL_METHODS:
+        # These take their defaults from their own constructors: pass only what was given.
+        p.pop("n_components", None)
+        return _OPTIONAL_METHODS[method](n_components=n_components, **p)
 
     raise ValueError(
-        f"Unknown embedding method: {method}. Choose from: phate, umap, tsne, diffusion_map, "
-        "dreams, flodr, popvae, autoencoder"
+        f"Unknown embedding method: {method}. Choose from: {', '.join(_EMBEDDING_METHODS)}"
     )
 
 

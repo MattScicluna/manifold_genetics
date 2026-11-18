@@ -17,27 +17,20 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
-from .base import EmbeddingBase
+from .base import EmbeddingBase, optional_import
 
 logger = logging.getLogger(__name__)
 
+_INSTALL = "pip install 'openTSNE @ git+https://github.com/berenslab/DREAMS.git@tp'"
+
 
 def _import_dreams_tsne():
-    try:
-        from openTSNE import TSNE as _TSNE
-    except ImportError as exc:
-        raise ImportError(
-            "DREAMS needs the authors' openTSNE fork: "
-            "`pip install 'openTSNE @ git+https://github.com/berenslab/DREAMS.git@tp'`."
-        ) from exc
     import inspect
 
-    if "reg_lambda" not in inspect.signature(_TSNE.__init__).parameters:
-        raise ImportError(
-            "The installed openTSNE is the upstream release, not the DREAMS fork "
-            "(no `reg_lambda`). Install from https://github.com/berenslab/DREAMS (branch tp)."
-        )
-    return _TSNE
+    TSNE = optional_import("openTSNE", _INSTALL).TSNE
+    if "reg_lambda" not in inspect.signature(TSNE.__init__).parameters:
+        raise ImportError(f"The installed openTSNE is not the DREAMS fork: {_INSTALL}")
+    return TSNE
 
 
 def _fit_fork(embedder, X: np.ndarray):
@@ -93,7 +86,6 @@ class DREAMS(EmbeddingBase):
         self.perplexity = perplexity
         self.reg_lambda = reg_lambda
         self.n_jobs = n_jobs
-        self._embedding = None
 
     def _reference(self, X: np.ndarray) -> np.ndarray:
         from sklearn.decomposition import PCA
@@ -102,7 +94,7 @@ class DREAMS(EmbeddingBase):
         return ref / ref[:, 0].std() * 1e-4
 
     def fit(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> "DREAMS":
-        _TSNE = _import_dreams_tsne()
+        TSNE = _import_dreams_tsne()
         X_array, self._sample_ids = self._load_input_data(X)
         X_array = np.asarray(X_array, dtype=float)
         ref = self._reference(X_array)
@@ -110,7 +102,7 @@ class DREAMS(EmbeddingBase):
             f"Running DREAMS (perplexity={self.perplexity}, lambda={self.reg_lambda}) "
             f"on {len(X_array)} samples..."
         )
-        embedder = _TSNE(
+        embedder = TSNE(
             n_components=self.n_components,
             perplexity=self.perplexity,
             initialization=ref,

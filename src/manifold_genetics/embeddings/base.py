@@ -14,6 +14,16 @@ import pandas as pd
 from ..utils.io import read_embedding_csv, write_embedding_csv
 
 
+def optional_import(module: str, install_hint: str):
+    """Import an optional dependency, or raise ImportError saying how to install it."""
+    import importlib
+
+    try:
+        return importlib.import_module(module)
+    except ImportError as exc:
+        raise ImportError(f"{module} is not installed: {install_hint}") from exc
+
+
 class EmbeddingBase(ABC):
     """
     Abstract base class for dimensionality reduction methods.

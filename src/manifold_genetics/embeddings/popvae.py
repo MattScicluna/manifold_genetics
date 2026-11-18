@@ -87,16 +87,16 @@ def plink_to_popvae_zarr(prefix, sample_ids, out_path, python: str):
 class PopVAE(EmbeddingBase):
     """popVAE embedding (latent means).
 
+    popVAE's own training defaults (network size, patience, epochs, train/validation
+    split) are used unchanged.
+
     Args:
         genotypes: PLINK prefix (``.bed/.bim/.fam``) holding the samples to embed.
         n_components: Latent dimensions (``--latent_dim``).
         python: Interpreter of the popVAE environment (default ``$POPVAE_PYTHON``).
         script: Path to ``popvae.py`` (default ``$POPVAE_SCRIPT``).
-        patience, max_epochs, batch_size, train_prop, depth, width: popVAE options
-            (popVAE defaults: 50, 500, 32, 0.9, 6, 128).
-        search_network_sizes: Run popVAE's own grid search over width/depth.
-        max_snps: Randomly subsample SNPs (``--max_SNPs``); ``None`` uses all.
-        workdir: Where inputs/outputs go (default: a temporary directory).
+        workdir: Where inputs/outputs go (default: a temporary directory). The
+            converted genotypes are reused across fits in the same ``workdir``.
         random_state: Seed (``--seed``).
     """
 
@@ -106,14 +106,6 @@ class PopVAE(EmbeddingBase):
         n_components: int = 2,
         python: Optional[str] = None,
         script: Optional[str] = None,
-        patience: int = 50,
-        max_epochs: int = 500,
-        batch_size: int = 32,
-        train_prop: float = 0.9,
-        depth: int = 6,
-        width: int = 128,
-        search_network_sizes: bool = False,
-        max_snps: Optional[int] = None,
         workdir: Optional[Union[str, Path]] = None,
         random_state: Optional[int] = 42,
     ):
@@ -121,47 +113,15 @@ class PopVAE(EmbeddingBase):
         self.genotypes = genotypes
         self.python = python or os.environ.get("POPVAE_PYTHON") or sys.executable
         self.script = script or os.environ.get("POPVAE_SCRIPT")
-        self.patience = patience
-        self.max_epochs = max_epochs
-        self.batch_size = batch_size
-        self.train_prop = train_prop
-        self.depth = depth
-        self.width = width
-        self.search_network_sizes = search_network_sizes
-        self.max_snps = max_snps
         self.workdir = workdir
 
     def _command(self, infile: Path, out: Path) -> list:
         if not self.script:
             raise ValueError("Set `script=` or $POPVAE_SCRIPT to the authors' popvae.py")
-        cmd = [
-            self.python,
-            self.script,
-            "--infile",
-            str(infile),
-            "--out",
-            str(out),
-            "--latent_dim",
-            str(self.n_components),
-            "--patience",
-            str(self.patience),
-            "--max_epochs",
-            str(self.max_epochs),
-            "--batch_size",
-            str(self.batch_size),
-            "--train_prop",
-            str(self.train_prop),
-            "--depth",
-            str(self.depth),
-            "--width",
-            str(self.width),
-        ]
+        cmd = [self.python, self.script, "--infile", str(infile), "--out", str(out)]
+        cmd += ["--latent_dim", str(self.n_components)]
         if self.random_state is not None:
             cmd += ["--seed", str(self.random_state)]
-        if self.search_network_sizes:
-            cmd += ["--search_network_sizes"]
-        if self.max_snps:
-            cmd += ["--max_SNPs", str(self.max_snps)]
         return cmd
 
     def fit(self, X: Union[np.ndarray, pd.DataFrame, str, Path]) -> "PopVAE":
