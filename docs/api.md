@@ -31,6 +31,27 @@ from manifold_genetics import (
 
 ::: manifold_genetics.embeddings.diffusion_map.DiffusionMap
 
+### Optional baselines
+
+These wrap other groups' published implementations and need extra installs:
+
+| Method | `--method` | Install |
+|---|---|---|
+| DREAMS (Kury, Kobak & Damrich, TMLR 2026) | `dreams` | `pip install "openTSNE @ git+https://github.com/berenslab/DREAMS.git@tp"` |
+| FloDR (Baraka & Probst, arXiv:2607.26278) | `flodr` | `pip install 'manifold-genetics[flodr]'` (Python 3.11 or later) |
+| Autoencoder (plain MLP, no KL term) | `autoencoder` | `pip install 'manifold-genetics[autoencoder]'` |
+| popVAE (Battey, Coffing & Kern, G3 2021) | `popvae` | A Python 3.10 / TensorFlow 2.15 environment with popVAE (<https://github.com/kr-colab/popvae>) and `bed-reader` installed; give its interpreter as `$POPVAE_PYTHON` and `popvae.py` as `$POPVAE_SCRIPT` |
+
+popVAE embeds genotypes rather than PCA coordinates (pass `--genotypes PLINK_PREFIX`), and, like t-SNE, it cannot project new samples.
+
+::: manifold_genetics.embeddings.dreams.DREAMS
+
+::: manifold_genetics.embeddings.flodr.FloDR
+
+::: manifold_genetics.embeddings.autoencoder.Autoencoder
+
+::: manifold_genetics.embeddings.popvae.PopVAE
+
 ::: manifold_genetics.embeddings.base.EmbeddingBase
 
 ## Admixture

@@ -4,8 +4,10 @@ Autoencoder: a plain (non-variational) MLP autoencoder with a low-dimensional bo
 A neural baseline with no neighbourhood graph and no KL term, trained with mean
 squared reconstruction error on the same input as the other methods (the PCA
 coordinates). Encoder and decoder mirror each other: ``hidden`` layer widths
-with ELU activations; the bottleneck is linear. Inputs are standardised per
-column before training. Needs PyTorch (``pip install 'manifold-genetics[autoencoder]'``).
+with ELU activations; the bottleneck is linear. Inputs are centred and divided
+by one global standard deviation, which keeps the relative variance of the PCs
+(standardising each PC separately would inflate the noisy trailing PCs to the
+same weight as PC1). Needs PyTorch (``pip install 'manifold-genetics[autoencoder]'``).
 """
 
 import logging
@@ -75,7 +77,7 @@ class Autoencoder(EmbeddingBase):
         X_array, self._sample_ids = self._load_input_data(X)
         X_array = np.asarray(X_array, dtype=np.float32)
         self._mu = X_array.mean(0)
-        self._sd = X_array.std(0) + 1e-8
+        self._sd = float((X_array - self._mu).std()) + 1e-8
         Xs = torch.from_numpy((X_array - self._mu) / self._sd)
 
         seed = 0 if self.random_state is None else int(self.random_state)
@@ -87,7 +89,9 @@ class Autoencoder(EmbeddingBase):
         params = list(self.encoder.parameters()) + list(decoder.parameters())
         opt = torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
 
-        logger.info(f"Training autoencoder {d}->{self.hidden}->{self.n_components} for {self.epochs} epochs")
+        logger.info(
+            f"Training autoencoder {d}->{self.hidden}->{self.n_components} for {self.epochs} epochs"
+        )
         n = Xs.shape[0]
         for epoch in range(self.epochs):
             perm = torch.randperm(n, generator=gen)

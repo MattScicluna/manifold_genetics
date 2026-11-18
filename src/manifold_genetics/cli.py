@@ -161,7 +161,10 @@ def _embedding_params_from_args(args) -> dict:
         params = {"epochs": getattr(args, "epochs", 300)}
     elif method == "popvae":
         params = {"genotypes": getattr(args, "genotypes", None)}
-    if method in ("dreams", "flodr", "autoencoder", "popvae") and getattr(args, "seed", None) is not None:
+    if (
+        method in ("dreams", "flodr", "autoencoder", "popvae")
+        and getattr(args, "seed", None) is not None
+    ):
         params["random_state"] = args.seed
 
     # Every method accepts n_components, so it is set outside the per-method
@@ -1421,11 +1424,16 @@ def main(argv: Optional[List[str]] = None):
     embed_parser.add_argument(
         "--flodr-w", type=float, default=2.0, help="Distance-order weight (FloDR; default 2.0)"
     )
-    embed_parser.add_argument("--epochs", type=int, default=300, help="Training epochs (autoencoder)")
     embed_parser.add_argument(
-        "--genotypes", help="PLINK prefix of the genotypes to embed (popVAE embeds genotypes, not PCs)"
+        "--epochs", type=int, default=300, help="Training epochs (autoencoder)"
     )
-    embed_parser.add_argument("--seed", type=int, help="Random seed (DREAMS, FloDR, autoencoder, popVAE)")
+    embed_parser.add_argument(
+        "--genotypes",
+        help="PLINK prefix of the genotypes to embed (popVAE embeds genotypes, not PCs)",
+    )
+    embed_parser.add_argument(
+        "--seed", type=int, help="Random seed (DREAMS, FloDR, autoencoder, popVAE)"
+    )
     embed_parser.add_argument(
         "--embed-batch-size",
         type=int,

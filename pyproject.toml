@@ -77,12 +77,6 @@ flodr = [
 autoencoder = [
     "torch>=1.10.0",
 ]
-# popVAE itself runs in its own Python 3.10 / TensorFlow 2.15 environment
-# (https://github.com/kr-colab/popvae); these are only for writing its input.
-popvae = [
-    "bed-reader>=1.0",
-    "h5py>=3.0",
-]
 # Kept so `pip install 'manifold-genetics[geosketch]'` still resolves; geosketch
 # is now a core dependency.
 geosketch = []

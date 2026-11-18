@@ -40,6 +40,34 @@ def _import_dreams_tsne():
     return _TSNE
 
 
+def _fit_fork(embedder, X: np.ndarray):
+    """Run the fork's ``TSNE.fit`` steps, working around a bug in the fork.
+
+    At the fork's ``tp`` head (eeea6a6, 2025-12-19), ``prepare_initial`` stores
+    ``"X"`` among the gradient-descent parameters, but the fork's
+    ``gradient_descent.__call__`` does not accept ``X``, so ``TSNE.fit`` raises
+    ``TypeError``. This repeats ``fit`` (early exaggeration, then the main phase)
+    after dropping that entry; nothing else changes.
+    """
+    embedding = embedder.prepare_initial(X)
+    embedding.gradient_descent_params.pop("X", None)
+    embedding.optimize(
+        n_iter=embedder.early_exaggeration_iter,
+        exaggeration=embedder.early_exaggeration,
+        momentum=embedder.initial_momentum,
+        inplace=True,
+        propagate_exception=True,
+    )
+    embedding.optimize(
+        n_iter=embedder.n_iter,
+        exaggeration=embedder.exaggeration,
+        momentum=embedder.final_momentum,
+        inplace=True,
+        propagate_exception=True,
+    )
+    return embedding
+
+
 class DREAMS(EmbeddingBase):
     """DREAMS embedding.
 
@@ -92,7 +120,7 @@ class DREAMS(EmbeddingBase):
             random_state=self.random_state,
             n_jobs=self.n_jobs,
         )
-        self._embedding = embedder.fit(X_array)
+        self._embedding = _fit_fork(embedder, X_array)
         self._is_fitted = True
         return self
 

@@ -8,12 +8,14 @@ that environment with ``python=`` / ``$POPVAE_PYTHON`` and at the script with
 
 Unlike the other methods, popVAE embeds *genotypes*, not PCA coordinates. The
 input passed to ``fit`` only fixes which samples are embedded and their order;
-the genotypes come from the PLINK fileset given as ``genotypes``. The PLINK
-genotypes are written to popVAE's own ``.popvae.hdf5`` input format, applying
-the same preprocessing popVAE applies to a VCF: singletons dropped, missing calls
-filled with Binomial(2, allele frequency) draws, dosages scaled to 0/0.5/1.
-popVAE has no out-of-sample projection, so ``transform`` only accepts the fitted
-samples.
+the genotypes come from the PLINK fileset given as ``genotypes``. They are
+written as a scikit-allel style zarr store (``calldata/GT``, ``samples``), one
+of popVAE's documented input formats, so popVAE applies its own filtering
+(biallelic sites, singletons) and missing-data imputation. The conversion runs
+in the popVAE environment, which needs ``bed-reader`` installed. (popVAE's
+``.popvae.hdf5`` input is not used: with h5py 3 its sample IDs load as bytes and
+popvae.py fails on them.) popVAE has no out-of-sample projection, so
+``transform`` only accepts the fitted samples.
 """
 
 import logging
@@ -33,40 +35,52 @@ from .base import EmbeddingBase
 logger = logging.getLogger(__name__)
 
 
-def plink_to_popvae_hdf5(prefix: Union[str, Path], sample_ids, out_path: Union[str, Path], seed: int = 0):
-    """Write ``sample_ids`` from PLINK ``prefix`` as a popVAE ``.popvae.hdf5`` file."""
-    try:
-        import h5py
-        from bed_reader import open_bed
-    except ImportError as exc:
-        raise ImportError(
-            "popVAE input conversion needs `bed-reader` and `h5py`: "
-            "`pip install 'manifold-genetics[popvae]'`."
-        ) from exc
+_CONVERT = r"""
+import sys
+import numcodecs
+import numpy as np
+import zarr
+from bed_reader import open_bed
 
-    prefix = str(prefix)
-    with open_bed(prefix + ".bed") as bed:
-        iid = np.asarray(bed.iid).astype(str)
-        pos = pd.Series(np.arange(len(iid)), index=iid)
-        missing = [s for s in sample_ids if s not in pos.index]
-        if missing:
-            raise ValueError(f"{len(missing)} samples not in {prefix}.fam, e.g. {missing[:3]}")
-        G = bed.read(index=np.s_[pos.loc[list(sample_ids)].values, :], dtype="float32")
+prefix, ids_file, out = sys.argv[1:4]
+ids = [l.strip() for l in open(ids_file) if l.strip()]
+with open_bed(prefix + ".bed") as bed:
+    iid = np.asarray(bed.iid).astype(str)
+    pos = {s: i for i, s in enumerate(iid)}
+    missing = [s for s in ids if s not in pos]
+    if missing:
+        sys.exit(f"{len(missing)} samples not in {prefix}.fam, e.g. {missing[:3]}")
+    rows = np.array([pos[s] for s in ids])
+    n_var = bed.sid_count
+    root = zarr.open_group(out, mode="w")
+    # Object dtype, as scikit-allel's read_vcf returns: popvae.py concatenates a
+    # str with this array, which fails for fixed-width unicode arrays.
+    root.create_dataset("samples", data=np.array(ids, dtype=object), object_codec=numcodecs.VLenUTF8())
+    gt = root.require_group("calldata").zeros(
+        "GT", shape=(n_var, len(ids), 2), chunks=(10000, len(ids), 2), dtype="i1"
+    )
+    for start in range(0, n_var, 10000):
+        d = bed.read(index=np.s_[rows, start:start + 10000], dtype="float32").T  # variants x samples
+        g = np.stack([d >= 1, d >= 2], axis=-1).astype("i1")  # allele-1 count -> two calls
+        g[np.isnan(d)] = -1
+        gt[start:start + d.shape[0]] = g
+print(f"wrote {n_var} variants x {len(ids)} samples to {out}")
+"""
 
-    # popVAE preprocessing (popvae.py, VCF branch): drop singletons, impute, scale.
-    miss = np.isnan(G)
-    dc_all = np.nansum(G, axis=0)
-    ninds = (~miss).sum(axis=0)
-    keep = dc_all > 2
-    G, miss, dc_all, ninds = G[:, keep], miss[:, keep], dc_all[keep], ninds[keep]
-    af = dc_all / (2 * np.maximum(ninds, 1))
-    rng = np.random.default_rng(seed)
-    rows, cols = np.nonzero(miss)
-    G[rows, cols] = rng.binomial(2, af[cols])
-    with h5py.File(out_path, "w") as h5:
-        h5.create_dataset("derived_counts", data=(G * 0.5).astype("float32"))
-        h5.create_dataset("samples", data=np.asarray(sample_ids, dtype=object), dtype=h5py.string_dtype())
-    logger.info(f"Wrote popVAE input: {G.shape[0]} samples x {G.shape[1]} SNPs -> {out_path}")
+
+def plink_to_popvae_zarr(prefix, sample_ids, out_path, python: str):
+    """Write ``sample_ids`` from PLINK ``prefix`` as a zarr store popVAE can read.
+
+    Runs in the popVAE interpreter ``python`` (its zarr version matches popVAE's
+    reader; it needs ``bed-reader``). Genotypes are encoded as counts of the
+    PLINK A1 allele.
+    """
+    out_path = Path(out_path)
+    ids_file = out_path.with_suffix(".samples.txt")
+    ids_file.write_text("\n".join(str(s) for s in sample_ids) + "\n")
+    script = out_path.with_suffix(".convert.py")
+    script.write_text(_CONVERT)
+    subprocess.run([python, str(script), str(prefix), str(ids_file), str(out_path)], check=True)
     return out_path
 
 
@@ -121,12 +135,26 @@ class PopVAE(EmbeddingBase):
         if not self.script:
             raise ValueError("Set `script=` or $POPVAE_SCRIPT to the authors' popvae.py")
         cmd = [
-            self.python, self.script,
-            "--infile", str(infile), "--out", str(out),
-            "--latent_dim", str(self.n_components),
-            "--patience", str(self.patience), "--max_epochs", str(self.max_epochs),
-            "--batch_size", str(self.batch_size), "--train_prop", str(self.train_prop),
-            "--depth", str(self.depth), "--width", str(self.width),
+            self.python,
+            self.script,
+            "--infile",
+            str(infile),
+            "--out",
+            str(out),
+            "--latent_dim",
+            str(self.n_components),
+            "--patience",
+            str(self.patience),
+            "--max_epochs",
+            str(self.max_epochs),
+            "--batch_size",
+            str(self.batch_size),
+            "--train_prop",
+            str(self.train_prop),
+            "--depth",
+            str(self.depth),
+            "--width",
+            str(self.width),
         ]
         if self.random_state is not None:
             cmd += ["--seed", str(self.random_state)]
@@ -143,9 +171,9 @@ class PopVAE(EmbeddingBase):
         sample_ids = [str(s) for s in sample_ids]
         workdir = Path(self.workdir or tempfile.mkdtemp(prefix="popvae_"))
         workdir.mkdir(parents=True, exist_ok=True)
-        infile = workdir / "input.popvae.hdf5"
+        infile = workdir / "input.zarr"
         if not infile.exists():
-            plink_to_popvae_hdf5(self.genotypes, sample_ids, infile, seed=self.random_state or 0)
+            plink_to_popvae_zarr(self.genotypes, sample_ids, infile, python=self.python)
         out = workdir / f"popvae_seed{self.random_state}"
         cmd = self._command(infile, out)
         logger.info("Running popVAE: " + " ".join(shlex.quote(c) for c in cmd))
@@ -154,7 +182,12 @@ class PopVAE(EmbeddingBase):
         coords = pd.read_csv(str(out) + "_latent_coords.txt", sep="\t")
         coords["sampleID"] = coords["sampleID"].astype(str)
         coords = coords.set_index("sampleID").loc[sample_ids]
-        cols = [f"LD{i + 1}" for i in range(self.n_components)]
+        # popvae.py names the latent means mean1/mean2 when latent_dim == 2, LD1..LDn otherwise.
+        cols = (
+            ["mean1", "mean2"]
+            if self.n_components == 2
+            else [f"LD{i + 1}" for i in range(self.n_components)]
+        )
         self._embedding = coords[cols].values
         self._sample_ids = sample_ids
         self._is_fitted = True
@@ -165,7 +198,9 @@ class PopVAE(EmbeddingBase):
             raise RuntimeError("PopVAE must be fitted before transform")
         _, sample_ids = self._load_input_data(X)
         if [str(s) for s in sample_ids] != self._sample_ids:
-            raise NotImplementedError("popVAE has no out-of-sample projection; embed all samples in fit")
+            raise NotImplementedError(
+                "popVAE has no out-of-sample projection; embed all samples in fit"
+            )
         return self._format_output(self._embedding, self._sample_ids)
 
     def fit_transform(self, X, output_path=None) -> pd.DataFrame:

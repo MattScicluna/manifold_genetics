@@ -104,6 +104,7 @@ def build_embedding_model(method: str, params: Optional[Mapping] = None):
             axes=p.get("axes", "variance"),
             max_iter=p.get("max_iter"),
             random_state=p.get("random_state", 42),
+            device=p.get("device"),
         )
     if method == "autoencoder":
         return Autoencoder(

@@ -3,7 +3,6 @@
 import inspect
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from manifold_genetics.embeddings import DREAMS, Autoencoder, FloDR, PopVAE
@@ -61,34 +60,34 @@ def test_popvae_requires_genotypes(small_pca_data):
 
 
 def test_popvae_command_line():
-    cmd = PopVAE(genotypes="g", python="py", script="popvae.py", random_state=3, max_snps=100)._command(
-        "in.popvae.hdf5", "out"
-    )
+    cmd = PopVAE(
+        genotypes="g", python="py", script="popvae.py", random_state=3, max_snps=100
+    )._command("in.popvae.hdf5", "out")
     assert cmd[:2] == ["py", "popvae.py"]
     assert cmd[cmd.index("--seed") + 1] == "3"
     assert cmd[cmd.index("--max_SNPs") + 1] == "100"
     assert cmd[cmd.index("--latent_dim") + 1] == "2"
 
 
-def test_plink_to_popvae_hdf5_preprocessing(temp_dir):
-    """Singletons are dropped, missing calls imputed, dosages scaled to 0/0.5/1."""
-    bed_reader = pytest.importorskip("bed_reader")
-    h5py = pytest.importorskip("h5py")
-    from manifold_genetics.embeddings.popvae import plink_to_popvae_hdf5
+def test_plink_to_popvae_zarr_layout(temp_dir):
+    """Samples keep their order; allele counts become two calls; missing is -1."""
+    import sys
 
-    rng = np.random.default_rng(0)
-    G = rng.integers(0, 3, size=(20, 30)).astype(float)
-    G[:, 0] = 0
-    G[0, 0] = 1  # a singleton SNP: dropped
-    G[3, 5] = np.nan  # a missing call: imputed
+    bed_reader = pytest.importorskip("bed_reader")
+    zarr = pytest.importorskip("zarr")
+    from manifold_genetics.embeddings.popvae import plink_to_popvae_zarr
+
+    G = np.array([[0, 1, 2], [2, np.nan, 0], [1, 1, 1]], dtype=float)
     prefix = temp_dir / "toy"
-    iid = [f"s{i}" for i in range(20)]
+    iid = ["a", "b", "c"]
     bed_reader.to_bed(str(prefix) + ".bed", G, properties={"iid": iid})
-    order = iid[::-1]
-    plink_to_popvae_hdf5(prefix, order, temp_dir / "toy.popvae.hdf5")
-    with h5py.File(temp_dir / "toy.popvae.hdf5", "r") as h5:
-        dc = np.array(h5["derived_counts"])
-        samples = [s.decode() if isinstance(s, bytes) else s for s in h5["samples"][:]]
-    assert samples == order
-    assert dc.shape == (20, 29)
-    assert set(np.unique(dc)) <= {0.0, 0.5, 1.0}
+    out = plink_to_popvae_zarr(
+        prefix, ["c", "a", "b"], temp_dir / "toy.zarr", python=sys.executable
+    )
+    root = zarr.open_group(str(out), mode="r")
+    assert [str(s) for s in root["samples"][:]] == ["c", "a", "b"]
+    gt = root["calldata/GT"][:]
+    assert gt.shape == (3, 3, 2)
+    assert (gt[:, 0, :].sum(axis=1) == [1, 1, 1]).all()  # sample c
+    assert (gt[:, 1, :].sum(axis=1) == [0, 1, 2]).all()  # sample a
+    assert (gt[1, 2] == [-1, -1]).all()  # sample b, SNP 2 missing

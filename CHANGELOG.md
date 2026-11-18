@@ -9,6 +9,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Optional embedding baselines: `dreams`, `flodr`, `autoencoder`, `popvae`.**
+  Each wraps the authors' published code. DREAMS uses the berenslab openTSNE
+  fork (and works around a `TypeError` in its `TSNE.fit` at the fork's head).
+  FloDR comes from the `[flodr]` extra (Python 3.11 or later). The autoencoder
+  is a plain PyTorch MLP (`[autoencoder]` extra). popVAE runs the authors'
+  `popvae.py` in its own Python 3.10 / TensorFlow 2.15 environment
+  (`$POPVAE_PYTHON`, `$POPVAE_SCRIPT`) and embeds genotypes from `--genotypes`,
+  not PCs. None of them is installed by default.
+
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published
   `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)
