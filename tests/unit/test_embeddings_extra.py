@@ -86,6 +86,9 @@ def test_popvae_command_line():
     assert cmd[:2] == ["py", "popvae.py"]
     assert cmd[cmd.index("--seed") + 1] == "3"
     assert cmd[cmd.index("--latent_dim") + 1] == "2"
+    assert "--max_epochs" not in cmd  # popVAE's own default unless capped
+    capped = PopVAE(script="popvae.py", max_epochs=100)._command("in.zarr", "out")
+    assert capped[capped.index("--max_epochs") + 1] == "100"
 
 
 def test_plink_to_popvae_zarr_layout(temp_dir):

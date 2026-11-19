@@ -87,14 +87,17 @@ def plink_to_popvae_zarr(prefix, sample_ids, out_path, python: str):
 class PopVAE(EmbeddingBase):
     """popVAE embedding (latent means).
 
-    popVAE's own training defaults (network size, patience, epochs, train/validation
-    split) are used unchanged.
+    popVAE's own training defaults (network size, patience, train/validation split)
+    are used unchanged.
 
     Args:
         genotypes: PLINK prefix (``.bed/.bim/.fam``) holding the samples to embed.
         n_components: Latent dimensions (``--latent_dim``).
         python: Interpreter of the popVAE environment (default ``$POPVAE_PYTHON``).
         script: Path to ``popvae.py`` (default ``$POPVAE_SCRIPT``).
+        max_epochs: Cap on training epochs (``--max_epochs``; ``None`` keeps
+            popVAE's default of 500). Each epoch's cost grows with sample size,
+            so large cohorts may need a cap.
         workdir: Where inputs/outputs go (default: a temporary directory). The
             converted genotypes are reused across fits in the same ``workdir``.
         random_state: Seed (``--seed``).
@@ -106,6 +109,7 @@ class PopVAE(EmbeddingBase):
         n_components: int = 2,
         python: Optional[str] = None,
         script: Optional[str] = None,
+        max_epochs: Optional[int] = None,
         workdir: Optional[Union[str, Path]] = None,
         random_state: Optional[int] = 42,
     ):
@@ -113,6 +117,7 @@ class PopVAE(EmbeddingBase):
         self.genotypes = genotypes
         self.python = python or os.environ.get("POPVAE_PYTHON") or sys.executable
         self.script = script or os.environ.get("POPVAE_SCRIPT")
+        self.max_epochs = max_epochs
         self.workdir = workdir
 
     def _command(self, infile: Path, out: Path) -> list:
@@ -120,6 +125,8 @@ class PopVAE(EmbeddingBase):
             raise ValueError("Set `script=` or $POPVAE_SCRIPT to the authors' popvae.py")
         cmd = [self.python, self.script, "--infile", str(infile), "--out", str(out)]
         cmd += ["--latent_dim", str(self.n_components)]
+        if self.max_epochs is not None:
+            cmd += ["--max_epochs", str(self.max_epochs)]
         if self.random_state is not None:
             cmd += ["--seed", str(self.random_state)]
         return cmd
