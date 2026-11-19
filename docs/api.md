@@ -39,11 +39,15 @@ from manifold_genetics import (
 
 ## Metrics
 
-Both metrics compare distances between sampled pairs of samples in the embedding with distances in another space, using a Spearman correlation.
+The geographic and admixture metrics compare distances between sampled pairs of samples in the embedding with distances in another space, using a Spearman correlation.
 
 ::: manifold_genetics.metrics.geographic.compute_geographic_preservation
 
 ::: manifold_genetics.metrics.admixture.compute_admixture_preservation
+
+Rank correlations do not change when an embedding squeezes each group into a tight cluster, because the order of distances survives the squeeze. Separation inflation is scale-aware: it asks whether groups look more separated (detached clusters) or less separated (merged) in the embedding than in a reference space such as the PCA input or admixture proportions.
+
+::: manifold_genetics.metrics.separation.compute_separation_inflation
 
 ## Visualisation
 

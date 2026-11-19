@@ -9,6 +9,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Separation inflation metric (`compute_separation_inflation`).** For each sample,
+  the distance to the nearest member of another group over the mean distance to its
+  own group's nearest neighbours, compared on a log scale between the embedding and a
+  reference space (PCA coordinates or admixture proportions). Positive means groups
+  look more separated than in the reference, negative means merged. Unlike the
+  rank-based metrics, it penalises embeddings that collapse groups into tight clusters.
+
 - **`admixture.wdl`: admixture for the workflows' experiments.** Optional, run
   after `analyse`. Rebuilds each experiment's fit set from its published
   `fit_samples.txt`, runs Neural Admixture (K = 2 to 10, fit and project sets)
