@@ -2,8 +2,10 @@
 
 from .admixture import compute_admixture_preservation
 from .geographic import compute_geographic_preservation
+from .knn import compute_knn_preservation
 
 __all__ = [
     "compute_geographic_preservation",
     "compute_admixture_preservation",
+    "compute_knn_preservation",
 ]

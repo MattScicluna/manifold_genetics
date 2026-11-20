@@ -60,11 +60,15 @@ popVAE embeds genotypes rather than PCA coordinates (pass `--genotypes PLINK_PRE
 
 ## Metrics
 
-Both metrics compare distances between sampled pairs of samples in the embedding with distances in another space, using a Spearman correlation.
+The geographic and admixture metrics compare distances between sampled pairs of samples in the embedding with distances in another space, using a Spearman correlation.
 
 ::: manifold_genetics.metrics.geographic.compute_geographic_preservation
 
 ::: manifold_genetics.metrics.admixture.compute_admixture_preservation
+
+k-NN preservation measures local structure instead: the share of each sample's nearest neighbours in the PCA input that stay among its nearest neighbours in the embedding.
+
+::: manifold_genetics.metrics.knn.compute_knn_preservation
 
 ## Visualisation
 

@@ -9,6 +9,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **k-NN preservation metric (`compute_knn_preservation`).** The share of each
+  sample's k nearest neighbours (default 10) in a reference space, usually the PCA
+  input, that are also among its k nearest neighbours in the embedding. It measures
+  local structure, alongside the global admixture and geographic metrics.
+
 - **Optional embedding baselines: `dreams`, `flodr`, `autoencoder`, `popvae`.**
   Each wraps the authors' published code. DREAMS uses the berenslab openTSNE
   fork (and works around a `TypeError` in its `TSNE.fit` at the fork's head).
