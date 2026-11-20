@@ -122,8 +122,17 @@ class DREAMS(EmbeddingBase):
         X_array, sample_ids = self._load_input_data(X)
         if sample_ids == self._sample_ids:
             return self._format_output(np.asarray(self._embedding), sample_ids)
-        # openTSNE places new points against the fitted embedding (no regularisation term).
-        Y = np.asarray(self._embedding.transform(np.asarray(X_array, dtype=float)))
+        # openTSNE places new points against the fitted embedding, which stays fixed. The
+        # regularisation term is switched off for this step: its PCA reference describes the
+        # fitted samples, not the new ones, and the fork raises UnboundLocalError ('alpha')
+        # when it is left on during transform.
+        params = self._embedding.gradient_descent_params
+        saved = params.get("regularization")
+        params["regularization"] = False
+        try:
+            Y = np.asarray(self._embedding.transform(np.asarray(X_array, dtype=float)))
+        finally:
+            params["regularization"] = saved
         return self._format_output(Y, sample_ids)
 
     def fit_transform(self, X, output_path=None) -> pd.DataFrame:

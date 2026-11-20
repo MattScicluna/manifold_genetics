@@ -16,7 +16,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - **Optional embedding baselines: `dreams`, `flodr`, `autoencoder`, `popvae`.**
   Each wraps the authors' published code. DREAMS uses the berenslab openTSNE
-  fork (and works around a `TypeError` in its `TSNE.fit` at the fork's head).
+  fork (and works around a `TypeError` in its `TSNE.fit` and an `UnboundLocalError`
+  when projecting new samples, both at the fork's head).
   FloDR comes from the `[flodr]` extra (Python 3.11 or later). The autoencoder
   is a plain PyTorch MLP (`[autoencoder]` extra). popVAE runs the authors'
   `popvae.py` in its own Python 3.10 / TensorFlow 2.15 environment
