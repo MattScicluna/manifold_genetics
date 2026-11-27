@@ -9,6 +9,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Ancestry resolution metric (`compute_ancestry_resolution`).** Labels each sample
+  with its largest admixture component and scores how well a k-nearest-neighbour
+  classifier (default 15) predicts it from the embedding coordinates (balanced
+  accuracy, 5-fold). The admixture score is dominated by the largest distances, so an
+  embedding can score well on it while overlapping smaller ancestries; this metric
+  weights every ancestry equally.
+
 - **k-NN preservation metric (`compute_knn_preservation`).** The share of each
   sample's k nearest neighbours (default 10) in a reference space, usually the PCA
   input, that are also among its k nearest neighbours in the embedding. It measures

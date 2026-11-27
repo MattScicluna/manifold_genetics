@@ -70,6 +70,10 @@ k-NN preservation measures local structure instead: the share of each sample's n
 
 ::: manifold_genetics.metrics.knn.compute_knn_preservation
 
+Ancestry resolution measures how well ancestries are kept apart: the balanced accuracy of predicting each sample's main admixture component from its position in the embedding. The admixture score is dominated by the largest distances, so an embedding can score well on it while overlapping smaller ancestries; ancestry resolution weights every ancestry equally.
+
+::: manifold_genetics.metrics.ancestry.compute_ancestry_resolution
+
 ## Visualisation
 
 ::: manifold_genetics.visualization.plotting.visualize
